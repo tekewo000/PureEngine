@@ -32,6 +32,7 @@ static class ConsoleChecks
         BasicDisplay();
         FiltersSearchAndSelection();
         ScrollPositionSurvivesIntake();
+        SearchDoesNotSnapToTail();
         ClearAndClearOnPlay();
         PlayErrorsDedup();
         RemovalErrorsAppearWhilePlaying();
@@ -258,6 +259,66 @@ static class ConsoleChecks
                 "Intake must follow the tail when the viewport was at the bottom.");
         }
         finally { CloseEditor(editor); }
+    }
+
+    private static void SearchDoesNotSnapToTail()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            Field<DispatcherTimer>(editor, "_consoleTimer").Stop();
+            var tab = editor.GetLogicalDescendants().OfType<TabItem>()
+                .Single(tab => Equals(tab.Header, "Console"));
+            tab.IsSelected = true;
+            tab.GetLogicalAncestors().OfType<Grid>().First(grid => grid.RowDefinitions.Count == 3)
+                .RowDefinitions[2].Height = new GridLength(400);
+            // Enough entries to overflow the viewport so scrolling is meaningful.
+            for (var i = 0; i < 80; i++) Log.Info($"entry-{i:00}");
+            Drain(editor);
+            var list = Control<ListBox>(editor, "ConsoleList");
+            var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+            Check(scroll.Viewport.Height > 0, "Search test requires a visible list viewport.");
+            Check(scroll.Extent.Height > scroll.Viewport.Height, "Search test requires overflowing content.");
+            // Pin near the top: an earlier entry should remain visible while typing a search
+            // that filters out the tail. Restoring the offset must not fall through to the tail.
+            scroll.Offset = new Vector(0, 0);
+            Dispatcher.UIThread.RunJobs();
+            var search = Control<TextBox>(editor, "ConsoleSearch");
+            search.Text = "entry-00";
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 1, "Search must leave exactly one entry.");
+            Check(scroll.Offset.Y <= 1, "A single search result must be at the top.");
+            // Clearing the search restores the full list without jumping away from the top.
+            search.Text = "";
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 80, "Clearing search must restore all entries.");
+            Check(scroll.Extent.Height > scroll.Viewport.Height, "Restored list must overflow.");
+            Check(scroll.Offset.Y <= 1, $"Clearing search must not scroll; got {scroll.Offset.Y}.");
+            // A no-match search and a level filter must also restore the list at the top.
+            search.Text = "no-match";
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 0, "Unmatched search must be empty.");
+            search.Text = "";
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 80 && scroll.Offset.Y <= 1,
+                "Clearing an unmatched search must restore entries at the top.");
+            var info = Control<CheckBox>(editor, "ConsoleInfoFilter");
+            info.IsChecked = false;
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 0, "Disabling Info must hide the entries.");
+            info.IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 80 && scroll.Offset.Y <= 1,
+                "Re-enabling Info must restore entries at the top.");
+            scroll.Offset = new Vector(0, 200);
+            Dispatcher.UIThread.RunJobs();
+            search.Text = "entry";
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 80 && Math.Abs(scroll.Offset.Y - 200) < 1,
+                $"Search with matching entries must preserve the offset; got {scroll.Offset.Y}.");
+            CloseEditor(editor);
+        }
+        finally { if (editor.IsVisible) CloseEditor(editor); }
     }
 
     private static void RemovalErrorsAppearWhilePlaying()

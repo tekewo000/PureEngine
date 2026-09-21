@@ -87,7 +87,7 @@ public partial class MainWindow
             _consoleHistoryDropped += overflow;
         }
         _consoleHistory.AddRange(entries);
-        RebuildConsoleView();
+        RebuildConsoleView(followTail: true);
     }
 
     private bool PassesConsoleFilter(LogEntry entry)
@@ -103,7 +103,7 @@ public partial class MainWindow
             || (entry.ExceptionDetail?.Contains(_consoleSearch, StringComparison.OrdinalIgnoreCase) == true);
     }
 
-    private void RebuildConsoleView()
+    private void RebuildConsoleView(bool followTail = false)
     {
         var list = ConsoleList;
         // Preserve selection across batched refreshes so reading past logs keeps its place.
@@ -133,15 +133,17 @@ public partial class MainWindow
             }
         }
         RefreshConsoleMeta();
-        if (wasAtTail && filtered.Count > 0)
+        if (followTail && wasAtTail && filtered.Count > 0)
         {
             try { list.ScrollIntoView(filtered[^1]); } catch { /* Headless or not yet realized. */ }
         }
-        else if (scroll is not null && offset.HasValue)
+        else if (offset.HasValue)
         {
-            // Replacing ItemsSource can reset the viewport; restore it after layout.
+            // Search/filter changes preserve the offset, including zero, within the new extent.
             list.UpdateLayout();
-            scroll.Offset = offset.Value;
+            var newScroll = list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+            if (newScroll is not null)
+                newScroll.Offset = offset.Value;
         }
     }
 
