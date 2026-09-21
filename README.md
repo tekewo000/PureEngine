@@ -130,6 +130,7 @@ dotnet run --project src/PureEngine.Editor
 ## 構成
 
 - `src/PureEngine.Core/`：シーン・オブジェクト・属性の定義。
+- `src/PureEngine.Runtime/`：サービス生成・Component生成・SceneRuntimeの開始・更新・停止を接続する実行接続。Editor・Avaloniaに依存しない。
 - `src/PureEngine.Editor/`：Avaloniaによる編集画面。
 - `tests/PureEngine.Core.Checks/`：Coreの動作チェック。
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
@@ -152,7 +153,7 @@ foreach (var error in runtime.Errors)
 
 実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroy＋Disposeします。各ライフサイクルはPriorityの小さい順に実行し、同値は順序を保証しません。動的追加分は最初のStartより前に `SetStartPriority` などで設定できます。全Componentの生成・復元・検証が成功してからStartし、準備失敗時はStart／Destroyせず生成済み `IDisposable` のみ解放します。Start途中失敗でも受入済み全対象をDestroy＋Disposeし、一つの終了処理の例外でも残りを続けて `Errors` に報告します。`Stop()`／`Dispose()` の重複はno-opで二重終了しません。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
 
-ツールバーのPlayは編集中Sceneの複製で `PlaySession` を作り、約60Hzのタイマーで実測の経過秒を渡して更新します。Inspectorに入力エラーがある間は開始せず、画面下部に理由を表示します。実行中はシーン編集・切替とシーン操作メニューを無効化し、Stopで終了します。開始・更新・終了の失敗とSceneRuntimeのErrorsは画面下部に表示し、失敗後も操作可能な状態へ戻します。ウィンドウを閉じる際も実行中なら終了・解放します。再Playは新しいSceneRuntimeで開始します。描画はまだ行いません。
+ツールバーのPlayは編集中Sceneの複製で `PureEngine.Runtime.PlaySession` を作り、約60Hzのタイマーで実測の経過秒を渡して更新します。Inspectorに入力エラーがある間は開始せず、画面下部に理由を表示します。実行中はシーン編集・切替とシーン操作メニューを無効化し、Stopで終了します。開始・更新・終了の失敗とSceneRuntimeのErrorsは画面下部に表示し、失敗後も操作可能な状態へ戻します。ウィンドウを閉じる際も実行中なら終了・解放します。再Playは新しいSceneRuntimeで開始します。描画はまだ行いません。
 
 Playの実行・終了エラーは画面下部に表示し、ツールチップで全件の発生箇所と例外詳細を確認できます。ウィンドウ終了時にPlayの後片付けでエラーが発生した場合は、その回の終了を取り消して表示を残します。内容を確認してもう一度閉じると終了できます。
 
@@ -194,7 +195,7 @@ Log.Engine.Error("エンジン側の処理に失敗しました", exception);
 
 ## ゲームのサービス登録とコンストラクタ注入
 
-Game側で一度だけ登録を書き、Component は普通のコンストラクタで受け取ります（`src/PureEngine.Editor/Game/GameServices.cs`）。
+Game側で一度だけ登録を書き、Component は普通のコンストラクタで受け取ります。実行接続は `src/PureEngine.Runtime/` にあり、登録処理を外部から受け取ります（Editorでは `src/PureEngine.Editor/Game/GameServices.cs` のサンプル登録を渡す）。
 
 ```csharp
 services.AddScoped<IRandomService, RandomService>();
@@ -207,10 +208,13 @@ public sealed class InjectedPlayer(IRandomService random, BattleSession session)
 }
 ```
 
-Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
+Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PureEngine.Runtime.PlaySession` を使います。
 
 ```csharp
-using var play = PlaySession.Prepare(scene, ComponentAssets.Registry);
+using PureEngine.Runtime;
+
+using var edit = GameSession.Create(CheckGameServices.Configure);
+using var play = PlaySession.Prepare(scene, registry, CheckGameServices.Configure);
 play.Start();
 if (play.Runtime.IsRunning) play.Step(1f / 60f);
 ```

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using PureEngine.Core;
+using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
 
@@ -57,7 +58,7 @@ public partial class MainWindow
         PlaySession? session;
         try
         {
-            session = PlaySession.Prepare(_scene, ComponentAssets.Registry);
+            session = PlaySession.Prepare(_scene, ComponentAssets.Registry, GameServices.Configure);
         }
         catch (Exception error)
         {

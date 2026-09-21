@@ -1,11 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 using PureEngine.Core.Attributes;
-using PureEngine.Editor;
-using PureEngine.Editor.Samples;
+using PureEngine.Runtime;
 
 /// <summary>
-/// Game の登録（GameServices）から実際の生成経路（編集・Play・単体実行）までを MS DI で確認する。
+/// 実行接続（PureEngine.Runtime）の登録から実際の生成経路（編集・Play・単体実行）までを MS DI で確認する。
+/// Editor・Avaloniaを参照せず、チェック用の登録処理とローカルなComponent／サービスで検証する。
+/// A1統合後は実際のプロジェクト登録経路での確認が残る。
 /// </summary>
 static class GameDependencyChecks
 {
@@ -33,11 +34,23 @@ static class GameDependencyChecks
         Console.WriteLine("PASS: game registration to edit/play paths, scoped sharing and separation, failures, and single-release ownership.");
     }
 
+    private static ComponentRegistry RegistryFor(params (Type Type, string Id)[] entries)
+    {
+        var registry = new ComponentRegistry();
+        foreach (var (type, id) in entries)
+        {
+            var method = typeof(ComponentRegistry).GetMethod(nameof(ComponentRegistry.Register))!
+                .MakeGenericMethod(type);
+            method.Invoke(registry, [id]);
+        }
+        return registry;
+    }
+
     private static void PlainNew()
     {
-        var random = new RandomService();
-        var session = new BattleSession();
-        var direct = new InjectedPlayer(random, session);
+        var random = new CheckRandomService();
+        var session = new CheckBattleSession();
+        var direct = new CheckInjectedPlayer(random, session);
         Check(ReferenceEquals(direct.Random, random) && ReferenceEquals(direct.Session, session),
             "Plain new must keep the given services.");
         Check(direct.Hp == 100, "New component must start from initializers.");
@@ -48,15 +61,16 @@ static class GameDependencyChecks
 
     private static void EditAddSaveReload()
     {
-        using var edit = GameSession.Create();
+        using var edit = GameSession.Create(CheckGameServices.Configure);
         var target = new SceneObject("Edit me");
-        Check(ComponentAssets.TryAttach(target, typeof(InjectedPlayer), edit.Factory),
-            "Edit attach must inject through the registered services.");
-        var added = target.GetComponent<InjectedPlayer>()!;
+        var created = (CheckInjectedPlayer)edit.Factory(typeof(CheckInjectedPlayer));
+        target.Attach(created);
+        var added = target.GetComponent<CheckInjectedPlayer>()!;
         Check(added.Random is not null && added.Session is not null, "Edit instance must have services.");
         added.Hp = 37;
 
-        var serializer = new SceneSerializer(ComponentAssets.Registry);
+        var registry = RegistryFor((typeof(CheckInjectedPlayer), "checks.injected-player"));
+        var serializer = new SceneSerializer(registry);
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Hero");
@@ -65,7 +79,7 @@ static class GameDependencyChecks
         Check(yaml.Contains("Hp: 37"), "Edited Inspector value must be saved.");
 
         var reloaded = serializer.Deserialize(yaml, edit.Factory);
-        var copy = reloaded.Objects[0].GetComponent<InjectedPlayer>()!;
+        var copy = reloaded.Objects[0].GetComponent<CheckInjectedPlayer>()!;
         Check(copy.Hp == 37 && !ReferenceEquals(copy, added), "Reload must restore values into a new instance.");
         Check(copy.Random is not null && copy.Session is not null, "Reloaded edit instance must have services.");
         Check(ReferenceEquals(copy.Session, added.Session),
@@ -74,15 +88,16 @@ static class GameDependencyChecks
 
     private static void PlayInjectionAndInspector()
     {
+        var registry = RegistryFor((typeof(CheckInjectedPlayer), "checks.injected-player"));
         var source = new Scene();
         var item = source.AddEmpty();
         item.Rename("Hero");
-        var authoringRandom = new RandomService();
-        var authoringSession = new BattleSession();
-        item.Attach(new InjectedPlayer(authoringRandom, authoringSession) { Hp = 63 });
+        var authoringRandom = new CheckRandomService();
+        var authoringSession = new CheckBattleSession();
+        item.Attach(new CheckInjectedPlayer(authoringRandom, authoringSession) { Hp = 63 });
 
-        using var play = PlaySession.Prepare(source, ComponentAssets.Registry);
-        var copy = play.Runtime.Scene.Objects[0].GetComponent<InjectedPlayer>()!;
+        using var play = PlaySession.Prepare(source, registry, CheckGameServices.Configure);
+        var copy = play.Runtime.Scene.Objects[0].GetComponent<CheckInjectedPlayer>()!;
         Check(copy.Hp == 63, "Play must restore Inspector values.");
         Check(!ReferenceEquals(copy.Random, authoringRandom) && !ReferenceEquals(copy.Session, authoringSession),
             "Play must resolve fresh services instead of copying authoring references.");
@@ -95,20 +110,21 @@ static class GameDependencyChecks
 
     private static void ScopedSharingAndIsolation()
     {
+        var registry = RegistryFor((typeof(CheckInjectedPlayer), "checks.injected-player"));
         var source = new Scene();
         for (var i = 0; i < 2; i++)
-            source.AddEmpty().Attach(new InjectedPlayer(new RandomService(), new BattleSession()) { Hp = 10 + i });
+            source.AddEmpty().Attach(new CheckInjectedPlayer(new CheckRandomService(), new CheckBattleSession()) { Hp = 10 + i });
 
-        using var edit = GameSession.Create();
-        var editSession = edit.Services.GetRequiredService<BattleSession>();
-        var editRandom = edit.Services.GetRequiredService<IRandomService>();
+        using var edit = GameSession.Create(CheckGameServices.Configure);
+        var editSession = edit.Services.GetRequiredService<CheckBattleSession>();
+        var editRandom = edit.Services.GetRequiredService<ICheckRandomService>();
         editRandom.Next(10);
 
-        BattleSession firstSession;
-        IRandomService firstRandom;
-        using (var first = PlaySession.Prepare(source, ComponentAssets.Registry))
+        CheckBattleSession firstSession;
+        ICheckRandomService firstRandom;
+        using (var first = PlaySession.Prepare(source, registry, CheckGameServices.Configure))
         {
-            var copies = first.Runtime.Scene.Objects.Select(o => o.GetComponent<InjectedPlayer>()!).ToArray();
+            var copies = first.Runtime.Scene.Objects.Select(o => o.GetComponent<CheckInjectedPlayer>()!).ToArray();
             Check(ReferenceEquals(copies[0].Session, copies[1].Session)
                 && ReferenceEquals(copies[0].Random, copies[1].Random),
                 "Scoped services must be shared within one Play.");
@@ -120,13 +136,13 @@ static class GameDependencyChecks
             Check(firstSession.Members == 2, "Play state must accumulate within the Play.");
         }
 
-        using (var second = PlaySession.Prepare(source, ComponentAssets.Registry))
+        using (var second = PlaySession.Prepare(source, registry, CheckGameServices.Configure))
         {
-            var copies = second.Runtime.Scene.Objects.Select(o => o.GetComponent<InjectedPlayer>()!).ToArray();
+            var copies = second.Runtime.Scene.Objects.Select(o => o.GetComponent<CheckInjectedPlayer>()!).ToArray();
             Check(!ReferenceEquals(copies[0].Session, firstSession)
                 && !ReferenceEquals(copies[0].Random, firstRandom),
                 "A replay must not carry previous Play state, including Singletons of that provider.");
-            Check(copies[0].Session.Members == 0 && ((RandomService)copies[0].Random).Calls == 0,
+            Check(copies[0].Session.Members == 0 && ((CheckRandomService)copies[0].Random).Calls == 0,
                 "Replay services must start fresh.");
             Check(firstSession.IsDisposed, "The previous Play Scope must have ended its services.");
             second.Start();
@@ -146,13 +162,13 @@ static class GameDependencyChecks
         var source = new Scene();
         var first = source.AddEmpty();
         first.Rename("First");
-        first.Attach(new GoodProbe(new BattleSession()) { Tag = "good" });
+        first.Attach(new GoodProbe(new CheckBattleSession()) { Tag = "good" });
         var second = source.AddEmpty();
         second.Rename("Second");
         second.Attach(new NeedMissing(new UnregisteredService()));
 
         PlaySession? play = null;
-        var error = Reject<InvalidOperationException>(() => play = PlaySession.Prepare(source, registry));
+        var error = Reject<InvalidOperationException>(() => play = PlaySession.Prepare(source, registry, CheckGameServices.Configure));
         Check(play is null, "Failed preparation must not produce a running session.");
         Check(error.Message.Contains("di.missing") && error.Message.Contains(nameof(NeedMissing))
             && error.Message.Contains("Second") && error.InnerException is not null
@@ -169,13 +185,14 @@ static class GameDependencyChecks
 
     private static void TerminationAndOwnership()
     {
+        var registry = RegistryFor((typeof(CheckInjectedPlayer), "checks.injected-player"));
         var source = new Scene();
-        source.AddEmpty().Attach(new InjectedPlayer(new RandomService(), new BattleSession()) { Hp = 5 });
-        InjectedPlayer copy;
-        BattleSession playSession;
-        using (var play = PlaySession.Prepare(source, ComponentAssets.Registry))
+        source.AddEmpty().Attach(new CheckInjectedPlayer(new CheckRandomService(), new CheckBattleSession()) { Hp = 5 });
+        CheckInjectedPlayer copy;
+        CheckBattleSession playSession;
+        using (var play = PlaySession.Prepare(source, registry, CheckGameServices.Configure))
         {
-            copy = play.Runtime.Scene.Objects[0].GetComponent<InjectedPlayer>()!;
+            copy = play.Runtime.Scene.Objects[0].GetComponent<CheckInjectedPlayer>()!;
             playSession = copy.Session;
             play.Start();
             play.Step(0);
@@ -196,8 +213,8 @@ static class GameDependencyChecks
             var registry = new ComponentRegistry();
             registry.Register<StopProbe>("stop-probe");
             var source = new Scene();
-            source.AddEmpty().Attach(new StopProbe(new BattleSession()));
-            using var play = PlaySession.Prepare(source, registry);
+            source.AddEmpty().Attach(new StopProbe(new CheckBattleSession()));
+            using var play = PlaySession.Prepare(source, registry, CheckGameServices.Configure);
             var probe = play.Runtime.Scene.Objects[0].GetComponent<StopProbe>()!;
             var failure = new ApplicationException("lifecycle failed");
             if (mode == "dispose-start") probe.OnStart = play.Dispose;
@@ -222,9 +239,100 @@ static class GameDependencyChecks
         }
     }
 
-    private sealed class StopProbe(BattleSession session) : IDisposable
+    private static class CheckGameServices
     {
-        public BattleSession Session { get; } = session;
+        public static void Configure(IServiceCollection services)
+        {
+            services.AddScoped<ICheckRandomService, CheckRandomService>();
+            services.AddScoped<CheckBattleSession>();
+        }
+    }
+
+    private interface ICheckRandomService
+    {
+        int Calls { get; }
+        int Next(int max);
+    }
+
+    private sealed class CheckRandomService : ICheckRandomService
+    {
+        private int _calls;
+
+        public int Calls => _calls;
+
+        public int Next(int max)
+        {
+            _calls++;
+            return 0;
+        }
+    }
+
+    private sealed class CheckBattleSession : IDisposable
+    {
+        private bool _disposed;
+
+        public int Members { get; private set; }
+
+        public bool IsDisposed => _disposed;
+
+        public int DisposeCalls { get; private set; }
+
+        public void Join() => Members++;
+
+        public void Dispose()
+        {
+            if (_disposed) throw new InvalidOperationException("BattleSession must be disposed once.");
+            _disposed = true;
+            DisposeCalls++;
+        }
+    }
+
+    private sealed class CheckInjectedPlayer : IDisposable
+    {
+        private readonly ICheckRandomService _random;
+        private readonly CheckBattleSession _session;
+        private bool _disposed;
+
+        public int Starts;
+        public int Updates;
+        public int Destroys;
+        public int Disposes;
+        public int StartedHp = -1;
+
+        public ICheckRandomService Random => _random;
+        public CheckBattleSession Session => _session;
+
+        public CheckInjectedPlayer(ICheckRandomService random, CheckBattleSession session)
+        {
+            _random = random ?? throw new ArgumentNullException(nameof(random));
+            _session = session ?? throw new ArgumentNullException(nameof(session));
+        }
+
+        [Inspector] public int Hp { get; set; } = 100;
+
+        [Start] private void OnStart()
+        {
+            Starts++;
+            StartedHp = Hp;
+            _session.Join();
+            _ = _random.Next(100);
+        }
+
+        [Update] private void Tick(float dt) => Updates++;
+
+        [Destroy] private void OnEnd() => Destroys++;
+
+        public void Dispose()
+        {
+            if (_disposed) throw new InvalidOperationException("Dispose must run once.");
+            _disposed = true;
+            Disposes++;
+        }
+    }
+
+    private sealed class StopProbe(CheckBattleSession session) : IDisposable
+    {
+        public CheckBattleSession Session { get; } = session;
         public Action? OnStart, OnUpdate, OnDestroy;
         public bool DestroyedAlive, DisposedAlive;
         public int Disposes;
@@ -247,14 +355,14 @@ static class GameDependencyChecks
     private sealed class GoodProbe : IDisposable
     {
         public static readonly List<GoodProbe> Disposed = [];
-        public static BattleSession? LastSession;
+        public static CheckBattleSession? LastSession;
 
-        public readonly BattleSession Session;
+        public readonly CheckBattleSession Session;
         [Inspector] public string Tag = "";
         public int Starts;
         private bool _disposed;
 
-        public GoodProbe(BattleSession session) => Session = session;
+        public GoodProbe(CheckBattleSession session) => Session = session;
 
         [Start] private void Begin() => Starts++;
 

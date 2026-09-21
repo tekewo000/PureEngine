@@ -1,12 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
+using PureEngine.Core;
 
-namespace PureEngine.Editor;
+namespace PureEngine.Runtime;
 
 /// <summary>
 /// 独立した一組のサービス群（provider＋明示 Scope）と Core 用の生成関数。
-/// 同じ <see cref="GameServices.Configure"/> から作り、編集と各 Play で別インスタンスを持つ。
+/// 登録処理は外部から受け取り、編集と各 Play で別インスタンスを持つ。
 /// 編集と Play、異なる Play の間で Singleton も含めて状態を共有しない。
 /// Root provider から Scoped を直接解決せず、必ずこの Scope を通す。
+/// Editor・Avaloniaに依存しない。A1のプロジェクト側登録はこのconfigureとして受け取る。
 /// </summary>
 public sealed class GameSession : IDisposable
 {
@@ -28,10 +30,15 @@ public sealed class GameSession : IDisposable
         Factory = type => ActivatorUtilities.CreateInstance(Services, type);
     }
 
-    public static GameSession Create()
+    /// <summary>
+    /// 外部の登録処理から独立したサービス群を作る。
+    /// 呼び出し側がゲーム用サービス登録（A1接続後はプロジェクト側の登録、現状はEditorのGameServices.Configureやチェック用登録）を渡す。
+    /// </summary>
+    public static GameSession Create(Action<IServiceCollection> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         var services = new ServiceCollection();
-        GameServices.Configure(services);
+        configure(services);
         var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

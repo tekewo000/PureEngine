@@ -10,7 +10,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 
 - **Core**：シーン、オブジェクト、アタッチしたクラスとその実行を扱う。AvaloniaやSteamには依存させない。
 - **Editor**：Coreのデータを編集する。制作画面には.NET 11とAvaloniaを使う。
-- **ゲーム実行部分**：描画・入力・ゲームコードの実行を接続する。具体的な構成は保留。
+- **ゲーム実行部分**：描画・入力・ゲームコードの実行を接続する。`src/PureEngine.Runtime/` に置き、サービス生成・Component生成・SceneRuntimeの開始・更新・停止を接続する。Editor・Avaloniaに依存せず、ゲーム用サービス登録は外部から受け取り、型登録表（Registry）は引数で受け取る。
 - **ゲーム側のコード**：配札・投票・勝敗判定などのルールを、描画やSteamから独立したC#で記述する。
 
 独自のカード表示や投票結果なども、標準部品と同じ仕組みで追加できることを目指す。
@@ -120,21 +120,21 @@ private void Tick(float dt) { }
 - 実行・構造変更は単一スレッドで使う。Priorityは各ライフサイクルで小さい順に適用し、同値の順序は保証しない。component単独のDetachは今回の範囲に含めない。
 - Componentの生成箇所は `SceneSerializer.Restore`（`Clone`／`Deserialize` の `CreateComponent`）、編集時の `ComponentAssets.TryAttach`、実行中の呼び出し側 `new`＋`Attach` に限る。各生成箇所は省略可能な `Func<Type, object>? factory` を受け、未指定時は従来のパラメータレス生成を使う。指定時はその結果を使い、失敗したら報告する。パラメータレス生成で再試行して隠さない。factory の戻り値は null でなく要求どおりの exact type であることを確認する。呼び出しごとに新しいインスタンスを返す契約とし、共有は注入するサービス側に置く。資源解放箇所は `SceneRuntime` の削除時（`DestroyRemoved`）と停止・失敗時（`DestroyRemaining`）のDestroy後Dispose、および復元・準備失敗時の生成逆順Disposeに限る。解放箇所は維持する。
 - ゲームの Component は普通のC#コンストラクタでサービスを受け取る。`ctor = 依存`、`[Inspector] = 保存データ` とする。保存値はコンストラクタ実行後に復元するため、保存値を使う初期化は `Start` に置く。編集時にも生成するため、Component とサービスのコンストラクタで通信やゲーム進行を開始しない。`[Inject]`、独自コンテナ、サービスロケーター、階層Scope、コード生成は追加しない。プリミティブ引数の一律禁止や、型からサービスかどうかを推測する独自検証も追加しない。
-- サービス登録・解決には Microsoft.Extensions.DependencyInjection を Game 側の登録処理と接続部分でのみ利用する。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しない。Component 自体の DI 登録は不要で、既存の ComponentRegistry への型登録は別の役割として残す。`ComponentRegistry.Register<T>` に `new()` 制約はない。型登録時にインスタンスは生成せず、解決の成否は実際の生成時に判定する。
-- Game 側の登録口は `GameServices.Configure` 一つにまとめる。同じ登録処理から、編集用と各 Play 用の独立したサービス群（provider＋明示 Scope）を作る。編集と Play、異なる Play の間では Singleton も含めて共有しない。Root provider から Scoped を直接解決せず、必ず各 Scope を通す。provider 作成時は `ValidateScopes` と `ValidateOnBuild` を有効にする。
-- Play の順序は、Play 用 provider・Scope → factory → `SceneRuntime`（生成・復元・検証）→ `Start` とする。Stop では Runtime の終了処理（Destroy＋Dispose）を完了してから Scope、provider の順に終了する。準備失敗時も生成済みの所有資源を逆順で解放し、Scope・provider も終了する。どの `Start` も呼ばない。元の例外と後始末中の例外を保持する。
+- サービス登録・解決には Microsoft.Extensions.DependencyInjection を実行接続（`PureEngine.Runtime`）とゲーム側の登録処理でのみ利用する。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しない。Component 自体の DI 登録は不要で、既存の ComponentRegistry への型登録は別の役割として残す。`ComponentRegistry.Register<T>` に `new()` 制約はない。型登録時にインスタンスは生成せず、解決の成否は実際の生成時に判定する。
+- Game 側の登録は `Action<IServiceCollection>` として `PureEngine.Runtime.GameSession.Create`／`PureEngine.Runtime.PlaySession.Prepare` へ渡す。Editorでは `GameServices.Configure`（サンプル登録）を渡す。A1でプロジェクト側の登録口が用意できたら、そちらを渡す接続点とする。同じ登録処理から、編集用と各 Play 用の独立したサービス群（provider＋明示 Scope）を作る。編集と Play、異なる Play の間では Singleton も含めて共有しない。Root provider から Scoped を直接解決せず、必ず各 Scope を通す。provider 作成時は `ValidateScopes` と `ValidateOnBuild` を有効にする。
+- Play の順序は、Play 用 provider・Scope → factory → `SceneRuntime`（生成・復元・検証）→ `Start` とする。`PlaySession.Prepare(scene, registry, configure)` がこの順序で行い、Stop では Runtime の終了処理（Destroy＋Dispose）を完了してから Scope、provider の順に終了する。準備失敗時も生成済みの所有資源を逆順で解放し、Scope・provider も終了する。どの `Start` も呼ばない。元の例外と後始末中の例外を保持する。
 - DI が生成・所有する disposable サービスは DI 側（Scope・provider 終了）で後始末し、Component は注入されたサービスを Dispose しない。factory 経由で生成した Component 自体は DI の所有物ではなく Engine が一度だけ Dispose する。手動 `Attach(object)` の所有権は変更しない。
 
 ### Play時の制作データの分離（Coreで実装済み）
 
-- `SceneRuntime.Stopped` は全 Component の終了処理が完了してから一度だけ通知する。`PlaySession` はこの通知で Scope・provider を解放する。コールバック内の Stop／Dispose、Runtime の直接停止、Start／Update 例外による自動停止も同じ経路を通る。停止後の Runtime と Errors は参照できる。
+- `SceneRuntime.Stopped` は全 Component の終了処理が完了してから一度だけ通知する。`PureEngine.Runtime.PlaySession` はこの通知で Scope・provider を解放する。コールバック内の Stop／Dispose、Runtime の直接停止、Start／Update 例外による自動停止も同じ経路を通る。停止後の Runtime と Errors は参照できる。
 - 編集用 Component は Editor が所有し、シーン切替・削除・一時読み込みの破棄・終了時に Dispose する。編集用の Destroy は呼ばない。終了時は全 Component の Dispose を試みてから編集用 Scope・provider を解放し、失敗を集約する。
 
 - 現在の編集内容から別の実行用Sceneとクラスのインスタンスを作る。未保存の編集内容も対象にする。
 - オブジェクトのID・名前・アタッチ構成と、対応済みの制作データ、Priorityを引き継ぐ。クラスのメンバーは `[Inspector]` の値を引き継ぎ、それ以外は新しいインスタンスの初期値を使う。
 - 実行中の変更を編集用Sceneに自動で書き戻さない。コピーはPlay時に行い、毎フレームは行わない。実行用SceneでのPriority変更も編集用Sceneに漏れない。
 - この分離はSceneとそのインスタンスが対象。ゲームコードのstatic変数や外部への副作用の巻き戻しを意味しない。
-- 複製には `SceneSerializer.Clone` を使い、既存の制作データ変換・検証を共有する。YAML文字列やファイルを経由しない。Play 時の Clone には Play 用 factory を渡し、注入されたサービス参照は保存・コピーせず Clone 先のサービス群から新しく解決する。Editor の Play／Stop ボタンは `PlaySession` を使う。
+- 複製には `SceneSerializer.Clone` を使い、既存の制作データ変換・検証を共有する。YAML文字列やファイルを経由しない。Play 時の Clone には Play 用 factory を渡し、注入されたサービス参照は保存・コピーせず Clone 先のサービス群から新しく解決する。Editor の Play／Stop ボタンは `PureEngine.Runtime.PlaySession` を使う。
 
 ### 実行コスト（実装・測定済み）
 

@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
+using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
 
@@ -80,7 +81,7 @@ public partial class LauncherWindow : Window
     private async void OnCreateProject(object? sender, RoutedEventArgs e) => await RunOperation(() =>
     {
         var created = ProjectSession.Create(ProjectLocation.Text?.Trim() ?? "", ProjectName.Text?.Trim() ?? "");
-        OpenEditor(created, GameSession.Create());
+        OpenEditor(created, GameSession.Create(GameServices.Configure));
         return Task.CompletedTask;
     });
 
@@ -90,7 +91,7 @@ public partial class LauncherWindow : Window
             { Title = "Open Project", AllowMultiple = false, FileTypeFilter = [ProjectType] });
         if (files.Count == 0) return;
         var path = files[0].TryGetLocalPath() ?? throw new IOException("ローカルのProjectを選択してください。");
-        var editServices = GameSession.Create();
+        var editServices = GameSession.Create(GameServices.Configure);
         ProjectSession session;
         try
         {
@@ -126,7 +127,7 @@ public partial class LauncherWindow : Window
 
     private Task OpenRecent(RecentProject project) => RunOperation(() =>
     {
-        var editServices = GameSession.Create();
+        var editServices = GameSession.Create(GameServices.Configure);
         ProjectSession session;
         try
         {
