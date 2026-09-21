@@ -96,7 +96,11 @@ public static class ComponentAssets
 
     public static void ClearUserCode() => SetUserCode(null);
 
-    internal static ComponentRegistry CreateRegistry(UserCodeCompileResult? result)
+    /// <summary>
+    /// コンパイル結果に対する候補Registryを作る。全体の登録は変えない。
+    /// 採用前の検証（Scene移行の可否）と、採用時の移行元・移行先の組立てに使う（A3の採用手順・A2が所有予定）。
+    /// </summary>
+    public static ComponentRegistry CreateRegistry(UserCodeCompileResult? result)
     {
         var registry = new ComponentRegistry();
         foreach (var id in Registry.Ids.Where(id => !id.StartsWith("user.", StringComparison.Ordinal)))

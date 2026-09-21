@@ -48,7 +48,7 @@
 
 - Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。ゲーム画面の描画・プレビューは未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
-- Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはUIスレッドで行う。
+- Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはUIスレッドで行う（バックグラウンド基盤は実装済み、Editor接続はA2・A4統合待ち）。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
 - ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
@@ -115,6 +115,17 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+2026-09-22、A3のコンパイル側基盤（バックグラウンド実行・世代札・不採用解放）の実装後に以下を実行し、両方PASS。A3自体はEditor接続がA2・A4統合待ちのため「未完了（統合待ち）」。
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release
+dotnet run --project tests/PureEngine.Editor.Checks -c Release
+```
+
+- 追加分（Editor・Background）：実コンパイルのUI外実行、門で制御した重なり・完了順逆転での最新のみ採用と不採用分の読込解放、連続要求のまとめ、プロジェクト切替・終了後の不採用とUI無接触、失敗時の旧状態維持と修正後の再試行、コンパイル中編集の現在Sceneからの移行保持、処理中のUI投稿作業の先行実行を確認。待ち時間だけに依存する不安定な確認は使わない。
+- 既存分：前回（共通ログAPIとConsole・Play接続後）の全項目を再確認。
+- 未検証：MainWindow再読み込み経路・Launcher／ProjectSession開設経路への接続と実規模での体感はA2・A4統合後に行う。全体の完了数（0／5）は統合担当が更新する。
 
 クラス改名対応：クラス名＋名前空間変更後のID・Inspector値・Priority維持、保存後の再Open、旧シーンの名前空間変更からの初回移行、多対多改名時の拒否と管理ファイル保持、複数クラスの名前空間変更をEditorチェックで確認。
 

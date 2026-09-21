@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | A1 | プロジェクト側からゲーム用サービスを登録できるようにする | 未完了（未着手） | — |
 | A2 | MainWindowに集中した責務を分離する | 未完了（未着手） | — |
-| A3 | C#コンパイルをUIスレッドから分離する | 未完了（未着手） | — |
+| A3 | C#コンパイルをUIスレッドから分離する | 未完了（統合待ち） | コンパイル側基盤とチェックを実装（2026-09-22）。Editor接続はA2・A4統合待ち |
 | A4 | 型登録と読込コードをプロジェクト単位で所有する | 未完了（未着手） | — |
 | A5 | ゲーム実行の接続部分をEditorから独立させる | 未完了（未着手） | — |
 
@@ -46,7 +46,13 @@
 
 ## A3：コンパイルのバックグラウンド実行
 
-**現状：未完了。** [UserCodeWatcher](../src/PureEngine.Editor/Compilation/UserCodeWatcher.cs) がUIスレッドに変更通知を渡し、[ReloadUserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) が同期的にコンパイルする。プロジェクトが大きくなるほど、コンパイル中に画面操作が止まりやすい。
+**現状：未完了（統合待ち）。** コンパイル側の基盤は実装済みだが、Editorへの接続はA2・A4の統合後に行う。
+[UserCodeCompileTracker](../src/PureEngine.Editor/Compilation/UserCodeBackgroundCompile.cs) がソース読み取り・コンパイルだけを
+バックグラウンドで行い、編集Sceneへの接触・Component生成を伴う移行・結果の採用・表示更新はUI側に残す。
+世代札による最新のみ採用、切替・終了時の無効化、不採用結果の読込解放を提供する。独自のSessionや再読み込み管理は持たない。
+[ReloadUserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) と
+[ProjectSession.Open](../src/PureEngine.Editor/Projects/ProjectSession.cs) は従来どおり同期コンパイルのため、
+プロジェクトを開く際とコード再読み込みの際のUI占有はまだ解消していない。
 
 ソースの読み取り・コンパイルをバックグラウンドで行い、編集Sceneの移行・結果の採用・表示更新はUI側で行う。単に非同期化するだけでなく、採用時点の状態を確認する。
 
@@ -57,6 +63,30 @@
 - [ ] コンパイル中に編集した値を古いSceneで上書きしない。採用時もPlay・ファイル操作・入力エラーの制約を守る。
 - [ ] コンパイル失敗時は直前の正常な状態を維持し、修正後に再試行できる。
 - [ ] 処理の重なりや完了順の逆転を含むチェックと、コンパイル中のUI応答確認を記録する。
+
+実装箇所（コンパイル側、2026-09-22確認）：
+
+- [UserCodeBackgroundCompile.cs](../src/PureEngine.Editor/Compilation/UserCodeBackgroundCompile.cs)：`UserCodeCompileTicket`（世代札）、
+  `UserCodeCompileAttempt`（終了状態）、`UserCodeCompileTracker`（要求・妥当性判定・バックグラウンド実行・解放・破棄）。
+  既存の.NET機能のみを使い、新しい依存ライブラリは追加しない。Scene・ComponentAssets・Dispatcherに触れない。
+- [ComponentAssets.cs](../src/PureEngine.Editor/Components/ComponentAssets.cs)：`CreateRegistry` を公開化し、
+  全体登録を変えない候補Registryの組立てをA2の採用手順から使えるようにした。
+- [UserCodeBackgroundChecks.cs](../tests/PureEngine.Editor.Checks/UserCodeBackgroundChecks.cs)：完了順を門で制御する決定論的チェック。
+  逆転完了・連続要求のまとめ・プロジェクト切替・終了・失敗後の再試行・コンパイル中編集の保持
+  （実SceneCodeMigratorで現在のSceneから移行）・処理中のUI応答（投稿作業の先行実行）を確認。
+  待ち時間だけに依存する不安定なチェックは使わない。
+
+検証結果（2026-09-22）：
+
+- `dotnet run --project tests/PureEngine.Core.Checks -c Release`：PASS（回帰なし）。
+- `dotnet run --project tests/PureEngine.Editor.Checks -c Release`：PASS（既存項目すべて＋新規background項目）。
+- UI応答の確認方法：門で閉じたバックグラウンド処理を飛行中にし、UIへ投稿した作業が先に実行されること、
+  かつその処理が未完了のまま残ることを確認。結果：応答あり、処理の横取りなし。
+
+未検証・統合待ち（A2・A4統合後に実施）：
+
+- MainWindowの再読み込み経路とLauncher／ProjectSessionのプロジェクト開設経路への接続。
+- 採用時制約（Play・ファイル操作・入力エラー）の再確認を含むEditor結合検証と、実プロジェクト規模での体感確認。
 
 ## A4：プロジェクト単位の型登録と読込コードの所有
 
