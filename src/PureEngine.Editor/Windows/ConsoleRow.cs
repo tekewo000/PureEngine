@@ -17,35 +17,43 @@ public sealed class ConsoleRow
     public string SourceText => Entry.Source.ToString();
 
     /// <summary>Severity accent used for the row's left bar and level badge. Text label remains, so color is never the only indicator.</summary>
+    /// <remarks>Desaturated to match the Project tab's monochrome badges. Info is light blue,
+    /// Warning/Error are muted amber/red. Structural accent (lavender) is reserved for Engine/source.</remarks>
     public SolidColorBrush LevelAccent => Entry.Level switch
     {
-        LogLevel.Warning => new SolidColorBrush(Color.Parse("#FFB74D")),
-        LogLevel.Error => new SolidColorBrush(Color.Parse("#FF5252")),
-        _ => new SolidColorBrush(Color.Parse("#64B5F6")),
+        LogLevel.Warning => new SolidColorBrush(Color.Parse("#C2A15E")),
+        LogLevel.Error => new SolidColorBrush(Color.Parse("#C07F7F")),
+        _ => new SolidColorBrush(Color.Parse("#A5D8FF")),
     };
 
-    public SolidColorBrush LevelBadgeBackground => Entry.Level switch
-    {
-        LogLevel.Warning => new SolidColorBrush(Color.Parse("#4A2F0B")),
-        LogLevel.Error => new SolidColorBrush(Color.Parse("#4A1A1A")),
-        _ => new SolidColorBrush(Color.Parse("#1E3A5F")),
-    };
+    /// <summary>Level badge fill. Unified with Project kindBadge (#454545) so Console rows scan like Project rows.</summary>
+    public SolidColorBrush LevelBadgeBackground => new(Color.Parse("#454545"));
 
     public SolidColorBrush LevelBadgeForeground => Entry.Level switch
     {
-        LogLevel.Warning => new SolidColorBrush(Color.Parse("#FFCC80")),
-        LogLevel.Error => new SolidColorBrush(Color.Parse("#FF8A80")),
-        _ => new SolidColorBrush(Color.Parse("#93C5FD")),
+        LogLevel.Warning => new SolidColorBrush(Color.Parse("#E8D0A0")),
+        LogLevel.Error => new SolidColorBrush(Color.Parse("#E2B0B0")),
+        _ => new SolidColorBrush(Color.Parse("#C9E2FF")),
     };
 
-    /// <summary>Source tint: Engine uses the editor accent, Game stays neutral.</summary>
-    public SolidColorBrush SourceBadgeBackground => Entry.Source == LogSource.Engine
-        ? new SolidColorBrush(Color.Parse("#3D3455"))
-        : new SolidColorBrush(Color.Parse("#454545"));
+    /// <summary>Level badge outline. Thin severity cue; fill stays neutral.</summary>
+    public SolidColorBrush LevelBadgeBorder => Entry.Level switch
+    {
+        LogLevel.Warning => new SolidColorBrush(Color.Parse("#C2A15E")),
+        LogLevel.Error => new SolidColorBrush(Color.Parse("#C07F7F")),
+        _ => new SolidColorBrush(Color.Parse("#A5D8FF")),
+    };
+
+    /// <summary>Source tint: Engine reuses the editor structural accent (lavender, same as Startup pill/focus ring), Game stays neutral.</summary>
+    public SolidColorBrush SourceBadgeBackground => new(Color.Parse("#454545"));
 
     public SolidColorBrush SourceBadgeForeground => Entry.Source == LogSource.Engine
         ? new SolidColorBrush(Color.Parse("#D6C9F5"))
         : new SolidColorBrush(Color.Parse("#D5D5D5"));
+
+    public SolidColorBrush SourceBadgeBorder => Entry.Source == LogSource.Engine
+        ? new SolidColorBrush(Color.Parse("#B2A0E0"))
+        : new SolidColorBrush(Color.Parse("#555555"));
 
     public string Head
     {
