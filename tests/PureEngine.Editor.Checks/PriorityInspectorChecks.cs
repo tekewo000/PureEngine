@@ -64,12 +64,26 @@ static class PriorityInspectorChecks
         Check(fullBoxes.Select(box => ToolTip.GetTip(box) as string)
             .SequenceEqual(new[] { "Start Priority", "Update Priority", "Destroy Priority" }),
             "Priority tooltips must identify each lifecycle in order.");
-        var priorityPanel = fullBoxes[0].Parent as StackPanel;
+        Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Text)
+            .SequenceEqual(new[] { "S", "U", "D" }),
+            "Priority fields must show S/U/D labels in lifecycle order.");
+        Check(fullBoxes.All(box => box.Width == 28 && box.FontSize == 10
+            && box.TextAlignment == Avalonia.Media.TextAlignment.Center),
+            "Priority boxes must stay compact and centered.");
+        var fields = fullBoxes.Select(box => box.Parent as StackPanel).ToList();
+        Check(fields.All(field => field is not null
+            && field.Orientation == Avalonia.Layout.Orientation.Horizontal
+            && field.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Center
+            && field.Children.Count == 2),
+            "Each priority must pair its S/U/D label with its box.");
+        var priorityPanel = fields[0]?.Parent as StackPanel;
         Check(priorityPanel?.Orientation == Avalonia.Layout.Orientation.Horizontal
-            && fullBoxes.All(box => box.Parent == priorityPanel && box.Width == 36 && box.FontSize == 10)
+            && priorityPanel.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Right
+            && fields.All(field => field!.Parent == priorityPanel)
             && priorityPanel.Parent is Grid header
+            && Grid.GetColumn(priorityPanel) == 1
             && header.Children.OfType<TextBlock>().Single().Text == nameof(InspectorFullProbe),
-            "Compact priority fields must share the component title header.");
+            "Compact priority fields must share the component title header and dock right.");
 
         // Partial shows only Start.
         sceneObjects.SelectedItem = partialObject;

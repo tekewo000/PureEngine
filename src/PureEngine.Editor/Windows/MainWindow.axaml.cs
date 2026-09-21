@@ -214,12 +214,19 @@ public partial class MainWindow : Window
     {
         var type = component.GetType();
         var body = new StackPanel { Spacing = 4 };
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 8 };
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         var title = new TextBlock { Text = type.Name, FontWeight = FontWeight.SemiBold,
-            MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis };
+            MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
         ToolTip.SetTip(title, type.FullName);
         header.Children.Add(title);
-        var priorities = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+        var priorities = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
         foreach (var field in BuildPriorityFields(item, component))
             priorities.Children.Add(field);
         Grid.SetColumn(priorities, 1);
@@ -257,6 +264,12 @@ public partial class MainWindow : Window
     private Control BuildPriorityField(SceneObject item, object component, ComponentLifecycle kind, string displayName)
     {
         var type = component.GetType();
+        var shortLabel = kind switch
+        {
+            ComponentLifecycle.Start => "S",
+            ComponentLifecycle.Update => "U",
+            _ => "D",
+        };
         Func<int> getter = kind switch
         {
             ComponentLifecycle.Start => () => item.GetStartPriority(component),
@@ -269,12 +282,21 @@ public partial class MainWindow : Window
             ComponentLifecycle.Update => value => item.SetUpdatePriority(component, value),
             _ => value => item.SetDestroyPriority(component, value),
         };
+        var label = new TextBlock
+        {
+            Text = shortLabel,
+            Classes = { "muted" },
+            FontSize = 10,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(label, displayName);
         var box = new TextBox
         {
             Text = getter().ToString(CultureInfo.InvariantCulture),
-            Width = 36, MinHeight = 22, Height = 22,
-            FontSize = 10, Padding = new Thickness(3, 1),
+            Width = 28, MinHeight = 22, Height = 22,
+            FontSize = 10, Padding = new Thickness(2, 1),
             TextAlignment = TextAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
         ToolTip.SetTip(box, displayName);
         box.Classes.Add("inspectorField");
@@ -303,7 +325,16 @@ public partial class MainWindow : Window
             box.Text = getter().ToString(CultureInfo.InvariantCulture);
             e.Handled = true;
         };
-        return box;
+        var field = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 2,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        field.Children.Add(label);
+        field.Children.Add(box);
+        ToolTip.SetTip(field, displayName);
+        return field;
     }
 
     private Control BuildMemberRow(object component, MemberInfo member)
