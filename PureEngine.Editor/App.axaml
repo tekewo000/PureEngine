@@ -4,5 +4,17 @@
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
+    <Style Selector="Button, TextBox, ListBoxItem, MenuItem">
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="ContextMenu">
+      <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <Style Selector="ContextMenu MenuItem">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Padding" Value="8,3" />
+    </Style>
   </Application.Styles>
 </Application>
