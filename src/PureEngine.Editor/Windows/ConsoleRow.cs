@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -14,6 +15,37 @@ public sealed class ConsoleRow
     public string LevelText => Entry.Level.ToString();
 
     public string SourceText => Entry.Source.ToString();
+
+    /// <summary>Severity accent used for the row's left bar and level badge. Text label remains, so color is never the only indicator.</summary>
+    public SolidColorBrush LevelAccent => Entry.Level switch
+    {
+        LogLevel.Warning => new SolidColorBrush(Color.Parse("#FFB74D")),
+        LogLevel.Error => new SolidColorBrush(Color.Parse("#FF5252")),
+        _ => new SolidColorBrush(Color.Parse("#64B5F6")),
+    };
+
+    public SolidColorBrush LevelBadgeBackground => Entry.Level switch
+    {
+        LogLevel.Warning => new SolidColorBrush(Color.Parse("#4A2F0B")),
+        LogLevel.Error => new SolidColorBrush(Color.Parse("#4A1A1A")),
+        _ => new SolidColorBrush(Color.Parse("#1E3A5F")),
+    };
+
+    public SolidColorBrush LevelBadgeForeground => Entry.Level switch
+    {
+        LogLevel.Warning => new SolidColorBrush(Color.Parse("#FFCC80")),
+        LogLevel.Error => new SolidColorBrush(Color.Parse("#FF8A80")),
+        _ => new SolidColorBrush(Color.Parse("#93C5FD")),
+    };
+
+    /// <summary>Source tint: Engine uses the editor accent, Game stays neutral.</summary>
+    public SolidColorBrush SourceBadgeBackground => Entry.Source == LogSource.Engine
+        ? new SolidColorBrush(Color.Parse("#3D3455"))
+        : new SolidColorBrush(Color.Parse("#454545"));
+
+    public SolidColorBrush SourceBadgeForeground => Entry.Source == LogSource.Engine
+        ? new SolidColorBrush(Color.Parse("#D6C9F5"))
+        : new SolidColorBrush(Color.Parse("#D5D5D5"));
 
     public string Head
     {

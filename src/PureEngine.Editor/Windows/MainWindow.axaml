@@ -36,13 +36,74 @@
     </Style>
     <Style Selector="ListBox#ConsoleList ListBoxItem">
       <Setter Property="MinHeight" Value="0" />
-      <Setter Property="Height" Value="24" />
+      <Setter Property="Height" Value="28" />
       <Setter Property="Padding" Value="8,2" />
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="CornerRadius" Value="6" />
     </Style>
     <Style Selector="ListBox#ConsoleList ListBoxItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox#ConsoleList ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="#3D3D3D" />
+    </Style>
+    <Style Selector="Border.consoleFilter">
+      <Setter Property="Background" Value="#333333" />
+      <Setter Property="BorderBrush" Value="#555555" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.filterDot">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.countBadge">
+      <Setter Property="Background" Value="#454545" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="MinWidth" Value="24" />
+    </Style>
+    <Style Selector="Border.countBadge > TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="Border.levelBadge">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Border.sourceBadge">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Border.metaPill">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="#555555" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.consoleCard">
+      <Setter Property="Background" Value="#333333" />
+      <Setter Property="BorderBrush" Value="#555555" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="8" />
+    </Style>
+    <Style Selector="Border.rowAccent">
+      <Setter Property="Width" Value="3" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Margin" Value="0,3" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
     </Style>
     <Style Selector="TabControl.editorTabs">
       <Setter Property="Focusable" Value="True" />
@@ -351,45 +412,93 @@
               </Grid>
             </TabItem>
             <TabItem Header="Console" AutomationProperties.Name="Console">
-              <Grid RowDefinitions="Auto,*,Auto" Margin="8">
+              <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="8">
                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                   <WrapPanel.Styles>
                     <Style Selector="WrapPanel > Control">
                       <Setter Property="Margin" Value="0,0,6,4" />
                     </Style>
                   </WrapPanel.Styles>
-                  <CheckBox x:Name="ConsoleInfoFilter" Content="Info" IsChecked="True" AutomationProperties.Name="Console info filter" VerticalAlignment="Center" />
-                  <TextBlock x:Name="ConsoleInfoCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console info count" />
-                  <CheckBox x:Name="ConsoleWarningFilter" Content="Warning" IsChecked="True" AutomationProperties.Name="Console warning filter" VerticalAlignment="Center" />
-                  <TextBlock x:Name="ConsoleWarningCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console warning count" />
-                  <CheckBox x:Name="ConsoleErrorFilter" Content="Error" IsChecked="True" AutomationProperties.Name="Console error filter" VerticalAlignment="Center" />
-                  <TextBlock x:Name="ConsoleErrorCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console error count" />
-                  <CheckBox x:Name="ConsoleEngineFilter" Content="Engine" IsChecked="True" AutomationProperties.Name="Console engine filter" ToolTip.Tip="エンジンのログを表示（Info / Warning / Error）" VerticalAlignment="Center" />
-                  <TextBox x:Name="ConsoleSearch" Width="140" PlaceholderText="検索" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
-                  <Button x:Name="ConsoleClear" Content="Clear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" />
-                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" />
-                  <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" />
+                  <Border Classes="consoleFilter">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Border Classes="filterDot" Background="#64B5F6" />
+                      <CheckBox x:Name="ConsoleInfoFilter" Content="Info" IsChecked="True" AutomationProperties.Name="Console info filter" VerticalAlignment="Center" />
+                      <Border Classes="countBadge">
+                        <TextBlock x:Name="ConsoleInfoCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console info count" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="consoleFilter">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Border Classes="filterDot" Background="#FFB74D" />
+                      <CheckBox x:Name="ConsoleWarningFilter" Content="Warning" IsChecked="True" AutomationProperties.Name="Console warning filter" VerticalAlignment="Center" />
+                      <Border Classes="countBadge">
+                        <TextBlock x:Name="ConsoleWarningCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console warning count" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="consoleFilter">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Border Classes="filterDot" Background="#FF5252" />
+                      <CheckBox x:Name="ConsoleErrorFilter" Content="Error" IsChecked="True" AutomationProperties.Name="Console error filter" VerticalAlignment="Center" />
+                      <Border Classes="countBadge">
+                        <TextBlock x:Name="ConsoleErrorCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console error count" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="consoleFilter">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Border Classes="filterDot" Background="#B2A0E0" />
+                      <CheckBox x:Name="ConsoleEngineFilter" Content="Engine" IsChecked="True" AutomationProperties.Name="Console engine filter" ToolTip.Tip="エンジンのログを表示（Info / Warning / Error）" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Border>
+                  <TextBox x:Name="ConsoleSearch" Width="180" PlaceholderText="検索…" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
+                  <Button x:Name="ConsoleClear" Content="✕ Clear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" />
+                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" ToolTip.Tip="Play開始時に履歴を消去します" />
+                  <Border Classes="metaPill">
+                    <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" FontSize="11" />
+                  </Border>
                 </WrapPanel>
-                <ListBox Grid.Row="1" x:Name="ConsoleList" Margin="0,6,0,6" Background="Transparent" BorderThickness="0"
+                <StackPanel Grid.Row="1" Margin="8,6,8,0" Spacing="4">
+                  <Grid ColumnDefinitions="4,82,78,76,*">
+                    <TextBlock Grid.Column="1" Text="TIME" Classes="columnHeader" FontSize="10" />
+                    <TextBlock Grid.Column="2" Text="LEVEL" Classes="columnHeader" FontSize="10" />
+                    <TextBlock Grid.Column="3" Text="SOURCE" Classes="columnHeader" FontSize="10" />
+                    <TextBlock Grid.Column="4" Text="MESSAGE" Classes="columnHeader" FontSize="10" />
+                  </Grid>
+                  <Separator Classes="divider" Margin="0,0" />
+                </StackPanel>
+                <ListBox Grid.Row="2" x:Name="ConsoleList" Margin="0,6,0,6" Background="Transparent" BorderThickness="0"
                          SelectionMode="Single" SelectionChanged="OnConsoleSelectionChanged"
                          AutomationProperties.Name="Console list">
                   <ListBox.ItemTemplate>
                     <DataTemplate DataType="editor:ConsoleRow">
-                      <Grid ColumnDefinitions="90,64,64,*" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding TimeText}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="{Binding SourceText}" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="{Binding LevelText}" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="3" Text="{Binding Head}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Head}" />
+                      <Grid ColumnDefinitions="4,82,78,76,*" VerticalAlignment="Center">
+                        <Border Classes="rowAccent" Background="{Binding LevelAccent}" />
+                        <TextBlock Grid.Column="1" Text="{Binding TimeText}" Classes="muted" FontSize="11" FontFamily="Consolas,Menlo,monospace" VerticalAlignment="Center" />
+                        <Border Grid.Column="2" Classes="levelBadge" Background="{Binding LevelBadgeBackground}">
+                          <TextBlock Text="{Binding LevelText}" Foreground="{Binding LevelBadgeForeground}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <Border Grid.Column="3" Classes="sourceBadge" Background="{Binding SourceBadgeBackground}">
+                          <TextBlock Text="{Binding SourceText}" Foreground="{Binding SourceBadgeForeground}" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <TextBlock Grid.Column="4" Text="{Binding Head}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0,0,0" ToolTip.Tip="{Binding Head}" />
                       </Grid>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
-                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,96">
-                  <TextBlock Text="詳細" Classes="columnHeader" Margin="0,0,0,4" />
-                  <TextBox Grid.Row="1" x:Name="ConsoleDetail" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                           AutomationProperties.Name="Console detail" />
+                <Grid Grid.Row="3" ColumnDefinitions="*,Auto" RowDefinitions="Auto,96">
+                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,0,4">
+                    <TextBlock Text="詳細" Classes="columnHeader" />
+                    <TextBlock Text="選択中のログ" Classes="muted" FontSize="10" />
+                  </StackPanel>
+                  <Border Grid.Row="1" Classes="consoleCard" Padding="0" Margin="0,0,8,0">
+                    <TextBox x:Name="ConsoleDetail" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                             Background="Transparent" BorderThickness="0" PlaceholderText="ログを選択すると詳細を表示します"
+                             AutomationProperties.Name="Console detail" />
+                  </Border>
                   <Button Grid.Row="1" Grid.Column="1" x:Name="ConsoleCopy" Content="Copy" Click="OnConsoleCopy"
-                          VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.Name="Console copy" />
+                          VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.Name="Console copy" ToolTip.Tip="詳細をクリップボードにコピー" />
                 </Grid>
               </Grid>
             </TabItem>
