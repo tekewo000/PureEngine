@@ -14,6 +14,7 @@ namespace PureEngine.Editor;
 public partial class MainWindow : Window
 {
     private Scene _scene = new();
+    private GameSession _editSession;
     private static readonly DataFormat<Type> ComponentFormat =
         DataFormat.CreateInProcessFormat<Type>("PureEngine.ComponentType");
     private PointerPressedEventArgs? _assetPress;
@@ -21,8 +22,14 @@ public partial class MainWindow : Window
     private Type? _dragType;
     private readonly HashSet<TextBox> _invalidFields = [];
 
-    public MainWindow(ProjectSession session) : this()
+    public MainWindow(ProjectSession session, GameSession? editServices = null) : this()
     {
+        if (editServices is not null)
+        {
+            var created = _editSession;
+            _editSession = editServices;
+            created.Dispose();
+        }
         _project = session.Project;
         SetCurrentScene(session.Scene, session.Project.StartupScenePath);
         ProjectTab.IsSelected = true;
@@ -31,6 +38,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // 編集期間の専用サービス群。同じ登録から作り、Play 用とは独立させる。
+        _editSession = GameSession.Create();
+        Closed += (_, _) => CloseEditSession();
         Closing += OnEditorClosing;
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);
         UpdateSceneTitle();
@@ -102,7 +112,7 @@ public partial class MainWindow : Window
         SceneObjects.SelectedItem = target;
         try
         {
-            if (!ComponentAssets.TryAttach(target, type)) return;
+            if (!ComponentAssets.TryAttach(target, type, _editSession.Factory)) return;
             MarkSceneChanged();
             RefreshComponents();
             e.DragEffects = DragDropEffects.Copy;
@@ -451,6 +461,8 @@ public partial class MainWindow : Window
         MarkSceneChanged();
         SceneObjects.SelectedIndex = Math.Min(index, _scene.Objects.Count - 1);
         SceneObjects.Focus();
+        try { ComponentAssets.DisposeComponents(item.Components); }
+        catch (Exception error) { SetFileStatus(error.ToString(), true); }
     }
 
     private void OnPanePointerPressed(object? sender, PointerPressedEventArgs e)

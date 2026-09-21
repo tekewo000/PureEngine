@@ -21,7 +21,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     public string Serialize(Scene scene) => _writer.Value.Serialize(Capture(scene));
 
     /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
-    public Scene Clone(Scene scene) => Restore(Capture(scene));
+    public Scene Clone(Scene scene, Func<Type, object>? factory = null) => Restore(Capture(scene), factory);
 
     private SceneDocument Capture(Scene scene)
     {
@@ -65,49 +65,100 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         return saved;
     }
 
-    public Scene Deserialize(string yaml)
+    public Scene Deserialize(string yaml, Func<Type, object>? factory = null)
     {
         return Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
-            ?? throw new InvalidDataException("The scene document is empty."));
+            ?? throw new InvalidDataException("The scene document is empty."), factory);
     }
 
-    private Scene Restore(SceneDocument document)
+    private Scene Restore(SceneDocument document, Func<Type, object>? factory = null)
     {
         if (document.Version != 1)
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
 
         var scene = new Scene();
-        foreach (var saved in document.Objects)
+        // Preparation release tracking: components created below are owned by this restore
+        // until it succeeds. On failure they are disposed reverse-creation without any Start/Destroy.
+        var created = new List<object>();
+        try
         {
-            if (saved is null || saved.Id == Guid.Empty || string.IsNullOrWhiteSpace(saved.Name) || saved.Components is null)
-                throw new InvalidDataException("Each object requires a non-empty id, name and components list.");
-            var item = scene.RestoreObject(saved.Id, saved.Name);
-            foreach (var data in saved.Components)
+            foreach (var saved in document.Objects)
             {
-                if (data is null || string.IsNullOrWhiteSpace(data.TypeId) || data.Values is null)
-                    throw new InvalidDataException($"{saved.Name}: component typeId and values are required.");
-                var type = registry.GetType(data.TypeId);
-                var members = Members(type).ToDictionary(member => member.Name, StringComparer.Ordinal);
-                foreach (var name in data.Values.Keys)
-                    if (!members.ContainsKey(name))
-                        throw new InvalidDataException($"{data.TypeId}.{name}: unknown Inspector member.");
-                var (start, update, destroy) = ReadPriorities(data, type);
-                var component = Activator.CreateInstance(type)!;
-                foreach (var member in members.Values)
+                if (saved is null || saved.Id == Guid.Empty || string.IsNullOrWhiteSpace(saved.Name) || saved.Components is null)
+                    throw new InvalidDataException("Each object requires a non-empty id, name and components list.");
+                var item = scene.RestoreObject(saved.Id, saved.Name);
+                foreach (var data in saved.Components)
                 {
-                    ValidateType(MemberType(member));
-                    // A newly added member keeps its class initializer when absent from older scenes.
-                    if (!data.Values.TryGetValue(member.Name, out var raw)) continue;
-                    var value = ReadValue(raw, MemberType(member), $"{data.TypeId}.{member.Name}");
-                    if (member is FieldInfo field) field.SetValue(component, value);
-                    else ((PropertyInfo)member).SetValue(component, value);
+                    if (data is null || string.IsNullOrWhiteSpace(data.TypeId) || data.Values is null)
+                        throw new InvalidDataException($"{saved.Name}: component typeId and values are required.");
+                    var type = registry.GetType(data.TypeId);
+                    var members = Members(type).ToDictionary(member => member.Name, StringComparer.Ordinal);
+                    foreach (var name in data.Values.Keys)
+                        if (!members.ContainsKey(name))
+                            throw new InvalidDataException($"{data.TypeId}.{name}: unknown Inspector member.");
+                    var (start, update, destroy) = ReadPriorities(data, type);
+                    var component = CreateComponent(type, factory, data.TypeId, saved.Name);
+                    created.Add(component);
+                    foreach (var member in members.Values)
+                    {
+                        ValidateType(MemberType(member));
+                        // A newly added member keeps its class initializer when absent from older scenes.
+                        if (!data.Values.TryGetValue(member.Name, out var raw)) continue;
+                        var value = ReadValue(raw, MemberType(member), $"{data.TypeId}.{member.Name}");
+                        if (member is FieldInfo field) field.SetValue(component, value);
+                        else ((PropertyInfo)member).SetValue(component, value);
+                    }
+                    item.Attach(component);
+                    item.RestorePriorities(component, start, update, destroy);
                 }
-                item.Attach(component);
-                item.RestorePriorities(component, start, update, destroy);
             }
         }
+        catch (Exception error)
+        {
+            var errors = new List<Exception> { error };
+            for (var i = created.Count - 1; i >= 0; i--)
+            {
+                if (created[i] is IDisposable disposable)
+                {
+                    try { disposable.Dispose(); }
+                    catch (Exception cleanupError) { errors.Add(cleanupError); }
+                }
+            }
+            if (errors.Count > 1)
+                throw new AggregateException("Scene restoration and cleanup failed.", errors);
+            throw;
+        }
         return scene;
+    }
+
+    /// <summary>
+    /// Component 生成箇所 (復元/Clone): 型から新しい実行用・編集用インスタンスを作る。
+    /// factory 未指定時は従来のパラメータレス生成を使い、指定時は factory の結果を使う。
+    /// factory の失敗時はそのエラーを報告し、パラメータレス生成で再試行して隠さない。
+    /// factory は null でない要求どおりの exact type の新しいインスタンスを返す契約とし、
+    /// 共有したいものは注入するサービス側に置く。
+    /// </summary>
+    private static object CreateComponent(Type type, Func<Type, object>? factory, string typeId, string objectName)
+    {
+        if (factory is null) return Activator.CreateInstance(type)!;
+        object? created;
+        try
+        {
+            created = factory(type);
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException(
+                $"Failed to create component {typeId} ({type.FullName}) for object '{objectName}'.", error);
+        }
+        if (created is null)
+            throw new InvalidOperationException(
+                $"Component factory returned null for {typeId} ({type.FullName}) on object '{objectName}'.");
+        if (created.GetType() != type)
+            throw new InvalidOperationException(
+                $"Component factory returned {created.GetType().FullName} instead of {type.FullName} for {typeId} on object '{objectName}'.");
+        return created;
     }
 
     private static MemberInfo[] Members(Type type) => InspectorMembers.GetOrAdd(type, static type =>

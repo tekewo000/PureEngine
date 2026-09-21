@@ -99,16 +99,20 @@ public partial class MainWindow
     {
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
-        var restored = _sceneSerializer.Deserialize(File.ReadAllText(path));
+        // 編集用 factory でコンストラクタ注入し、Play 用とは別のサービス群を使う。
+        var restored = _sceneSerializer.Deserialize(File.ReadAllText(path), _editSession.Factory);
+        // This first scene only validates the file; it is never adopted by the editor.
+        ComponentAssets.DisposeComponents(restored.Objects.SelectMany(item => item.Components));
         if (!await ConfirmUnsavedChanges()) return;
         // Saving the old scene during confirmation may overwrite the file just selected.
-        restored = _sceneSerializer.Deserialize(File.ReadAllText(path));
+        restored = _sceneSerializer.Deserialize(File.ReadAllText(path), _editSession.Factory);
         SetCurrentScene(restored, path);
         SetFileStatus($"読み込みました: {path}");
     }
 
     private void SetCurrentScene(Scene restored, string? path)
     {
+        var previous = _scene;
         _scene = restored;
         SceneObjects.SelectedItem = null;
         SceneObjects.ItemsSource = _scene.Objects;
@@ -120,6 +124,20 @@ public partial class MainWindow
         UpdateSceneTitle();
         SyncExplorerToScene(path);
         RefreshProjectExplorer();
+        if (!ReferenceEquals(previous, restored))
+            ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components));
+    }
+
+    private void CloseEditSession()
+    {
+        var previous = _scene;
+        _scene = new Scene();
+        var errors = new List<Exception>();
+        try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
+        catch (Exception error) { errors.Add(error); }
+        try { _editSession.Dispose(); }
+        catch (Exception error) { errors.Add(error); }
+        if (errors.Count != 0) throw new AggregateException("Editor cleanup failed.", errors);
     }
 
     /// <summary>開いたシーンのフォルダをExplorerで選び直し、右ペインでそのファイルを選択する。</summary>

@@ -112,6 +112,9 @@ ScenePersistenceChecks.Run();
 ProjectPersistenceChecks.Run();
 SceneRuntimeChecks.Run();
 PriorityChecks.Run();
+LifecycleChecks.Run();
+DependencyInjectionChecks.Run();
+GameDependencyChecks.Run();
 Console.WriteLine("PASS: add, rename, validation, identity, notifications, removal, attach, get-component, schema, asset drop policy, YAML persistence, and projects.");
 
 sealed class PlayerController

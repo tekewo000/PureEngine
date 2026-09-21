@@ -32,6 +32,7 @@ public sealed class SceneRuntime : IDisposable
         public int UpdatePriority;
         public int DestroyPriority;
         public bool Destroyed;
+        public bool Disposed;
     }
 
     private static readonly Comparer<Invocation> StartOrder =
@@ -58,9 +59,17 @@ public sealed class SceneRuntime : IDisposable
     public Scene Scene { get; }
     public bool IsRunning => _started && !_stopRequested && !_stopped;
     public IReadOnlyList<SceneRuntimeError> Errors { get; }
+    /// <summary>Raised once after all components have finished termination, including deferred Stop.</summary>
+    public event Action? Stopped;
 
     /// <summary>Validates declarations and copies the current Inspector data; does not call Start.</summary>
-    public SceneRuntime(Scene source, ComponentRegistry registry)
+    /// <remarks>
+    /// Preparation (validation + Clone + bind) must fully succeed before any Start.
+    /// On failure the constructor throws without calling Start/Update/Destroy; Clone-time
+    /// IDisposable instances are released by the serializer in reverse creation order,
+    /// and components already cloned for this runtime are disposed here without Destroy.
+    /// </remarks>
+    public SceneRuntime(Scene source, ComponentRegistry registry, Func<Type, object>? factory = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(registry);
@@ -68,15 +77,28 @@ public sealed class SceneRuntime : IDisposable
             foreach (var component in item.Components)
                 ComponentSchema.GetLifecycle(component.GetType());
 
-        Scene = new SceneSerializer(registry).Clone(source);
+        // Component 生成箇所 (Play 用): 編集データの複製経由で実行用インスタンスを作る。
+        // factory 未指定時は従来のパラメータレス生成、指定時はその factory でコンストラクタ注入する。
+        Scene = new SceneSerializer(registry).Clone(source, factory);
         Errors = _errors.AsReadOnly();
-        foreach (var item in Scene.Objects)
+        try
         {
-            RegisterObject(item);
-            foreach (var component in item.Components) RegisterComponent(item, component);
-            item.Runtime = this;
+            foreach (var item in Scene.Objects)
+            {
+                RegisterObject(item);
+                foreach (var component in item.Components) RegisterComponent(item, component);
+                item.Runtime = this;
+            }
+            Scene.Runtime = this;
         }
-        Scene.Runtime = this;
+        catch (Exception error)
+        {
+            // Preparation failure: never started, so no Destroy. Release owned resources only.
+            var cleanupErrors = DisposeSceneComponents(Scene);
+            if (cleanupErrors.Count != 0)
+                throw new AggregateException("Runtime preparation and cleanup failed.", [error, .. cleanupErrors]);
+            throw;
+        }
     }
 
     /// <summary>Starts the initial batch. Additions made by its callbacks wait until the next Step.</summary>
@@ -119,7 +141,8 @@ public sealed class SceneRuntime : IDisposable
         finally { FinishStep(); }
     }
 
-    /// <summary>Stops after the current callback, then destroys every accepted component, even before Start.</summary>
+    /// <summary>Stops after the current callback, then destroys and disposes every accepted component, even before Start.</summary>
+    /// <remarks>Repeated Stop/Dispose calls are no-ops; Destroy and Dispose each run at most once per accepted component.</remarks>
     public void Stop()
     {
         if (_stopped) return;
@@ -129,6 +152,7 @@ public sealed class SceneRuntime : IDisposable
         FinishStep();
     }
 
+    /// <summary>Equivalent to Stop; Destroy and Dispose remain single-shot.</summary>
     public void Dispose() => Stop();
 
     internal void EnsureMutationAllowed()
@@ -243,6 +267,7 @@ public sealed class SceneRuntime : IDisposable
 
     private void FinishStep()
     {
+        var completedStop = false;
         try
         {
             if (!_stopRequested && _removals.Count != 0)
@@ -264,12 +289,19 @@ public sealed class SceneRuntime : IDisposable
                 _pendingStarts.Clear();
                 _updates.Clear();
                 _removals.Clear();
+                completedStop = true;
             }
         }
         finally
         {
             _destroying = false;
             _busy = false;
+        }
+        if (completedStop)
+        {
+            var stopped = Stopped;
+            Stopped = null;
+            stopped?.Invoke();
         }
     }
 
@@ -280,13 +312,8 @@ public sealed class SceneRuntime : IDisposable
         foreach (var owner in _removals)
             targets.AddRange(owner.Components);
         if (targets.Count > 1) targets.Sort(DestroyOrder);
-        foreach (var entry in targets)
-        {
-            if (entry.Destroyed) continue;
-            entry.Destroyed = true;
-            try { entry.Destroy?.Invoke(); }
-            catch (Exception error) { Report(entry, entry.Methods.Destroy!.Name, error); }
-        }
+        DestroyTargets(targets);
+        DisposeTargets(targets);
         foreach (var owner in _removals)
         {
             Scene.RemoveImmediately(owner.Item);
@@ -297,19 +324,63 @@ public sealed class SceneRuntime : IDisposable
     private void DestroyRemaining()
     {
         // Stop destroys everything still accepted, ordered by Destroy Priority across objects.
+        // Rule: Started, Start-failed, and Unstarted components all receive Destroy once;
+        // already-destroyed removals are skipped; rejected attaches never receive it.
         var targets = new List<Invocation>();
         foreach (var owner in _objects.Values)
             targets.AddRange(owner.Components);
         if (targets.Count > 1) targets.Sort(DestroyOrder);
+        DestroyTargets(targets);
+        // Resource release point: after Destroy completes, release owned resources once.
+        // Future constructor injection keeps this point; only the creation point changes.
+        DisposeTargets(targets);
+        foreach (var owner in _objects.Values)
+            Scene.RemoveImmediately(owner.Item);
+    }
+
+    private void DestroyTargets(List<Invocation> targets)
+    {
         foreach (var entry in targets)
         {
             if (entry.Destroyed) continue;
             entry.Destroyed = true;
+            // A Destroy method may itself implement IDisposable.Dispose, including explicitly.
+            // Mark before invoking so a throwing Dispose is not retried in DisposeTargets.
+            if (entry.Component is IDisposable disposable && entry.Destroy == (Action)disposable.Dispose)
+                entry.Disposed = true;
             try { entry.Destroy?.Invoke(); }
             catch (Exception error) { Report(entry, entry.Methods.Destroy!.Name, error); }
         }
-        foreach (var owner in _objects.Values)
-            Scene.RemoveImmediately(owner.Item);
+    }
+
+    private void DisposeTargets(List<Invocation> targets)
+    {
+        foreach (var entry in targets)
+        {
+            if (entry.Disposed) continue;
+            entry.Disposed = true;
+            if (entry.Component is not IDisposable disposable) continue;
+            try { disposable.Dispose(); }
+            catch (Exception error) { Report(entry, nameof(IDisposable.Dispose), error); }
+        }
+    }
+
+    private static List<Exception> DisposeSceneComponents(Scene scene)
+    {
+        // Preparation-failure release point: no lifecycle ran, so only Dispose, in reverse creation order.
+        var created = new List<object>();
+        var errors = new List<Exception>();
+        foreach (var item in scene.Objects)
+            created.AddRange(item.Components);
+        for (var i = created.Count - 1; i >= 0; i--)
+        {
+            if (created[i] is IDisposable disposable)
+            {
+                try { disposable.Dispose(); }
+                catch (Exception error) { errors.Add(error); }
+            }
+        }
+        return errors;
     }
 
     private void Report(Invocation entry, string method, Exception error) =>

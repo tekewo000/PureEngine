@@ -7,7 +7,7 @@ public sealed class ComponentRegistry
 
     public IReadOnlyList<Type> Types => _types.Values.ToArray();
 
-    public void Register<T>(string id) where T : class, new()
+    public void Register<T>(string id) where T : class
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (id != id.Trim() || _types.ContainsKey(id) || _types.ContainsValue(typeof(T)))

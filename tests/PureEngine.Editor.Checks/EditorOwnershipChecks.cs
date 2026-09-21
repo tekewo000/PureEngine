@@ -1,0 +1,112 @@
+using System.Reflection;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using PureEngine.Core;
+using PureEngine.Core.Attributes;
+using PureEngine.Editor;
+using PureEngine.Editor.Samples;
+
+static class EditorOwnershipChecks
+{
+    private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+    private static object? Call(MainWindow window, string method, params object?[] args) =>
+        typeof(MainWindow).GetMethod(method, Private)!.Invoke(window, args);
+    private static T Field<T>(MainWindow window, string name) =>
+        (T)typeof(MainWindow).GetField(name, Private)!.GetValue(window)!;
+    private static void Dirty(MainWindow window, bool value) =>
+        typeof(MainWindow).GetField("_sceneDirty", Private)!.SetValue(window, value);
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) throw new Exception(message);
+    }
+
+    public static void Run(string root)
+    {
+        ComponentAssets.Registry.Register<OwnershipProbe>("checks.ownership");
+        var editor = new MainWindow();
+        editor.Show();
+        var scene = Field<Scene>(editor, "_scene");
+        var services = Field<GameSession>(editor, "_editSession");
+        var item = scene.AddEmpty();
+        ComponentAssets.TryAttach(item, typeof(OwnershipProbe), services.Factory);
+        var original = item.GetComponent<OwnershipProbe>()!;
+        var path = Path.Combine(root, "ownership.pure.scene.yaml");
+        File.WriteAllText(path, new SceneSerializer(ComponentAssets.Registry).Serialize(scene));
+        OwnershipProbe.Created.Clear();
+
+        ((Task)Call(editor, "OpenScenePathAsync", path)!).GetAwaiter().GetResult();
+        Check(original.Disposes == 1 && original.DisposedWithLiveServices, "Replaced edit scene must be released.");
+        Check(OwnershipProbe.Created.Count == 2 && OwnershipProbe.Created[0].Disposes == 1
+            && OwnershipProbe.Created[1].Disposes == 0, "Validation copy must be released; adopted copy must stay alive.");
+        var current = OwnershipProbe.Created[1];
+
+        Dirty(editor, true);
+        var pending = (Task)Call(editor, "OpenScenePathAsync", path)!;
+        Dispatcher.UIThread.RunJobs();
+        var dialog = editor.OwnedWindows.Single(window => window.Title == "Unsaved Scene");
+        dialog.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, "Cancel"))
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        pending.GetAwaiter().GetResult();
+        Check(OwnershipProbe.Created.Count == 3 && OwnershipProbe.Created[2].Disposes == 1
+            && current.Disposes == 0, "Cancelled read must release its temporary copy and keep the current scene.");
+
+        var objects = editor.FindControl<ListBox>("SceneObjects")!;
+        objects.SelectedIndex = 0;
+        Call(editor, "DeleteSelectedObject");
+        Check(current.Disposes == 1 && current.DisposedWithLiveServices, "Deleting an edit object must release it.");
+        Dirty(editor, false);
+        ((Task)Call(editor, "OpenScenePathAsync", path)!).GetAwaiter().GetResult();
+        var replaced = OwnershipProbe.Created[^1];
+        Call(editor, "SetCurrentScene", new Scene(), null);
+        Check(replaced.Disposes == 1, "Creating a new scene must release the previous scene.");
+        ((Task)Call(editor, "OpenScenePathAsync", path)!).GetAwaiter().GetResult();
+        var closing = OwnershipProbe.Created[^1];
+        editor.Close();
+        Dispatcher.UIThread.RunJobs();
+        Check(closing.Disposes == 1 && closing.DisposedWithLiveServices && closing.Session.IsDisposed,
+            "Editor close must release components before services.");
+        Check(OwnershipProbe.Created.All(probe => probe.Disposes == 1 && probe.Destroys == 0),
+            "Every editing copy must be released once without game Destroy callbacks.");
+        var failingEditor = new MainWindow();
+        failingEditor.Show();
+        var failingServices = Field<GameSession>(failingEditor, "_editSession");
+        var failingScene = Field<Scene>(failingEditor, "_scene");
+        var probes = Enumerable.Range(0, 2).Select(_ =>
+        {
+            var target = failingScene.AddEmpty();
+            ComponentAssets.TryAttach(target, typeof(OwnershipProbe), failingServices.Factory);
+            return target.GetComponent<OwnershipProbe>()!;
+        }).ToArray();
+        var cleanupFailure = new ApplicationException("editor cleanup failed");
+        probes[1].Failure = cleanupFailure;
+        Exception? reported = null;
+        try { Call(failingEditor, "CloseEditSession"); }
+        catch (TargetInvocationException error) { reported = error.InnerException; }
+        Check(reported is AggregateException aggregate && aggregate.Flatten().InnerExceptions.Contains(cleanupFailure),
+            "Editor cleanup must retain disposal errors.");
+        Check(probes.All(probe => probe.Disposes == 1 && probe.DisposedWithLiveServices && probe.Session.IsDisposed),
+            "One failed component must not prevent remaining components or services from being released.");
+        failingEditor.Close();
+        Console.WriteLine("PASS: editor component ownership on reload, cancelled read, deletion, and close.");
+    }
+
+    public sealed class OwnershipProbe : IDisposable
+    {
+        public static readonly List<OwnershipProbe> Created = [];
+        public BattleSession Session { get; }
+        public int Disposes, Destroys;
+        public bool DisposedWithLiveServices;
+        public Exception? Failure;
+        public OwnershipProbe(BattleSession session) { Session = session; Created.Add(this); }
+        [Destroy] private void End() => Destroys++;
+        public void Dispose()
+        {
+            Disposes++;
+            DisposedWithLiveServices = !Session.IsDisposed;
+            if (Failure is not null) throw Failure;
+        }
+    }
+}

@@ -79,7 +79,8 @@ public partial class LauncherWindow : Window
 
     private async void OnCreateProject(object? sender, RoutedEventArgs e) => await RunOperation(() =>
     {
-        OpenEditor(ProjectSession.Create(ProjectLocation.Text?.Trim() ?? "", ProjectName.Text?.Trim() ?? ""));
+        var created = ProjectSession.Create(ProjectLocation.Text?.Trim() ?? "", ProjectName.Text?.Trim() ?? "");
+        OpenEditor(created, GameSession.Create());
         return Task.CompletedTask;
     });
 
@@ -89,7 +90,25 @@ public partial class LauncherWindow : Window
             { Title = "Open Project", AllowMultiple = false, FileTypeFilter = [ProjectType] });
         if (files.Count == 0) return;
         var path = files[0].TryGetLocalPath() ?? throw new IOException("ローカルのProjectを選択してください。");
-        OpenEditor(ProjectSession.Open(path));
+        var editServices = GameSession.Create();
+        ProjectSession session;
+        try
+        {
+            session = ProjectSession.Open(path, editServices.Factory);
+        }
+        catch (Exception openError)
+        {
+            try
+            {
+                editServices.Dispose();
+            }
+            catch (Exception cleanupError)
+            {
+                throw new AggregateException("Project open and cleanup failed.", openError, cleanupError);
+            }
+            throw;
+        }
+        OpenEditor(session, editServices);
     });
 
     private async void OnRecentDoubleTapped(object? sender, TappedEventArgs e)
@@ -107,13 +126,31 @@ public partial class LauncherWindow : Window
 
     private Task OpenRecent(RecentProject project) => RunOperation(() =>
     {
-        OpenEditor(ProjectSession.Open(project.ManifestPath));
+        var editServices = GameSession.Create();
+        ProjectSession session;
+        try
+        {
+            session = ProjectSession.Open(project.ManifestPath, editServices.Factory);
+        }
+        catch (Exception openError)
+        {
+            try
+            {
+                editServices.Dispose();
+            }
+            catch (Exception cleanupError)
+            {
+                throw new AggregateException("Project open and cleanup failed.", openError, cleanupError);
+            }
+            throw;
+        }
+        OpenEditor(session, editServices);
         return Task.CompletedTask;
     });
 
-    private void OpenEditor(ProjectSession session)
+    private void OpenEditor(ProjectSession session, GameSession editServices)
     {
-        var editor = new MainWindow(session);
+        var editor = new MainWindow(session, editServices);
         editor.Closed += (_, _) =>
         {
             if (_closed) return;

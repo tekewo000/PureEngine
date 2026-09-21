@@ -95,35 +95,46 @@ private void Tick(float dt) { }
 
 ### 開始・更新・追加・削除・停止（Coreで実装済み）
 
+- 全Componentの生成・`[Inspector]`復元・実行前検証がすべて成功してからStartする。準備に失敗した場合はコンストラクターが例外を投げ、どのStart／Update／Destroyも呼ばない。復元途中で生成済みの `IDisposable` は生成の逆順でDisposeしてから投げる。コンストラクター自体が完了しなかった資源は生成側で解放する。
 - 開始対象すべてのStartを終えてからUpdateに進む。Startは実行用インスタンスにつき1回。
 - 実行中に追加された対象は次フレームから参加し、そのフレームのUpdateより先にStartを呼ぶ。
-- 削除は予約し、予約後はその対象のStart・Updateを呼ばない。フレーム末にDestroyを呼んで削除する。既に実行した処理は巻き戻さない。
-- Stop時は以後の更新を止め、実行用Sceneを破棄してDestroyを呼ぶ。同じ対象のDestroyを重複して呼ばない。
-- 再度Playした場合は新しい実行用インスタンスを作り、Startから始める。一時停止・途中再開は今回の範囲に含めない。
-- Start・Updateの例外では実行全体を停止し、対象オブジェクト・型・メソッド・例外を報告する。Destroyの例外も報告するが、残りの対象の後片付けは続ける。
+- 削除は予約し、予約後はその対象のStart・Updateを呼ばない。フレーム末にDestroyを呼んで削除し、その後に `IDisposable` はDisposeする。既に実行した処理は巻き戻さない。既に削除で終了した対象はStop時に繰り返さない。
+- Stop時は以後の更新を止め、実行用Sceneを破棄してDestroyを呼ぶ。同じ対象のDestroy／Disposeを重複して呼ばない。`Stop()`／`Dispose()` の重複呼び出しはno-opとする。
+- 終了処理の確定ルール：受け入れ済みの全対象に `[Destroy]` をDestroy優先度順に一度だけ呼ぶ。Start済み・Start中に失敗したもの・未開始を問わず対象とし、既に削除でDestroy済みのものと、コンストラクターや不正Attachで受け入れなかったものは呼ばない。Destroyの後に `IDisposable` は一度だけDisposeする（Destroyなし・Destroy例外でも行う）。
+- 再度Playした場合は新しい実行用インスタンスを作り、Startから始める。前回の実行状態（回数・破棄済みインスタンス・Dispose済み資源）は持ち越さない。一時停止・途中再開は今回の範囲に含めない。
+- Start・Updateの例外では実行全体を停止し、対象オブジェクト・型・メソッド・例外を報告する。Destroy／Disposeの例外も報告するが、残りの対象の後片付けは続ける。
 
 例：A・Bが開始対象なら、両方のStartが終わってからUpdateを実行する。AのUpdateが、まだUpdateしていないBの削除とCの追加を予約した場合、そのフレームのBのUpdateは呼ばず、末尾でBのDestroyを呼ぶ。Cは次フレームにStartしてからUpdateに参加する。この例はAがBより先に実行される場合であり、同じPriorityの順序を保証するものではない。
 
 #### APIと境界条件
 
-- `new SceneRuntime(source, registry)` は宣言検証と制作データの複製を行う。コンストラクターではStartを呼ばない。初期の制作データには既存の登録表・保存可能な型の制約が適用される。
+- `new SceneRuntime(source, registry)` は宣言検証と制作データの複製を行う。コンストラクターではStartを呼ばない。初期の制作データには既存の登録表・保存可能な型の制約が適用される。準備失敗時は例外を投げ、Start／Destroyを呼ばず、生成済み `IDisposable` のみ解放する。解放中にも例外が出た場合は残りの解放を続け、元の準備エラーを先頭、解放エラーを発生順に保持した `AggregateException` を投げる。解放が成功した場合は元の例外をそのまま再送出する。
 - `Start()` は初期対象を開始する。`Step(float dt)` は追加対象のStart、Update、予約削除の順に1フレームを実行する。dtは有限の0以上の秒数。
 - `Scene` は実行用Scene。既存の `Scene.AddEmpty()`、`SceneObject.Attach()`、`Scene.Remove()` が実行機構へ通知される。追加はSceneに即時現れるが、現在の開始バッチ／フレームには参加しない。削除対象はフレーム末までSceneに残る。
-- 各開始バッチの対象を開始時点で固定する。Start中に追加した対象も次のStepまで待つ。追加直後に削除された対象や、Start前に削除された対象はStartを呼ばずDestroyする。
-- 実行側が受け入れた全インスタンスを破棄対象とする。Start途中の例外でも未Startの対象を含めて後片付けする。コンストラクターで拒否されたSceneや、不正なAttachで受け入れなかった対象にはライフサイクルを呼ばない。
-- `Stop()`／`Dispose()` は繰り返し呼べる。Start前でも受け入れ済みの対象をDestroyする。コールバック中のStopは現在のコールバックが戻ってから後片付けし、後続のStart／Updateを呼ばない。
+- 各開始バッチの対象を開始時点で固定する。Start中に追加した対象も次のStepまで待つ。追加直後に削除された対象や、Start前に削除された対象はStartを呼ばずDestroy（＋Dispose）する。
+- 実行側が受け入れた全インスタンスを破棄対象とする。Start途中の例外でも、Start済み・失敗したもの・未Startの対象を含めてDestroy＋Disposeで後片付けする。コンストラクターで拒否されたSceneや、不正なAttachで受け入れなかった対象にはライフサイクルを呼ばない。作り済みインスタンスのAttach失敗時の解放は呼び出し側が担う。
+- `Stop()`／`Dispose()` は繰り返し呼べる。Start前でも受け入れ済みの対象をDestroy＋Disposeする。DestroyとDisposeは対象ごとに一度だけ行い、二重実行しない。`[Destroy]` が `IDisposable.Dispose` の実装メソッドそのものである場合はDestroyの順序で一度だけ呼び、例外時もDisposeとして再試行しない。別のDestroyメソッドから利用者が明示的にDisposeを呼ぶ場合、その二重解放防止は利用者の責任とする。コールバック中のStopは現在のコールバックが戻ってから後片付けし、後続のStart／Updateを呼ばない。
 - 同一runtimeでStartの再呼び出し、Stepの再入、開始前・停止後のStepは拒否する。再実行は新しい `SceneRuntime` を作る。
 - Destroy中とStop要求後の追加・Attach・削除、削除予約済み対象へのAttachは拒否する。同一runtimeで同じcomponentインスタンスの重複利用・破棄後の再利用も拒否する。
-- ライフサイクルの例外は `Errors` にオブジェクトID・名前・型・メソッド名・元の例外を記録する。Start／Updateの例外は実行全体を停止する。通常の削除でのDestroy例外は記録して削除を完了し、他の対象の実行は続ける。Stop時もDestroy例外にかかわらず後片付けを続ける。
+- ライフサイクルの例外は `Errors` にオブジェクトID・名前・型・メソッド名・元の例外を記録する（Dispose失敗はメソッド名 `Dispose`）。Start／Updateの例外は実行全体を停止する。通常の削除でのDestroy／Dispose例外は記録して削除を完了し、他の対象の実行は続ける。Stop時もDestroy／Dispose例外にかかわらず後片付けを続ける。
 - 実行・構造変更は単一スレッドで使う。Priorityは各ライフサイクルで小さい順に適用し、同値の順序は保証しない。component単独のDetachは今回の範囲に含めない。
+- Componentの生成箇所は `SceneSerializer.Restore`（`Clone`／`Deserialize` の `CreateComponent`）、編集時の `ComponentAssets.TryAttach`、実行中の呼び出し側 `new`＋`Attach` に限る。各生成箇所は省略可能な `Func<Type, object>? factory` を受け、未指定時は従来のパラメータレス生成を使う。指定時はその結果を使い、失敗したら報告する。パラメータレス生成で再試行して隠さない。factory の戻り値は null でなく要求どおりの exact type であることを確認する。呼び出しごとに新しいインスタンスを返す契約とし、共有は注入するサービス側に置く。資源解放箇所は `SceneRuntime` の削除時（`DestroyRemoved`）と停止・失敗時（`DestroyRemaining`）のDestroy後Dispose、および復元・準備失敗時の生成逆順Disposeに限る。解放箇所は維持する。
+- ゲームの Component は普通のC#コンストラクタでサービスを受け取る。`ctor = 依存`、`[Inspector] = 保存データ` とする。保存値はコンストラクタ実行後に復元するため、保存値を使う初期化は `Start` に置く。編集時にも生成するため、Component とサービスのコンストラクタで通信やゲーム進行を開始しない。`[Inject]`、独自コンテナ、サービスロケーター、階層Scope、コード生成は追加しない。プリミティブ引数の一律禁止や、型からサービスかどうかを推測する独自検証も追加しない。
+- サービス登録・解決には Microsoft.Extensions.DependencyInjection を Game 側の登録処理と接続部分でのみ利用する。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しない。Component 自体の DI 登録は不要で、既存の ComponentRegistry への型登録は別の役割として残す。`ComponentRegistry.Register<T>` に `new()` 制約はない。型登録時にインスタンスは生成せず、解決の成否は実際の生成時に判定する。
+- Game 側の登録口は `GameServices.Configure` 一つにまとめる。同じ登録処理から、編集用と各 Play 用の独立したサービス群（provider＋明示 Scope）を作る。編集と Play、異なる Play の間では Singleton も含めて共有しない。Root provider から Scoped を直接解決せず、必ず各 Scope を通す。provider 作成時は `ValidateScopes` と `ValidateOnBuild` を有効にする。
+- Play の順序は、Play 用 provider・Scope → factory → `SceneRuntime`（生成・復元・検証）→ `Start` とする。Stop では Runtime の終了処理（Destroy＋Dispose）を完了してから Scope、provider の順に終了する。準備失敗時も生成済みの所有資源を逆順で解放し、Scope・provider も終了する。どの `Start` も呼ばない。元の例外と後始末中の例外を保持する。
+- DI が生成・所有する disposable サービスは DI 側（Scope・provider 終了）で後始末し、Component は注入されたサービスを Dispose しない。factory 経由で生成した Component 自体は DI の所有物ではなく Engine が一度だけ Dispose する。手動 `Attach(object)` の所有権は変更しない。
 
 ### Play時の制作データの分離（Coreで実装済み）
+
+- `SceneRuntime.Stopped` は全 Component の終了処理が完了してから一度だけ通知する。`PlaySession` はこの通知で Scope・provider を解放する。コールバック内の Stop／Dispose、Runtime の直接停止、Start／Update 例外による自動停止も同じ経路を通る。停止後の Runtime と Errors は参照できる。
+- 編集用 Component は Editor が所有し、シーン切替・削除・一時読み込みの破棄・終了時に Dispose する。編集用の Destroy は呼ばない。終了時は全 Component の Dispose を試みてから編集用 Scope・provider を解放し、失敗を集約する。
 
 - 現在の編集内容から別の実行用Sceneとクラスのインスタンスを作る。未保存の編集内容も対象にする。
 - オブジェクトのID・名前・アタッチ構成と、対応済みの制作データ、Priorityを引き継ぐ。クラスのメンバーは `[Inspector]` の値を引き継ぎ、それ以外は新しいインスタンスの初期値を使う。
 - 実行中の変更を編集用Sceneに自動で書き戻さない。コピーはPlay時に行い、毎フレームは行わない。実行用SceneでのPriority変更も編集用Sceneに漏れない。
 - この分離はSceneとそのインスタンスが対象。ゲームコードのstatic変数や外部への副作用の巻き戻しを意味しない。
-- 複製には `SceneSerializer.Clone` を使い、既存の制作データ変換・検証を共有する。YAML文字列やファイルを経由しない。Editorからの接続は後続作業。
+- 複製には `SceneSerializer.Clone` を使い、既存の制作データ変換・検証を共有する。YAML文字列やファイルを経由しない。Play 時の Clone には Play 用 factory を渡し、注入されたサービス参照は保存・コピーせず Clone 先のサービス群から新しく解決する。Editor の Play／Stop ボタン接続は未実装のため、Play 実行には `PlaySession` を使う。ボタンの配線は後続作業。
 
 ### 実行コスト（実装・測定済み）
 

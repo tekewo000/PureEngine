@@ -17,6 +17,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
 - Inspectorで `[Inspector]` 付きのstring・int・float・boolを編集し、YAMLで保存・読み込みできる。
+- ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
@@ -107,7 +108,35 @@ foreach (var error in runtime.Errors)
     Console.WriteLine($"{error.ObjectName}/{error.ComponentType.Name}.{error.MethodName}: {error.Exception}");
 ```
 
-実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroyします。各ライフサイクルはPriorityの小さい順に実行し、同値は順序を保証しません。動的追加分は最初のStartより前に `SetStartPriority` などで設定できます。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
+実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroy＋Disposeします。各ライフサイクルはPriorityの小さい順に実行し、同値は順序を保証しません。動的追加分は最初のStartより前に `SetStartPriority` などで設定できます。全Componentの生成・復元・検証が成功してからStartし、準備失敗時はStart／Destroyせず生成済み `IDisposable` のみ解放します。Start途中失敗でも受入済み全対象をDestroy＋Disposeし、一つの終了処理の例外でも残りを続けて `Errors` に報告します。`Stop()`／`Dispose()` の重複はno-opで二重終了しません。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
+
+## ゲームのサービス登録とコンストラクタ注入
+
+Game側で一度だけ登録を書き、Component は普通のコンストラクタで受け取ります（`src/PureEngine.Editor/Game/GameServices.cs`）。
+
+```csharp
+services.AddScoped<IRandomService, RandomService>();
+services.AddScoped<BattleSession>();
+
+public sealed class InjectedPlayer(IRandomService random, BattleSession session)
+{
+    [Inspector] public int Hp { get; set; } = 100;
+    [Start] private void OnStart() { /* 保存値を使う初期化はここ */ }
+}
+```
+
+Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlay／Stopボタン接続は未実装のため、ボタン配線の接続口として使います。
+
+```csharp
+using var play = PlaySession.Prepare(scene, ComponentAssets.Registry);
+play.Start();
+if (play.Runtime.IsRunning) play.Step(1f / 60f);
+```
+
+終了時は Runtime の Destroy＋Dispose を完了してから Scope・provider を終了します。注入されたサービスを Component 側で Dispose しないでください。編集用シーン切替は同一ウィンドウ内で編集用 Scope を共有します。
+
+`PlaySession.Stop()` と `Dispose()` はどちらもサービスまで終了します。コールバック中の停止は、そのコールバックと Component の終了処理が完了してからサービスを解放します。ライフサイクル例外による自動停止も同じ順序です。停止後も `Runtime.Errors` を確認できます。
+編集用 Component はシーン切替・オブジェクト削除・読み込みキャンセル・ウィンドウ終了で Dispose し、ゲーム用の Destroy は呼びません。ウィンドウ終了では Component を先に、サービスを後に解放します。
 
 ## コアの動作確認
 
