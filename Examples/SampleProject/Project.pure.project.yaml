@@ -1,0 +1,3 @@
+version: 1
+name: SampleProject
+startupScene: Scenes/Main.pure.scene.yaml

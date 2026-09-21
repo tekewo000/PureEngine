@@ -1,0 +1,5 @@
+version: 1
+objects:
+- id: 107dca96-f770-40e5-9c29-70db8b70f0ca
+  name: Menu
+  components: []

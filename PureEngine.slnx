@@ -1,5 +1,6 @@
 <Solution>
-  <Project Path="PureEngine.Core/PureEngine.Core.csproj" />
-  <Project Path="PureEngine.Core.Checks/PureEngine.Core.Checks.csproj" />
-  <Project Path="PureEngine.Editor/PureEngine.Editor.csproj" />
+  <Project Path="src/PureEngine.Core/PureEngine.Core.csproj" />
+  <Project Path="tests/PureEngine.Core.Checks/PureEngine.Core.Checks.csproj" />
+  <Project Path="src/PureEngine.Editor/PureEngine.Editor.csproj" />
+  <Project Path="tests/PureEngine.Editor.Checks/PureEngine.Editor.Checks.csproj" />
 </Solution>

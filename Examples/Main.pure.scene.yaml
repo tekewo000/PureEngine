@@ -1,0 +1,13 @@
+version: 1
+objects:
+- id: a41d432a-ec0b-46ef-a3f4-6c75a750c3c2
+  name: Player
+  components:
+  - typeId: sample.player-stats
+    values:
+      Hp: 100
+      Name: "001"
+  - typeId: sample.round-settings
+    values:
+      MaxRounds: 5
+      TurnSeconds: 30.5

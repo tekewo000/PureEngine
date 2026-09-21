@@ -1,0 +1,318 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="using:PureEngine.Core"
+        xmlns:editor="using:PureEngine.Editor"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        x:Class="PureEngine.Editor.MainWindow"
+        Title="PureEngine Editor"
+        Width="1280" Height="800"
+        MinWidth="960" MinHeight="640"
+        Background="#292929" Foreground="#E6E6E6"
+        FontFamily="Segoe UI" FontSize="12"
+        WindowStartupLocation="CenterScreen" WindowState="Maximized">
+  <Window.Styles>
+    <Style Selector="ListBox#SceneObjects ListBoxItem, ListBox#ProjectFiles ListBoxItem">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Margin" Value="0,1" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TreeView#ProjectTree TreeViewItem">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Margin" Value="0,1" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="ListBox#ProjectFiles ListBoxItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="TabControl.editorTabs">
+      <Setter Property="Focusable" Value="True" />
+      <Setter Property="BorderBrush" Value="#BBBBBB" />
+      <Setter Property="ItemsPanel">
+        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+      </Setter>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid RowDefinitions="28,*">
+            <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
+                            Margin="0,0,0,-1" Height="29" VerticalAlignment="Top" ZIndex="1" />
+            <Border Grid.Row="1" Background="#383838" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1.5"
+                    CornerRadius="0,6,6,6" Margin="0,-1,0,0" UseLayoutRounding="False">
+              <ContentPresenter Name="PART_SelectedContentHost"
+                              Content="{TemplateBinding SelectedContent}"
+                              ContentTemplate="{TemplateBinding SelectedContentTemplate}"
+                              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="TabControl.editorTabs TabItem">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Width" Value="112" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="29" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Foreground" Value="#D5D5D5" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid>
+            <Path Name="TabFill" Fill="{TemplateBinding Background}" />
+            <Path Name="TabOutline" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1.5"
+                  UseLayoutRounding="False" />
+            <TextBlock Text="{TemplateBinding Header}" Margin="12,0"
+                       HorizontalAlignment="Left" VerticalAlignment="Center" />
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="TabControl.editorTabs TabItem /template/ Path#TabFill">
+      <Setter Property="Data" Value="M0,29 L0,28 Q6,28 6,22 L6,6 Q6,0.75 12,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,28 112,28 L112,29 Z" />
+    </Style>
+    <Style Selector="TabControl.editorTabs TabItem /template/ Path#TabOutline">
+      <Setter Property="Data" Value="M0,27.75 Q6,27.75 6,22 L6,6 Q6,0.75 12,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,27.75 112,27.75" />
+    </Style>
+    <Style Selector="TabControl.editorTabs TabItem.first /template/ Path#TabFill">
+      <Setter Property="Data" Value="M0.75,29 L0.75,6 Q0.75,0.75 6,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,28 112,28 L112,29 Z" />
+    </Style>
+    <Style Selector="TabControl.editorTabs TabItem.first /template/ Path#TabOutline">
+      <Setter Property="Data" Value="M0.75,29 L0.75,6 Q0.75,0.75 6,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,27.75 112,27.75" />
+    </Style>
+    <Style Selector="TabControl.editorTabs TabItem:selected">
+      <Setter Property="Background" Value="#383838" />
+      <Setter Property="BorderBrush" Value="#BBBBBB" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="TabControl.editorTabs:focus-within">
+      <Setter Property="BorderBrush" Value="#B2A0E0" />
+    </Style>
+    <Style Selector="TabControl.editorTabs:focus-within TabItem:selected">
+      <Setter Property="BorderBrush" Value="#B2A0E0" />
+    </Style>
+    <Style Selector="TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="#BBBBBB" />
+    </Style>
+    <Style Selector="TextBlock.sectionHeader">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.objectId">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Foreground" Value="#AAAAAA" />
+    </Style>
+    <Style Selector="Separator.divider">
+      <Setter Property="Background" Value="#555555" />
+      <Setter Property="Margin" Value="0,2" />
+    </Style>
+    <Style Selector="Border.componentCard">
+      <Setter Property="Background" Value="#333333" />
+      <Setter Property="BorderBrush" Value="#555555" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="6" />
+    </Style>
+    <Style Selector="TextBox.inspectorField">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.inspectorField:focus">
+      <Setter Property="BorderBrush" Value="#B2A0E0" />
+    </Style>
+    <Style Selector="Border.pane">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="GridSplitter.paneSplitter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Template">
+        <ControlTemplate><Border Background="{TemplateBinding Background}" CornerRadius="2" /></ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="GridSplitter.paneSplitter:pointerover">
+      <Setter Property="Background" Value="#555555" />
+    </Style>
+    <Style Selector="GridSplitter.paneSplitter:focus-visible">
+      <Setter Property="Background" Value="#B2A0E0" />
+    </Style>
+  </Window.Styles>
+
+  <Grid x:Name="EditorSurface" RowDefinitions="48,*,26" Margin="8,0">
+    <Grid ColumnDefinitions="220,*,240" Margin="10,0">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="PureEngine" FontWeight="SemiBold" />
+        <Menu Background="Transparent" VerticalAlignment="Center">
+          <MenuItem Header="File">
+            <MenuItem x:Name="CloseProjectMenu" Header="Return to Launcher" InputGesture="Ctrl+Shift+O" Click="OnCloseProject" />
+            <Separator />
+            <MenuItem Header="New Scene" InputGesture="Ctrl+N" Click="OnNewScene" />
+            <MenuItem Header="Open Scene…" InputGesture="Ctrl+O" Click="OnOpenScene" />
+            <MenuItem Header="Save Scene" InputGesture="Ctrl+S" Click="OnSaveScene" />
+            <MenuItem Header="Save Scene As…" InputGesture="Ctrl+Shift+S" Click="OnSaveSceneAs" />
+            <MenuItem x:Name="StartupSceneMenu" Header="Set Current Scene as Startup" Click="OnSetStartupScene" IsEnabled="False" />
+          </MenuItem>
+        </Menu>
+        <TextBlock Text="Edit" Classes="muted" />
+        <TextBlock Text="View" Classes="muted" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="22">
+        <Path Data="M 0,0 L 0,12 L 9,6 Z" Fill="#B8AFF1" Width="9" Height="12" VerticalAlignment="Center" />
+        <TextBlock Text="Preview" Classes="muted" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="592" />
+        <ColumnDefinition Width="8" />
+        <ColumnDefinition Width="472" MinWidth="160" />
+      </Grid.ColumnDefinitions>
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MinWidth="240" />
+          <ColumnDefinition Width="8" />
+          <ColumnDefinition Width="344" MinWidth="140" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*" MinHeight="180" />
+          <RowDefinition Height="8" />
+          <RowDefinition Height="164" MinHeight="80" />
+        </Grid.RowDefinitions>
+        <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
+                      ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Cursor="SizeWestEast" AutomationProperties.Name="Resize Stuffs pane" />
+        <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" Classes="paneSplitter" ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Cursor="SizeNorthSouth" AutomationProperties.Name="Resize Assets and Console pane" />
+        <Border Grid.Column="2" Classes="pane">
+          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem Classes="first" Header="Stuffs" AutomationProperties.Name="Stuffs">
+              <Grid x:Name="SceneSurface" Background="Transparent" DragDrop.AllowDrop="True">
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Add Empty" Click="OnAddObject" />
+                    <Separator />
+                    <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
+                              InputGesture="Delete" IsEnabled="False" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
+                <ListBox x:Name="SceneObjects" Background="Transparent" BorderThickness="0" Margin="8"
+                         SelectionMode="Single" AutomationProperties.Name="Stuffs objects"
+                         KeyDown="OnSceneKeyDown">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate DataType="core:SceneObject">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </TabItem>
+          </TabControl>
+        </Border>
+        <Border Classes="pane">
+          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View"><Grid /></TabItem>
+            <TabItem Header="Game" AutomationProperties.Name="Game"><Grid /></TabItem>
+          </TabControl>
+        </Border>
+        <Border Grid.Row="2" Grid.ColumnSpan="3" Classes="pane">
+          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem x:Name="ProjectTab" Classes="first" Header="Project" AutomationProperties.Name="Project">
+              <Grid ColumnDefinitions="180,8,*" Margin="8">
+                <TreeView x:Name="ProjectTree" Background="Transparent" BorderThickness="0"
+                          SelectionMode="Single"
+                          AutomationProperties.Name="Project folders"
+                          SelectionChanged="OnProjectTreeSelectionChanged"
+                          ContextRequested="OnProjectTreeContextRequested"
+                          PointerPressed="OnProjectTreePointerPressed">
+                  <TreeView.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem x:Name="TreeCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />
+                      <MenuItem x:Name="TreeCreateSceneMenu" Header="Create Scene" Click="OnExplorerCreateScene" />
+                      <Separator />
+                      <MenuItem x:Name="TreeRenameMenu" Header="Rename" Click="OnExplorerRename" />
+                      <MenuItem x:Name="TreeDeleteMenu" Header="Delete" Click="OnExplorerDelete" />
+                      <Separator />
+                      <MenuItem Header="Refresh" Click="OnExplorerRefresh" />
+                    </ContextMenu>
+                  </TreeView.ContextMenu>
+                </TreeView>
+                <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
+                              ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                              Cursor="SizeWestEast" AutomationProperties.Name="Resize Project tree" />
+                <ListBox Grid.Column="2" x:Name="ProjectFiles" Background="Transparent" BorderThickness="0"
+                         SelectionMode="Single"
+                         AutomationProperties.Name="Project files"
+                         DoubleTapped="OnProjectFilesDoubleTapped" KeyDown="OnProjectFilesKeyDown"
+                         ContextRequested="OnProjectFilesContextRequested"
+                         PointerPressed="OnProjectFilesPointerPressed">
+                  <ListBox.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem x:Name="FilesOpenMenu" Header="Open" Click="OnExplorerOpen" />
+                      <MenuItem x:Name="FilesStartupMenu" Header="Set as Startup Scene" Click="OnSetStartupScene" />
+                      <Separator />
+                      <MenuItem x:Name="FilesCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />
+                      <MenuItem x:Name="FilesCreateSceneMenu" Header="Create Scene" Click="OnExplorerCreateScene" />
+                      <Separator />
+                      <MenuItem x:Name="FilesRenameMenu" Header="Rename" Click="OnExplorerRename" />
+                      <MenuItem x:Name="FilesDeleteMenu" Header="Delete" Click="OnExplorerDelete" />
+                      <Separator />
+                      <MenuItem Header="Refresh" Click="OnExplorerRefresh" />
+                    </ContextMenu>
+                  </ListBox.ContextMenu>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate DataType="editor:ProjectExplorerEntry">
+                      <Grid ColumnDefinitions="52,*,*" ToolTip.Tip="{Binding ToolTip}">
+                        <TextBlock Text="{Binding KindLabel}" Classes="muted" FontSize="11" />
+                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" Margin="0,0,16,0" />
+                        <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </TabItem>
+            <TabItem Header="Console" AutomationProperties.Name="Console"><Grid /></TabItem>
+          </TabControl>
+        </Border>
+      </Grid>
+      <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
+                    ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    Cursor="SizeWestEast" AutomationProperties.Name="Resize Inspector pane" />
+      <Border Grid.Column="2" Classes="pane">
+        <TabControl x:Name="InspectorPane" Classes="editorTabs" SelectedIndex="0"
+                    PointerPressed="OnPanePointerPressed" DragDrop.AllowDrop="True">
+          <TabItem Classes="first" Header="Inspector" AutomationProperties.Name="Inspector">
+            <ScrollViewer Margin="8">
+              <StackPanel x:Name="ObjectInspector" IsVisible="False" Spacing="4">
+                <TextBox x:Name="ObjectName" Classes="inspectorField" AutomationProperties.Name="Object name" />
+                <TextBlock x:Name="NameError" Text="名前を入力してください。" Foreground="#FF5252"
+                           TextWrapping="Wrap" IsVisible="False" />
+                <TextBlock x:Name="ObjectId" Classes="objectId" MaxLines="1"
+                           HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
+                <StackPanel x:Name="AttachedClasses" IsVisible="False" Spacing="6" Margin="0,4,0,0">
+                  <Separator Classes="divider" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Name="ComponentsHeader" Text="Components" Classes="sectionHeader" />
+                    <TextBlock x:Name="ComponentsError" Classes="sectionHeader" Foreground="#FF5252" IsVisible="False" />
+                  </StackPanel>
+                  <StackPanel x:Name="ComponentEditors" Spacing="6" />
+                </StackPanel>
+                <TextBlock x:Name="AttachError" Foreground="#FF5252" TextWrapping="Wrap" IsVisible="False" />
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+        </TabControl>
+      </Border>
+    </Grid>
+    <TextBlock x:Name="FileStatus" Grid.Row="2" Margin="10,0" Classes="muted"
+               TextTrimming="CharacterEllipsis" AutomationProperties.Name="Scene file status" />
+  </Grid>
+</Window>
