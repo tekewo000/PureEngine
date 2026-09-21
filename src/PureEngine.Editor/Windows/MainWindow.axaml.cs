@@ -59,6 +59,7 @@ public partial class MainWindow : Window
             surface.AddHandler(DragDrop.DropEvent, OnComponentDrop, RoutingStrategies.Bubble, handledEventsToo: true);
         }
         InitPlayControls();
+        InitConsole();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)

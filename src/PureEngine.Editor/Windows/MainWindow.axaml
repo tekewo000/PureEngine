@@ -34,6 +34,16 @@
     <Style Selector="ListBox#ProjectFiles ListBoxItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
+    <Style Selector="ListBox#ConsoleList ListBoxItem">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Margin" Value="0,1" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="ListBox#ConsoleList ListBoxItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
     <Style Selector="TabControl.editorTabs">
       <Setter Property="Focusable" Value="True" />
       <Setter Property="BorderBrush" Value="#BBBBBB" />
@@ -338,7 +348,42 @@
                 </Grid>
               </Grid>
             </TabItem>
-            <TabItem Header="Console" AutomationProperties.Name="Console"><Grid /></TabItem>
+            <TabItem Header="Console" AutomationProperties.Name="Console">
+              <Grid RowDefinitions="Auto,*,Auto" Margin="8">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <CheckBox x:Name="ConsoleInfoFilter" Content="Info" IsChecked="True" AutomationProperties.Name="Console info filter" VerticalAlignment="Center" />
+                  <TextBlock x:Name="ConsoleInfoCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console info count" />
+                  <CheckBox x:Name="ConsoleWarningFilter" Content="Warning" IsChecked="True" AutomationProperties.Name="Console warning filter" VerticalAlignment="Center" />
+                  <TextBlock x:Name="ConsoleWarningCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console warning count" />
+                  <CheckBox x:Name="ConsoleErrorFilter" Content="Error" IsChecked="True" AutomationProperties.Name="Console error filter" VerticalAlignment="Center" />
+                  <TextBlock x:Name="ConsoleErrorCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console error count" />
+                  <TextBox x:Name="ConsoleSearch" Width="140" PlaceholderText="検索" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
+                  <Button x:Name="ConsoleClear" Content="Clear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" />
+                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" />
+                  <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" />
+                </StackPanel>
+                <ListBox Grid.Row="1" x:Name="ConsoleList" Margin="0,6,0,6" Background="Transparent" BorderThickness="0"
+                         SelectionMode="Single" SelectionChanged="OnConsoleSelectionChanged"
+                         AutomationProperties.Name="Console list">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate DataType="editor:ConsoleRow">
+                      <Grid ColumnDefinitions="90,64,*" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TimeText}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding LevelText}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{Binding Head}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Head}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,96">
+                  <TextBlock Text="詳細" Classes="columnHeader" Margin="0,0,0,4" />
+                  <TextBox Grid.Row="1" x:Name="ConsoleDetail" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                           AutomationProperties.Name="Console detail" />
+                  <Button Grid.Row="1" Grid.Column="1" x:Name="ConsoleCopy" Content="Copy" Click="OnConsoleCopy"
+                          VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.Name="Console copy" />
+                </Grid>
+              </Grid>
+            </TabItem>
           </TabControl>
         </Border>
       </Grid>

@@ -50,6 +50,10 @@ public partial class MainWindow
             return;
         }
 
+        // Clear on PlayはStart前に実施し、そのPlayの開始ログを消さない。
+        if (ConsoleClearOnPlay.IsChecked == true)
+            ClearConsole();
+
         PlaySession? session;
         try
         {
@@ -57,11 +61,13 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
+            Log.Error($"Playを開始できません: {error.GetBaseException().Message}", error);
             SetFileStatus($"Playを開始できません: {error.GetBaseException().Message}", true);
             return;
         }
 
         _play = session;
+        _playLoggedErrorCount = 0;
         try
         {
             _play.Start();
@@ -82,6 +88,7 @@ public partial class MainWindow
         _playLast = TimeSpan.Zero;
         _playTimer?.Start();
         UpdatePlayUI();
+        Log.Info("Playを開始しました。");
         SetFileStatus("Playを開始しました。");
     }
 
@@ -91,7 +98,6 @@ public partial class MainWindow
         var session = _play;
         if (session is null) return true;
         _playTimer?.Stop();
-        IReadOnlyList<SceneRuntimeError> errors = session.Runtime.Errors;
         Exception? stopError = null;
         try
         {
@@ -118,12 +124,24 @@ public partial class MainWindow
             UpdatePlayUI();
         }
 
+        // 同じRuntimeエラーを重複出力しないよう、未記録分だけConsoleへ取り込む。
+        LogPendingRuntimeErrors(session);
+        var errors = session.Runtime.Errors;
         if (stopError is not null)
+        {
+            Log.Error($"Playの停止中にエラー: {stopError.GetBaseException().Message}", stopError);
             SetFileStatus($"Playの停止中にエラー: {stopError.GetBaseException().Message}{FormatPlayErrors(errors)}", true);
+        }
         else if (errors.Count > 0)
+        {
+            Log.Error($"Playを停止しました（エラー{errors.Count}件）");
             SetFileStatus($"Playを停止しました（エラー{errors.Count}件）{FormatPlayErrors(errors)}", true);
+        }
         else
+        {
+            Log.Info("Playを停止しました。");
             SetFileStatus("Playを停止しました。");
+        }
         return stopError is null && errors.Count == 0;
     }
 
@@ -144,6 +162,7 @@ public partial class MainWindow
             return;
         }
 
+        LogPendingRuntimeErrors(session);
         if (!session.Runtime.IsRunning)
             FinishPlayAfterAutoStop(session);
     }
@@ -182,6 +201,9 @@ public partial class MainWindow
         }
 
         UpdatePlayUI();
+        if (session is not null) LogPendingRuntimeErrors(session);
+        if (cleanupError is not null) Log.Error($"Play開始の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
+        Log.Error(message);
         var detail = message + FormatPlayErrors(errors);
         if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
         SetFileStatus(detail, true);
@@ -208,6 +230,9 @@ public partial class MainWindow
             UpdatePlayUI();
         }
 
+        LogPendingRuntimeErrors(session);
+        if (cleanupError is not null) Log.Error($"Play更新の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
+        Log.Error(message);
         var detail = message + FormatPlayErrors(errors);
         if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
         SetFileStatus(detail, true);
@@ -234,12 +259,22 @@ public partial class MainWindow
             UpdatePlayUI();
         }
 
+        LogPendingRuntimeErrors(session);
         if (cleanupError is not null)
+        {
+            Log.Error($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）", cleanupError);
             SetFileStatus($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）{FormatPlayErrors(errors)}", true);
+        }
         else if (errors.Count > 0)
+        {
+            Log.Error($"Playがエラーで停止しました（{errors.Count}件）");
             SetFileStatus($"Playがエラーで停止しました（{errors.Count}件）{FormatPlayErrors(errors)}", true);
+        }
         else
+        {
+            Log.Info("Playが停止しました。");
             SetFileStatus("Playが停止しました。");
+        }
     }
 
     /// <summary>ウィンドウ終了時など、確実に終了・解放するための内部停止。表示は呼び出し側に任せる。</summary>
@@ -258,6 +293,7 @@ public partial class MainWindow
             _playClock?.Stop();
             _playClock = null;
             UpdatePlayUI();
+            try { LogPendingRuntimeErrors(session); } catch { /* 終了時の記録失敗で終了を妨げない。 */ }
         }
     }
 

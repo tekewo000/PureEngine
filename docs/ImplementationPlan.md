@@ -1,10 +1,10 @@
 # PureEngine 実装計画・進捗
 
-最終更新：2026-09-22
+最終更新：2026-09-23
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。
+実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。
 
 ## 現在の到達点
 
@@ -31,6 +31,7 @@
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
 | ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Game側の一箇所登録、編集・Play別のprovider＋Scope、factory生成、終了順と失敗時解放 | [GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Editor/Game/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs) |
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
+| 共通ログとConsole | `Log.Info/Warning/Error` の共有API、呼び出し元・例外詳細の保持、有界キュー。Consoleの一覧・フィルター・検索・詳細・コピー・Clear／Clear on Play、Play開始・停止・失敗とRuntime全件の重複なし取り込み | [Log](../src/PureEngine.Core/Log.cs)、[MainWindow.Console](../src/PureEngine.Editor/Windows/MainWindow.Console.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | ソース構成 | srcに実装、testsにチェック、docsに文書、toolsに起動スクリプト | [PureEngine.slnx](../PureEngine.slnx) |
 
 ## まだできないこと・制限
@@ -96,6 +97,19 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+2026-09-23、共通ログAPIとEditorのConsole・Play接続の実装後に以下を実行し、両方PASS。
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release
+dotnet run --project tests/PureEngine.Editor.Checks -c Release
+```
+
+- 追加分（Core・Log）：`Log.Info/Warning/Error` の3種、呼び出し元情報の保持と転送、例外の内部・スタック詳細、通常ログのスタック非取得、別スレッド安全、有界キュー（1000件）と破棄数、無受信時の bounded、Avalonia非依存、記録のみで送出・停止なしを確認。
+- 追加分（Editor・Console）：時刻・種類・先頭の一覧、件数付きフィルター、検索、詳細・記録箇所・例外詳細とコピー、Clear、Clear on Play（初期ON・Start前・開始ログ保持）、自動スクロールの位置保持、表示のみフィルターと再表示、まとめて取り込み（約200ms）、キュー／履歴上限（各1000件）と破棄表示を確認。
+- 追加分（Play接続）：開始・停止・準備失敗・更新失敗・終了失敗のConsole表示、全件取り込みとStep／Stop／Disposeの重複防止、Object名・型・ライフサイクル名の保持、例外側情報の使用、既存ステータスと終了エラー時の残留維持、Stop後の可読、閉鎖時のタイマー解除と再開時の単一取り込みを確認。
+- 既存分：前回（Play／Stop接続後）の全項目を再確認。
+- 実画面の見た目、ネイティブファイルダイアログ、Project Explorerの全操作、タイマーの実測間隔は自動チェックの対象外。
 
 2026-09-21、EditorのPlay／Stop接続の実装後に以下を実行し、両方PASS。
 
