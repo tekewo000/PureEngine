@@ -42,6 +42,7 @@ internal static class Program
             EditorOwnershipChecks.Run(root);
             ConsoleChecks.Run();
             UserCodeChecks.Run(root);
+            ProjectIsolationChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";
             Click(Control<Button>(launcher, "CreateProjectButton"));
@@ -99,11 +100,13 @@ internal static class Program
             var history = new RecentProjects(historyPath);
             history.Load();
             Check(history.Entries.Count == 1 && history.Entries[0].ManifestPath == manifest, "History must survive a reload without duplicates.");
-            var loaded = ProjectSession.Open(manifest);
-            Check(loaded.Scene.Objects.Count == 0, "Discard must not write unsaved objects.");
+            using (var loaded = ProjectSession.Open(manifest))
+            {
+                Check(loaded.Scene.Objects.Count == 0, "Discard must not write unsaved objects.");
+            }
 
             // Corrupt startup scene and missing manifest both leave Launcher usable.
-            var startup = loaded.Project.StartupScenePath;
+            var startup = Path.Combine(Path.GetDirectoryName(manifest)!, "Scenes", "Main.pure.scene.yaml");
             File.WriteAllText(startup, "version: 999\nobjects: []\n");
             recent.SelectedIndex = 0;
             recent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });

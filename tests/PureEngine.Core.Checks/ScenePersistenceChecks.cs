@@ -84,7 +84,8 @@ static class ScenePersistenceChecks
         Check(scene.Objects[0] == item && item.GetComponent<PersistenceProbe>() == sample, "Failed reads mutated source scene.");
 
         var examplePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../Examples/Main.pure.scene.yaml"));
-        var exampleSerializer = new SceneSerializer(ComponentAssets.Registry);
+        using var exampleOwner = new ProjectComponents();
+        var exampleSerializer = new SceneSerializer(exampleOwner.Registry);
         var example = exampleSerializer.Deserialize(File.ReadAllText(examplePath));
         Check(example.Objects[0].GetComponent<PureEngine.Editor.Samples.PlayerStats>()!.Name == "001"
             && example.Objects[0].GetComponent<PureEngine.Editor.Samples.RoundSettings>()!.TurnSeconds == 30.5f,

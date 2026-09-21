@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
     <Compile Include="../../src/PureEngine.Editor/Components/ComponentAssets.cs" Link="ComponentAssets.cs" />
+    <Compile Include="../../src/PureEngine.Editor/Projects/ProjectComponents.cs" Link="ProjectComponents.cs" />
     <Compile Include="../../src/PureEngine.Editor/Compilation/UserCodeCompiler.cs" Link="Compilation/UserCodeCompiler.cs" />
     <Compile Include="../../src/PureEngine.Editor/Compilation/UserCodeIdentity.cs" Link="Compilation/UserCodeIdentity.cs" />
     <Compile Include="../../src/PureEngine.Editor/Game/*.cs" Link="Game/%(Filename)%(Extension)" />

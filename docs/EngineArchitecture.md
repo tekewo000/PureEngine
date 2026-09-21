@@ -118,7 +118,7 @@ private void Tick(float dt) { }
 - Destroy中とStop要求後の追加・Attach・削除、削除予約済み対象へのAttachは拒否する。同一runtimeで同じcomponentインスタンスの重複利用・破棄後の再利用も拒否する。
 - ライフサイクルの例外は `Errors` にオブジェクトID・名前・型・メソッド名・元の例外を記録する（Dispose失敗はメソッド名 `Dispose`）。Start／Updateの例外は実行全体を停止する。通常の削除でのDestroy／Dispose例外は記録して削除を完了し、他の対象の実行は続ける。Stop時もDestroy／Dispose例外にかかわらず後片付けを続ける。
 - 実行・構造変更は単一スレッドで使う。Priorityは各ライフサイクルで小さい順に適用し、同値の順序は保証しない。component単独のDetachは今回の範囲に含めない。
-- Componentの生成箇所は `SceneSerializer.Restore`（`Clone`／`Deserialize` の `CreateComponent`）、編集時の `ComponentAssets.TryAttach`、実行中の呼び出し側 `new`＋`Attach` に限る。各生成箇所は省略可能な `Func<Type, object>? factory` を受け、未指定時は従来のパラメータレス生成を使う。指定時はその結果を使い、失敗したら報告する。パラメータレス生成で再試行して隠さない。factory の戻り値は null でなく要求どおりの exact type であることを確認する。呼び出しごとに新しいインスタンスを返す契約とし、共有は注入するサービス側に置く。資源解放箇所は `SceneRuntime` の削除時（`DestroyRemoved`）と停止・失敗時（`DestroyRemaining`）のDestroy後Dispose、および復元・準備失敗時の生成逆順Disposeに限る。解放箇所は維持する。
+- Componentの生成箇所は `SceneSerializer.Restore`（`Clone`／`Deserialize` の `CreateComponent`）、編集時の `ProjectComponents.TryAttach`（`ComponentAssets.TryAttach(registry, ...)` の明示登録版）、実行中の呼び出し側 `new`＋`Attach` に限る。各生成箇所は省略可能な `Func<Type, object>? factory` を受け、未指定時は従来のパラメータレス生成を使う。指定時はその結果を使い、失敗したら報告する。パラメータレス生成で再試行して隠さない。factory の戻り値は null でなく要求どおりの exact type であることを確認する。呼び出しごとに新しいインスタンスを返す契約とし、共有は注入するサービス側に置く。資源解放箇所は `SceneRuntime` の削除時（`DestroyRemoved`）と停止・失敗時（`DestroyRemaining`）のDestroy後Dispose、および復元・準備失敗時の生成逆順Disposeに限る。解放箇所は維持する。
 - ゲームの Component は普通のC#コンストラクタでサービスを受け取る。`ctor = 依存`、`[Inspector] = 保存データ` とする。保存値はコンストラクタ実行後に復元するため、保存値を使う初期化は `Start` に置く。編集時にも生成するため、Component とサービスのコンストラクタで通信やゲーム進行を開始しない。`[Inject]`、独自コンテナ、サービスロケーター、階層Scope、コード生成は追加しない。プリミティブ引数の一律禁止や、型からサービスかどうかを推測する独自検証も追加しない。
 - サービス登録・解決には Microsoft.Extensions.DependencyInjection を Game 側の登録処理と接続部分でのみ利用する。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しない。Component 自体の DI 登録は不要で、既存の ComponentRegistry への型登録は別の役割として残す。`ComponentRegistry.Register<T>` に `new()` 制約はない。型登録時にインスタンスは生成せず、解決の成否は実際の生成時に判定する。
 - Game 側の登録口は `GameServices.Configure` 一つにまとめる。同じ登録処理から、編集用と各 Play 用の独立したサービス群（provider＋明示 Scope）を作る。編集と Play、異なる Play の間では Singleton も含めて共有しない。Root provider から Scoped を直接解決せず、必ず各 Scope を通す。provider 作成時は `ValidateScopes` と `ValidateOnBuild` を有効にする。
@@ -128,7 +128,8 @@ private void Tick(float dt) { }
 ### Play時の制作データの分離（Coreで実装済み）
 
 - `SceneRuntime.Stopped` は全 Component の終了処理が完了してから一度だけ通知する。`PlaySession` はこの通知で Scope・provider を解放する。コールバック内の Stop／Dispose、Runtime の直接停止、Start／Update 例外による自動停止も同じ経路を通る。停止後の Runtime と Errors は参照できる。
-- 編集用 Component は Editor が所有し、シーン切替・削除・一時読み込みの破棄・終了時に Dispose する。編集用の Destroy は呼ばない。終了時は全 Component の Dispose を試みてから編集用 Scope・provider を解放し、失敗を集約する。
+- `ComponentRegistry` はプロジェクト単位の所有者 `ProjectComponents` が保持する。`ComponentAssets` は可変なstatic登録を持たず、破棄・組み込み登録・候補Registry生成・アタッチ可否の共通処理だけを提供する。`SceneSerializer`・Inspectorのアタッチ・コード移行・Playには対象プロジェクトの `Registry` を明示的に渡す。「現在のプロジェクト」のstatic付け替えは行わない。
+- 編集用 Component は Editor が所有し、シーン切替・削除・一時読み込みの破棄・終了時に Dispose する。編集用の Destroy は呼ばない。終了時は全 Component の Dispose を試みてから編集用 Scope・provider を解放し、最後に所有者のコード解放要求（`ProjectComponents.Dispose` による user.* 除外とALC Unload要求）を行う。失敗を集約する。
 
 - 現在の編集内容から別の実行用Sceneとクラスのインスタンスを作る。未保存の編集内容も対象にする。
 - オブジェクトのID・名前・アタッチ構成と、対応済みの制作データ、Priorityを引き継ぐ。クラスのメンバーは `[Inspector]` の値を引き継ぎ、それ以外は新しいインスタンスの初期値を使う。
@@ -296,9 +297,11 @@ components:
 
 RoslynでProject内のソースを一括コンパイルし、collectible AssemblyLoadContextへ読み込む。型IDの初期値は `user.`＋FullNameだが、以後は `.pureengine/types.json` に永続化し、完全名と相対ソースパスの対応を更新する。publicの具象・非genericクラスを対象にし、1ファイルの複数対象は未アタッチ分をまとめて追加する。補助クラスはinternal等で区別する。
 
+所有者は `ProjectComponents`（`ProjectSession.Components`／`MainWindow._components`）。Registry・自作型一覧とソース対応・採用中のコンパイル結果と読込コードをプロジェクト単位で保持し、再読み込み時の差し替えと終了時の解放責任を持つ。組み込み型（sample.*）は所有者生成時に各Registryへ登録し、user.* の差し替えでは維持する。`ComponentAssets` は状態を持たない共通処理（`DisposeComponents`・`RegisterBuiltins`・候補生成・`CanAttach`／`TryAttach(registry, ...)`）のみを提供する。
+
 監視通知は600msまとめ、UIスレッドで適用する。Play中・ファイル操作中・Inspector入力エラー中は保留する。旧Registryで編集データを保存形式へ取り出し、新Registryで別Sceneへ復元する。ID・名前・Inspector値・Priorityを維持し、未保存状態と選択を戻す。型・メンバーの削除や型変更、Priorityの移行不能では切替自体を拒否し、旧コードとデータを保持する。生成途中の失敗は既存Serializerの逆順解放を使う。
 
-Project開始時も候補Registryで起動シーンの読み込みが成功してから公開する。終了時は監視とインスタンスを解放し、ユーザー型の登録を外してALCのUnloadを要求する。Coreの型キャッシュはConditionalWeakTableを使い、古いユーザー型を静的キャッシュで保持し続けない。ユーザー自身のstaticイベント購読等の解除はDispose側の責任。
+Project開始時も候補Registryで起動シーンの読み込みが成功してから `Adopt` で公開する。開処理・再読み込みの失敗時は旧登録とSceneを保持し、候補のALCだけを解放する。一方のProjectの失敗・再読み込み・終了は他方の所有者に触れない。終了時は編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求の順とし、所有者に旧Type・Assembly・結果への参照を残さない。Coreの型キャッシュはConditionalWeakTableを使い、古いユーザー型を静的キャッシュで保持し続けない。ユーザー自身のstaticイベント購読等の解除はDispose側の責任。
 
 外部NuGet・独自csproj設定、実行状態を維持したPlay中の差し替えは対象外。プロジェクト全体のコンパイルは同期処理であり、大規模化時のバックグラウンド化は今後の課題。
 

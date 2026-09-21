@@ -15,6 +15,8 @@ public partial class MainWindow : Window
 {
     private Scene _scene = new();
     private GameSession _editSession;
+    /// <summary>このウィンドウ（プロジェクト）の型所有者。Serializer・アタッチ・Play・再読み込みはここを明示的に使う。</summary>
+    internal ProjectComponents _components;
     private static readonly DataFormat<Type> ComponentFormat =
         DataFormat.CreateInProcessFormat<Type>("PureEngine.ComponentType");
     private static readonly DataFormat<IReadOnlyList<Type>> ComponentTypesFormat =
@@ -27,12 +29,19 @@ public partial class MainWindow : Window
 
     public MainWindow(ProjectSession session, GameSession? editServices = null) : this()
     {
+        ArgumentNullException.ThrowIfNull(session);
         if (editServices is not null)
         {
             var created = _editSession;
             _editSession = editServices;
             created.Dispose();
         }
+        // Sessionの所有権（ComponentsとScene）をこのウィンドウへ移す。移したSessionは破棄しない。
+        var placeholder = _components;
+        _components = session.Components;
+        session.TransferOwnership();
+        try { placeholder.Dispose(); } catch { }
+        _sceneSerializer = new SceneSerializer(_components.Registry);
         _project = session.Project;
         SetCurrentScene(session.Scene, session.Project.StartupScenePath);
         ProjectTab.IsSelected = true;
@@ -44,6 +53,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         // 起動時1回だけ、Scene View/Gameの実幅から16:9になるよう下ペイン高さを初期調整する。
         CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
+        // プロジェクト単位の型所有者。空プロジェクト（テスト・未オープン）でも独立して持つ。
+        _components = new ProjectComponents();
+        _sceneSerializer = new SceneSerializer(_components.Registry);
         // 編集期間の専用サービス群。同じ登録から作り、Play 用とは独立させる。
         _editSession = GameSession.Create();
         Closed += (_, _) => CloseEditSession();
@@ -85,7 +97,7 @@ public partial class MainWindow : Window
         {
             // Project欄のC#ファイルからアタッチ対象のクラスをD&Dできる。
             // 1ファイルに複数クラスがある場合はそのファイルの未アタッチ分をすべて付ける。
-            var types = ComponentAssets.GetTypesForFile(entry.FullPath);
+            var types = _components.GetTypesForFile(entry.FullPath);
             if (types.Count == 0) return;
             _dragTypes = types;
         }
@@ -134,7 +146,7 @@ public partial class MainWindow : Window
         var canAny = false;
         foreach (var type in GetDragTypes(e))
         {
-            if (ComponentAssets.CanAttach(target, type)) { canAny = true; break; }
+            if (_components.CanAttach(target, type)) { canAny = true; break; }
         }
         e.DragEffects = canAny ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -154,7 +166,7 @@ public partial class MainWindow : Window
         e.DragEffects = DragDropEffects.None;
         if (RejectWhenPlaying("アタッチ")) return;
         var target = DropTarget(sender, e);
-        var types = GetDragTypes(e).Where(t => ComponentAssets.CanAttach(target, t)).ToArray();
+        var types = GetDragTypes(e).Where(t => _components.CanAttach(target, t)).ToArray();
         if (types.Length == 0) return;
         SceneObjects.SelectedItem = target;
         var attached = 0;
@@ -164,7 +176,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                if (!ComponentAssets.TryAttach(target, type, _editSession.Factory)) continue;
+                if (!_components.TryAttach(target, type, _editSession.Factory)) continue;
                 attached++;
             }
             catch (Exception error)

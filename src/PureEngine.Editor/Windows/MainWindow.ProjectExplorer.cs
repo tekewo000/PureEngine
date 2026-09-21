@@ -165,7 +165,7 @@ public partial class MainWindow
                     if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                     {
                         // 自作C#はフォルダ構成のまま表示する。専用フォルダへの配置やComponents一覧への集約は要求しない。
-                        var types = ComponentAssets.GetTypesForFile(full);
+                        var types = _components.GetTypesForFile(full);
                         var detail = types.Count == 0 ? "C#（アタッチ対象なし／未反映）"
                             : types.Count == 1 ? $"C# {types[0].Name}"
                             : $"C# {types.Count}クラス";

@@ -66,12 +66,13 @@ public partial class MainWindow
                 SetFileStatus("C#のコンパイルに失敗しました。直前の状態を保持します。修正して保存してください。", true);
                 return;
             }
-            var registry = ComponentAssets.CreateRegistry(compiled);
-            migrated = SceneCodeMigrator.Migrate(_scene, ComponentAssets.Registry, registry, _editSession.Factory);
+            // このプロジェクトの所有者で候補を検証してから採用する。失敗時は旧登録とSceneを保持する。
+            var registry = _components.CreateCandidateRegistry(compiled);
+            migrated = SceneCodeMigrator.Migrate(_scene, _components.Registry, registry, _editSession.Factory);
             var previous = _scene;
             var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
             var wasDirty = _sceneDirty;
-            ComponentAssets.SetUserCode(compiled);
+            _components.Adopt(compiled);
             adopted = true;
             _scene = migrated;
             SceneObjects.SelectedItem = null;

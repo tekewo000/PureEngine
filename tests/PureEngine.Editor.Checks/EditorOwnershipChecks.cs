@@ -24,16 +24,17 @@ static class EditorOwnershipChecks
 
     public static void Run(string root)
     {
-        ComponentAssets.Registry.Register<OwnershipProbe>("checks.ownership");
         var editor = new MainWindow();
+        var owner = Field<ProjectComponents>(editor, "_components");
+        owner.Registry.Register<OwnershipProbe>("checks.ownership");
         editor.Show();
         var scene = Field<Scene>(editor, "_scene");
         var services = Field<GameSession>(editor, "_editSession");
         var item = scene.AddEmpty();
-        ComponentAssets.TryAttach(item, typeof(OwnershipProbe), services.Factory);
+        owner.TryAttach(item, typeof(OwnershipProbe), services.Factory);
         var original = item.GetComponent<OwnershipProbe>()!;
         var path = Path.Combine(root, "ownership.pure.scene.yaml");
-        File.WriteAllText(path, new SceneSerializer(ComponentAssets.Registry).Serialize(scene));
+        File.WriteAllText(path, new SceneSerializer(owner.Registry).Serialize(scene));
         OwnershipProbe.Created.Clear();
 
         ((Task)Call(editor, "OpenScenePathAsync", path)!).GetAwaiter().GetResult();
@@ -71,13 +72,15 @@ static class EditorOwnershipChecks
         Check(OwnershipProbe.Created.All(probe => probe.Disposes == 1 && probe.Destroys == 0),
             "Every editing copy must be released once without game Destroy callbacks.");
         var failingEditor = new MainWindow();
+        var failingOwner = Field<ProjectComponents>(failingEditor, "_components");
+        failingOwner.Registry.Register<OwnershipProbe>("checks.ownership");
         failingEditor.Show();
         var failingServices = Field<GameSession>(failingEditor, "_editSession");
         var failingScene = Field<Scene>(failingEditor, "_scene");
         var probes = Enumerable.Range(0, 2).Select(_ =>
         {
             var target = failingScene.AddEmpty();
-            ComponentAssets.TryAttach(target, typeof(OwnershipProbe), failingServices.Factory);
+            failingOwner.TryAttach(target, typeof(OwnershipProbe), failingServices.Factory);
             return target.GetComponent<OwnershipProbe>()!;
         }).ToArray();
         var cleanupFailure = new ApplicationException("editor cleanup failed");

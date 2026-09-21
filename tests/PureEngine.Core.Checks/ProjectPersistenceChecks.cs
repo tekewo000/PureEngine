@@ -21,7 +21,8 @@ static class ProjectPersistenceChecks
         Directory.CreateDirectory(testRoot);
         try
         {
-            var serializer = new SceneSerializer(ComponentAssets.Registry);
+            using var owner = new PureEngine.Editor.ProjectComponents();
+            var serializer = new SceneSerializer(owner.Registry);
             var scene = new Scene();
             var item = scene.AddEmpty();
             item.Attach(new PureEngine.Editor.Samples.PlayerStats { Name = "001", Hp = 25 });

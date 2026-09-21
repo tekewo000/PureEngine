@@ -93,19 +93,22 @@ try
 catch (InvalidOperationException) { }
 
 // Both editor drop surfaces use this catalog and attachment policy.
+// A4: プロジェクト単位の所有者を明示的に使う。可変staticには依存しない。
+using var projectOwner = new PureEngine.Editor.ProjectComponents();
+var ownerRegistry = projectOwner.Registry;
 var dropTarget = new SceneObject("Drop target");
 var otherTarget = new SceneObject("Other target");
 var assetType = typeof(PureEngine.Editor.Samples.PlayerStats);
-Check(!PureEngine.Editor.ComponentAssets.TryAttach(null, assetType), "A drop without an object must be rejected.");
-Check(!PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, null), "An unrelated drag must be rejected.");
-Check(!PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, typeof(PlayerController)), "Unlisted classes must be rejected.");
-Check(PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, assetType), "An Assets class must attach to its drop target.");
-Check(!PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, assetType) && dropTarget.Components.Count == 1,
+Check(!projectOwner.TryAttach(null, assetType), "A drop without an object must be rejected.");
+Check(!projectOwner.TryAttach(dropTarget, null), "An unrelated drag must be rejected.");
+Check(!projectOwner.TryAttach(dropTarget, typeof(PlayerController)), "Unlisted classes must be rejected.");
+Check(projectOwner.TryAttach(dropTarget, assetType), "An Assets class must attach to its drop target.");
+Check(!projectOwner.TryAttach(dropTarget, assetType) && dropTarget.Components.Count == 1,
     "Repeated drops must not duplicate a component.");
-Check(PureEngine.Editor.ComponentAssets.TryAttach(otherTarget, assetType)
+Check(projectOwner.TryAttach(otherTarget, assetType)
     && !ReferenceEquals(dropTarget.Components[0], otherTarget.Components[0]),
     "Each object must receive its own component instance.");
-Check(PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, typeof(PureEngine.Editor.Samples.RoundSettings))
+Check(projectOwner.TryAttach(dropTarget, typeof(PureEngine.Editor.Samples.RoundSettings))
     && dropTarget.Components.Count == 2, "Different classes must coexist on the drop target.");
 
 ScenePersistenceChecks.Run();

@@ -11,7 +11,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    private readonly SceneSerializer _sceneSerializer = new(ComponentAssets.Registry);
+    private SceneSerializer _sceneSerializer;
     private static readonly FilePickerFileType SceneFileType = new("PureEngine scene")
         { Patterns = ["*.pure.scene.yaml", "*.yaml", "*.yml"] };
     private string? _scenePath;
@@ -146,6 +146,7 @@ public partial class MainWindow
     private void CloseEditSession()
     {
         // プロジェクトの切り替え・終了時には、そのプロジェクトの監視を終了する。
+        // 終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求。別プロジェクトには触れない。
         StopUserCodeWatching();
         _playTimer?.Stop();
         try
@@ -162,7 +163,8 @@ public partial class MainWindow
             catch (Exception disposeError) { errors.Add(disposeError); }
             try { _editSession.Dispose(); }
             catch (Exception disposeError) { errors.Add(disposeError); }
-            ComponentAssets.ClearUserCode();
+            try { _components.Dispose(); }
+            catch (Exception disposeError) { errors.Add(disposeError); }
             throw new AggregateException("Editor cleanup failed.", errors);
         }
         var previousScene = _scene;
@@ -172,7 +174,8 @@ public partial class MainWindow
         catch (Exception error) { editErrors.Add(error); }
         try { _editSession.Dispose(); }
         catch (Exception error) { editErrors.Add(error); }
-        ComponentAssets.ClearUserCode();
+        try { _components.Dispose(); }
+        catch (Exception error) { editErrors.Add(error); }
         if (editErrors.Count != 0) throw new AggregateException("Editor cleanup failed.", editErrors);
     }
 

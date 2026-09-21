@@ -210,7 +210,8 @@ public sealed class InjectedPlayer(IRandomService random, BattleSession session)
 Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
 
 ```csharp
-using var play = PlaySession.Prepare(scene, ComponentAssets.Registry);
+using var components = new ProjectComponents();
+using var play = PlaySession.Prepare(scene, components.Registry);
 play.Start();
 if (play.Runtime.IsRunning) play.Step(1f / 60f);
 ```

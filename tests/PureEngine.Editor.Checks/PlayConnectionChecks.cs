@@ -22,11 +22,6 @@ static class PlayConnectionChecks
 
     public static void Run()
     {
-        ComponentAssets.Registry.Register<PlayCounter>("checks.play-counter");
-        ComponentAssets.Registry.Register<PlayBadLifecycle>("checks.play-bad");
-        ComponentAssets.Registry.Register<PlayFailUpdate>("checks.play-fail-update");
-        ComponentAssets.Registry.Register<PlayFailCleanup>("checks.play-fail-cleanup");
-
         PlayStartUpdateStop();
         RePlayKeepsAuthoring();
         InspectorErrorBlocksPlay();
@@ -38,9 +33,20 @@ static class PlayConnectionChecks
         Console.WriteLine("PASS: editor Play/Stop wiring, replay separation, guards, and cleanup.");
     }
 
+    private static void EnsureChecks(MainWindow editor)
+    {
+        // A4: 各ウィンドウの所有者に明示登録する。
+        var components = Field<ProjectComponents>(editor, "_components");
+        components.Registry.Register<PlayCounter>("checks.play-counter");
+        components.Registry.Register<PlayBadLifecycle>("checks.play-bad");
+        components.Registry.Register<PlayFailUpdate>("checks.play-fail-update");
+        components.Registry.Register<PlayFailCleanup>("checks.play-fail-cleanup");
+    }
+
     private static MainWindow CreateEditor()
     {
         var editor = new MainWindow();
+        EnsureChecks(editor);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         return editor;
@@ -77,9 +83,10 @@ static class PlayConnectionChecks
         {
             var scene = Field<Scene>(editor, "_scene");
             var services = Field<GameSession>(editor, "_editSession");
+            var owner = Field<ProjectComponents>(editor, "_components");
             var item = scene.AddEmpty();
             item.Rename("Player");
-            ComponentAssets.TryAttach(item, typeof(PlayCounter), services.Factory);
+            owner.TryAttach(item, typeof(PlayCounter), services.Factory);
             var edit = item.GetComponent<PlayCounter>()!;
             edit.Value = 10;
             Dispatcher.UIThread.RunJobs();
@@ -142,7 +149,7 @@ static class PlayConnectionChecks
             var scene = Field<Scene>(editor, "_scene");
             var services = Field<GameSession>(editor, "_editSession");
             var item = scene.AddEmpty();
-            ComponentAssets.TryAttach(item, typeof(PlayCounter), services.Factory);
+            Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
             var edit = item.GetComponent<PlayCounter>()!;
             edit.Value = 41;
             var countBefore = scene.Objects.Count;
@@ -183,7 +190,7 @@ static class PlayConnectionChecks
             var scene = Field<Scene>(editor, "_scene");
             var services = Field<GameSession>(editor, "_editSession");
             var item = scene.AddEmpty();
-            ComponentAssets.TryAttach(item, typeof(PlayCounter), services.Factory);
+            Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
             Dispatcher.UIThread.RunJobs();
             editor.FindControl<ListBox>("SceneObjects")!.SelectedItem = item;
             Dispatcher.UIThread.RunJobs();
@@ -253,7 +260,7 @@ static class PlayConnectionChecks
             var scene = Field<Scene>(editor, "_scene");
             var services = Field<GameSession>(editor, "_editSession");
             var item = scene.AddEmpty();
-            ComponentAssets.TryAttach(item, typeof(PlayFailUpdate), services.Factory);
+            Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayFailUpdate), services.Factory);
             Dispatcher.UIThread.RunJobs();
 
             Call(editor, "StartPlay");
@@ -283,7 +290,7 @@ static class PlayConnectionChecks
         var scene = Field<Scene>(editor, "_scene");
         var services = Field<GameSession>(editor, "_editSession");
         var item = scene.AddEmpty();
-        ComponentAssets.TryAttach(item, typeof(PlayCounter), services.Factory);
+        Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
         Dispatcher.UIThread.RunJobs();
 
         Call(editor, "StartPlay");
