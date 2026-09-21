@@ -59,6 +59,19 @@ internal static class Program
             editor = desktop.Windows.OfType<MainWindow>().Single();
             Check(editor.IsVisible && !launcher.IsVisible, "Enter must open the selected recent project.");
 
+            PriorityInspectorChecks.Run(editor);
+            // Inspector checks leave unsaved objects; discard them so the following flow starts clean.
+            editor.Close();
+            Dispatcher.UIThread.RunJobs();
+            var inspectorDiscard = desktop.Windows.Single(window => window.Title == "Unsaved Scene");
+            Click(inspectorDiscard.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, "Discard")));
+            Dispatcher.UIThread.RunJobs();
+            Check(launcher.IsVisible && !desktop.Windows.OfType<MainWindow>().Any(), "Inspector Discard must return to Launcher.");
+            recent.SelectedIndex = 0;
+            recent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+            Dispatcher.UIThread.RunJobs();
+            editor = desktop.Windows.OfType<MainWindow>().Single();
+
             // Exercise the real unsaved confirmation through add-object, close, Cancel, and Discard.
             var sceneSurface = Control<Grid>(editor, "SceneSurface");
             sceneSurface.ContextMenu!.Items.OfType<MenuItem>().First().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));

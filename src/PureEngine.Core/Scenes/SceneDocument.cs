@@ -18,4 +18,6 @@ public sealed class ComponentDocument
 {
     public string? TypeId { get; set; }
     public Dictionary<string, object?>? Values { get; set; }
+    // Attach settings, separate from Inspector values. Keys are start/update/destroy; absent means 0.
+    public Dictionary<string, object?>? Priorities { get; set; }
 }

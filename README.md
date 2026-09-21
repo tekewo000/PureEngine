@@ -17,6 +17,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
 - Inspectorで `[Inspector]` 付きのstring・int・float・boolを編集し、YAMLで保存・読み込みできる。
+- ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -34,9 +35,9 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - 未保存の変更はタイトルの `*` で示す。別シーンを開くときや終了時にSave／Discard／Cancelを選ぶ。
 - Inspectorに入力エラーがある間は保存しない。成否とエラー詳細は画面下部に表示する。
 
-保存対象はオブジェクトのID・名前、登録済みクラスの固定ID、`[Inspector]` 付きの値。
+保存対象はオブジェクトのID・名前、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。
 読み込みは別のSceneへ復元し、成功してから現在のSceneと入れ替える。保存は同じフォルダの一時ファイルへ書き終えてから置き換える。
-YAMLのコメントは再保存で失われる。Parent、Priority、オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。
+YAMLのコメントは再保存で失われる。Parent、オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。
 
 ## Project
 
@@ -91,7 +92,7 @@ dotnet run --project src/PureEngine.Editor
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
-Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値の編集、YAMLシーン保存、Coreのライフサイクル実行は実装済み。Editorからのゲーム実行、Steam連携、ゲーム内UI配置はまだ実装していません。
+Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）は実装済み。Editorからのゲーム実行、Steam連携、ゲーム内UI配置はまだ実装していません。
 
 ## Coreのライフサイクル実行
 
@@ -106,7 +107,7 @@ foreach (var error in runtime.Errors)
     Console.WriteLine($"{error.ObjectName}/{error.ComponentType.Name}.{error.MethodName}: {error.Exception}");
 ```
 
-実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroyします。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
+実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroyします。各ライフサイクルはPriorityの小さい順に実行し、同値は順序を保証しません。動的追加分は最初のStartより前に `SetStartPriority` などで設定できます。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
 
 ## コアの動作確認
 
@@ -122,7 +123,7 @@ Launcherからの作成・履歴からの再開・未保存確認・Launcherへ�
 dotnet run --project tests/PureEngine.Editor.Checks
 ```
 
-Coreのチェックにはライフサイクル・編集データの分離・追加削除・例外時の後片付けも含みます。実行機構単体の性能測定は次で再実行できます。測定条件と結果は実装計画・進捗に記載しています。
+Coreのチェックにはライフサイクル・編集データの分離・追加削除・例外時の後片付け・Priorityの保持と順序・保存互換も含みます。実行機構単体の性能測定は次で再実行できます。測定条件と結果は実装計画・進捗に記載しています。
 
 ```powershell
 dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark

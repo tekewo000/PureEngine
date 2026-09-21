@@ -118,13 +118,15 @@ public partial class MainWindow : Window
     {
         ComponentEditors.Children.Clear();
         _invalidFields.Clear();
-        var components = (SceneObjects.SelectedItem as SceneObject)?.Components.ToArray() ?? [];
+        var item = SceneObjects.SelectedItem as SceneObject;
+        var components = item?.Components.ToArray() ?? [];
         AttachedClasses.IsVisible = components.Length > 0;
         AttachError.IsVisible = false;
         ComponentsHeader.Text = $"Components ({components.Length})";
         UpdateErrorBadge();
+        if (item is null) return;
         foreach (var component in components)
-            ComponentEditors.Children.Add(BuildComponentCard(component));
+            ComponentEditors.Children.Add(BuildComponentCard(item, component));
     }
 
     private void UpdateErrorBadge()
@@ -133,7 +135,7 @@ public partial class MainWindow : Window
         ComponentsError.Text = $"Error {_invalidFields.Count}";
     }
 
-    private Border BuildComponentCard(object component)
+    private Border BuildComponentCard(SceneObject item, object component)
     {
         var type = component.GetType();
         var body = new StackPanel { Spacing = 4 };
@@ -143,7 +145,88 @@ public partial class MainWindow : Window
         body.Children.Add(new Separator { Classes = { "divider" } });
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
             body.Children.Add(BuildMemberRow(component, member));
+        foreach (var row in BuildPriorityRows(item, component))
+            body.Children.Add(row);
         return new Border { Classes = { "componentCard" }, Child = body };
+    }
+
+    /// <summary>Attach settings, separate from Inspector members. Only lifecycles present on the class are shown.</summary>
+    private List<Control> BuildPriorityRows(SceneObject item, object component)
+    {
+        List<Control> rows = [];
+        bool hasStart, hasUpdate, hasDestroy;
+        try
+        {
+            var type = component.GetType();
+            hasStart = ComponentSchema.GetStartMethod(type) is not null;
+            hasUpdate = ComponentSchema.GetUpdateMethod(type) is not null;
+            hasDestroy = ComponentSchema.GetDestroyMethod(type) is not null;
+        }
+        catch (InvalidOperationException)
+        {
+            return rows;
+        }
+        if (!hasStart && !hasUpdate && !hasDestroy) return rows;
+        rows.Add(new Separator { Classes = { "divider" } });
+        if (hasStart) rows.Add(BuildPriorityRow(item, component, ComponentLifecycle.Start, "Start Priority"));
+        if (hasUpdate) rows.Add(BuildPriorityRow(item, component, ComponentLifecycle.Update, "Update Priority"));
+        if (hasDestroy) rows.Add(BuildPriorityRow(item, component, ComponentLifecycle.Destroy, "Destroy Priority"));
+        return rows;
+    }
+
+    private Control BuildPriorityRow(SceneObject item, object component, ComponentLifecycle kind, string displayName)
+    {
+        var type = component.GetType();
+        Func<int> getter = kind switch
+        {
+            ComponentLifecycle.Start => () => item.GetStartPriority(component),
+            ComponentLifecycle.Update => () => item.GetUpdatePriority(component),
+            _ => () => item.GetDestroyPriority(component),
+        };
+        Action<int> setter = kind switch
+        {
+            ComponentLifecycle.Start => value => item.SetStartPriority(component, value),
+            ComponentLifecycle.Update => value => item.SetUpdatePriority(component, value),
+            _ => value => item.SetDestroyPriority(component, value),
+        };
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), ColumnSpacing = 8 };
+        var label = new TextBlock
+        {
+            Text = displayName,
+            Classes = { "muted" },
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        label.SetValue(ToolTip.TipProperty, $"{displayName} (attach setting)");
+        Grid.SetColumn(label, 0);
+        var box = new TextBox { Text = getter().ToString(CultureInfo.InvariantCulture) };
+        box.Classes.Add("inspectorField");
+        box.SetValue(AutomationProperties.NameProperty, $"{type.Name}.{kind}Priority");
+        box.TextChanged += (_, _) =>
+        {
+            if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                if (getter() != value)
+                {
+                    setter(value);
+                    MarkSceneChanged();
+                }
+                MarkInvalid(box, null);
+            }
+            else
+            {
+                MarkInvalid(box, "整数を入力してください");
+            }
+        };
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            box.Text = getter().ToString(CultureInfo.InvariantCulture);
+            e.Handled = true;
+        };
+        Grid.SetColumn(box, 1);
+        row.Children.Add(label);
+        row.Children.Add(box);
+        return row;
     }
 
     private Control BuildMemberRow(object component, MemberInfo member)

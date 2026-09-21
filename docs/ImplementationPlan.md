@@ -1,16 +1,16 @@
 # PureEngine 実装計画・進捗
 
-最終更新：2026-09-21
+最終更新：2026-09-22
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。PriorityとEditorのPlay／Stop接続は未着手。
+実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順を完了。EditorのPlay／Stop接続は未着手。
 
 ## 現在の到達点
 
-**LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値を編集し、YAMLで保存・復元できる。**
+**LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値とPriorityを編集し、YAMLで保存・復元できる。**
 
-制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／Destroyを実行できる。Scene View／Gameはまだ描画・ゲーム実行を行わない。
+制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。Scene View／Gameはまだ描画・ゲーム実行を行わない。
 
 ## 実装済み
 
@@ -24,16 +24,16 @@
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
 | ドラッグ＆ドロップ | ComponentsからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
-| Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
-| Inspector | string・int・float・boolの表示と編集、数値の無効表示・エラー数、Escで復元、非有限floatの拒否 | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
-| シーン保存 | YAML version 1、ID・名前・typeId・Inspector値の保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
+| Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
+| Inspector | string・int・float・boolの表示と編集、数値の無効表示・エラー数、Escで復元、非有限floatの拒否、存在するライフサイクルのPriority表示と編集 | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
+| シーン保存 | YAML version 1、ID・名前・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
+| Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
 | ソース構成 | srcに実装、testsにチェック、docsに文書、toolsに起動スクリプト | [PureEngine.slnx](../PureEngine.slnx) |
 
 ## まだできないこと・制限
 
-- Start／Update／DestroyはCoreで実行できる。EditorのPlay／Stop接続は未実装。
-- Priorityの保持・Inspector表示・保存・実行順への適用は未実装。
+- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stop接続は未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
 - クラスの登録はEditorにコンパイルされた共通のサンプルが対象。ProjectごとのC#コンパイル、外部 `.cs` の読み込み、自動探索は未実装。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。
@@ -63,13 +63,14 @@
 
 完了条件：画面なしでサンプルクラスを開始・更新・終了できる。
 
-### 3. Priorityをアタッチ設定として実装する
+### 3. Priorityをアタッチ設定として実装する（完了）
 
-- [ ] ライフサイクル別にPriorityを保持する。初期値0、負の値も許可する。
-- [ ] 存在するライフサイクルのPriorityだけInspectorに表示する。
-- [ ] YAMLで保存・復元し、小さい順に実行する。同値の順番は保証しない。
+- [x] ライフサイクル別にPriorityを保持する。初期値0、負の値も許可する。ゲーム側に基底クラス・メンバーを要求せず、アタッチごとに独立させる。
+- [x] 存在するライフサイクルのPriorityだけInspectorに表示する。入力検証・無効表示・Esc復元・未保存・保存拒否は既存の仕組みに合わせる。
+- [x] YAMLで保存・復元し、小さい順に実行する。同値の順番は保証せず、テストでも固定しない。旧形式は0として読む。
+- [x] Cloneで引き継ぎ、実行用と編集用の分離を維持する。実行中の変更可能期間（Start／Updateは初回Start前、DestroyはDestroy前）と明示的な拒否をAPI・文書・チェックで統一する。
 
-完了条件：保存・復元した設定で実行順が変わり、チェックで確認できる。
+完了条件：保存・復元した設定で実行順が変わり、チェックで確認できる。2026-09-22にCore・Editorのチェックと性能再測定で確認。
 
 ### 4. Editorから実行・停止する
 
@@ -94,7 +95,7 @@
 
 ## 検証状況
 
-2026-09-21、Coreの実行機構追加後に以下を実行し、両方PASS。
+2026-09-22、Priority追加後に以下を実行し、両方PASS。
 
 ```powershell
 dotnet run --project tests/PureEngine.Core.Checks -c Release
@@ -103,10 +104,32 @@ dotnet run --project tests/PureEngine.Editor.Checks -c Release
 
 - Core：オブジェクト操作、アタッチ、属性検出、YAML往復、不正データの拒否、保存失敗時の保護、Projectの作成・移動・復元。
 - Core実行：全Start後のUpdate、回数・dt、Inspector値の複製と非Inspector値の初期化、再実行、次フレームへの追加、削除予約・自己削除・Start前の削除、例外時の停止と全対象の後片付け、Stopの再入、Destroy中の変更拒否、不正宣言と継承・override。
+- Priority（Core）：初期値0と負値、アタッチごとの独立、Start／Update／Destroyの独立、複数オブジェクトでの昇順、同値の順序不問、旧形式読み込み・保存往復・不正値拒否、Clone維持と編集／実行の分離、動的追加・削除予約・Stop・例外時の後片付け、変更可能期間の境界と拒否、開始バッチへの割り込み禁止。
 - Editor：HeadlessでLauncher起動、新規作成、履歴からの再開、未保存確認のCancel／Discard、Launcher復帰、失敗時の表示、終了。
+- Editor（Priority Inspector）：存在するライフサイクルのみ表示、表示名、編集と負値、入力エラーと保存拒否、Esc復元、未保存状態、通常メンバーとの分離。
 - 実画面の見た目、ネイティブファイルダイアログ、Project Explorerの全操作をこれらのテストで網羅したとは扱わない。今回、実画面の操作確認は行っていない。
 
-### 実行機構の性能測定（2026-09-21）
+### 実行機構の性能測定（2026-09-22、Priority適用後）
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark
+```
+
+Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Release。各ケース1オブジェクト1component、Inspectorのintを1つ持つ。Start／DestroyとUpdateは空で、Updateはインライン化を禁止。描画・ゲーム処理・追加削除は含めない。
+
+準備は複製・デリゲートの結び付け・Startを含み、元Sceneの作成とStopを含めない。同一プロセスで最初の準備を別に測り、その後5回の中央値を記録。定常Stepは各ケース500msウォームアップ後、10,000ステップ×5回の中央値。割り当て量は `GC.GetAllocatedBytesForCurrentThread` の差であり、保持メモリ量ではない。
+
+| オブジェクト数 | Update対象数 | 最初の準備 ms | 以後の準備 ms | 準備の割り当て B | Step µs | Stepの割り当て B |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0 | 2.949 | 0.001 | 1,248 | 0.004 | 0 |
+| 100 | 100 | 7.008 | 0.368 | 233,960 | 0.239 | 0 |
+| 1,000 | 1,000 | 4.597 | 5.181 | 2,297,392 | 3.013 | 0 |
+| 10,000 | 10,000 | 36.593 | 47.338 | 22,848,832 | 136.715 | 0 |
+| 10,000 | 0 | 47.743 | 38.376 | 19,683,856 | 0.011 | 0 |
+
+定常Stepの割り当ては全ケース0 Bを維持し、毎フレームの並べ替えやリスト再生成は行っていない（整列は開始バッチ・更新昇格・削除／停止時に限定）。時間は単一環境での測定であり、固定しきい値を合否条件にはしない。前回（2026-09-21）との差は環境変動の範囲であり、桁の変化はない。
+
+### 実行機構の性能測定（2026-09-21、参考）
 
 ```powershell
 dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark

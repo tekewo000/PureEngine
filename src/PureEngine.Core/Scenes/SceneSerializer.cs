@@ -12,7 +12,8 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     private static readonly ConcurrentDictionary<Type, MemberInfo[]> InspectorMembers = new();
     private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .WithQuotingNecessaryStrings().DisableAliases().Build());
+        .WithQuotingNecessaryStrings().DisableAliases()
+        .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull).Build());
     private readonly Lazy<IDeserializer> _reader = new(static () => new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .WithDuplicateKeyChecking().Build());
@@ -41,11 +42,27 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                         throw new InvalidDataException($"{type.Name}.{member.Name}: a finite number is required.");
                     values.Add(member.Name, value);
                 }
-                saved.Components.Add(new ComponentDocument { TypeId = registry.GetId(type), Values = values });
+                saved.Components.Add(new ComponentDocument
+                {
+                    TypeId = registry.GetId(type),
+                    Values = values,
+                    Priorities = CapturePriorities(item, component),
+                });
             }
             document.Objects.Add(saved);
         }
         return document;
+    }
+
+    private static Dictionary<string, object?>? CapturePriorities(SceneObject item, object component)
+    {
+        var (start, update, destroy) = item.ReadAttachedPriorities(component);
+        if (start == 0 && update == 0 && destroy == 0) return null;
+        var saved = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (start != 0) saved.Add("start", start);
+        if (update != 0) saved.Add("update", update);
+        if (destroy != 0) saved.Add("destroy", destroy);
+        return saved;
     }
 
     public Scene Deserialize(string yaml)
@@ -75,6 +92,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                 foreach (var name in data.Values.Keys)
                     if (!members.ContainsKey(name))
                         throw new InvalidDataException($"{data.TypeId}.{name}: unknown Inspector member.");
+                var (start, update, destroy) = ReadPriorities(data, type);
                 var component = Activator.CreateInstance(type)!;
                 foreach (var member in members.Values)
                 {
@@ -86,6 +104,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                     else ((PropertyInfo)member).SetValue(component, value);
                 }
                 item.Attach(component);
+                item.RestorePriorities(component, start, update, destroy);
             }
         }
         return scene;
@@ -126,5 +145,46 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             if (type == typeof(bool) && bool.TryParse(text, out var boolean)) return boolean;
         }
         throw new InvalidDataException($"{path}: invalid {type.Name} value.");
+    }
+
+    private static (int Start, int Update, int Destroy) ReadPriorities(ComponentDocument data, Type type)
+    {
+        if (data.Priorities is null) return (0, 0, 0);
+        var parsed = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (key, raw) in data.Priorities)
+        {
+            if (key is not ("start" or "update" or "destroy"))
+                throw new InvalidDataException($"{data.TypeId}.{key}: unknown priority.");
+            var path = $"{data.TypeId}.priorities.{key}";
+            int value;
+            if (raw is int integer) value = integer;
+            else if (raw is string text
+                && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedValue))
+                value = parsedValue;
+            else
+                throw new InvalidDataException($"{path}: invalid int value.");
+            if (parsed.ContainsKey(key))
+                throw new InvalidDataException($"{path}: duplicate priority.");
+            parsed.Add(key, value);
+        }
+        // Invalid declarations are rejected when the runtime starts; loading keeps the data so it can be fixed.
+        try
+        {
+            var lifecycles = ComponentSchema.GetLifecycle(type);
+            foreach (var (key, kind) in new[] { ("start", lifecycles.Start), ("update", lifecycles.Update), ("destroy", lifecycles.Destroy) })
+            {
+                if (parsed.ContainsKey(key) && kind is null)
+                    throw new InvalidDataException($"{data.TypeId}.priorities.{key}: no [{key}] lifecycle to prioritize.");
+            }
+        }
+        catch (InvalidOperationException error) when (error.Message.Contains("requires a", StringComparison.Ordinal)
+            || error.Message.Contains("multiple", StringComparison.Ordinal))
+        {
+            // Defer invalid declarations to runtime validation; keep priorities for editing.
+        }
+        parsed.TryGetValue("start", out var start);
+        parsed.TryGetValue("update", out var update);
+        parsed.TryGetValue("destroy", out var destroy);
+        return (start, update, destroy);
     }
 }

@@ -28,8 +28,18 @@ public sealed class SceneRuntime : IDisposable
         public Action? Update;
         public Action<float>? UpdateWithDelta;
         public Action? Destroy;
+        public int StartPriority;
+        public int UpdatePriority;
+        public int DestroyPriority;
         public bool Destroyed;
     }
+
+    private static readonly Comparer<Invocation> StartOrder =
+        Comparer<Invocation>.Create(static (a, b) => a.StartPriority.CompareTo(b.StartPriority));
+    private static readonly Comparer<Invocation> UpdateOrder =
+        Comparer<Invocation>.Create(static (a, b) => a.UpdatePriority.CompareTo(b.UpdatePriority));
+    private static readonly Comparer<Invocation> DestroyOrder =
+        Comparer<Invocation>.Create(static (a, b) => a.DestroyPriority.CompareTo(b.DestroyPriority));
 
     private readonly Dictionary<SceneObject, RuntimeObject> _objects = [];
     // Remember lifetime ownership without retaining deleted components for the rest of the session.
@@ -149,9 +159,53 @@ public sealed class SceneRuntime : IDisposable
             if (update.GetParameters().Length == 0) entry.Update = update.CreateDelegate<Action>(component);
             else entry.UpdateWithDelta = update.CreateDelegate<Action<float>>(component);
         }
+        var (start, updatePriority, destroy) = item.ReadAttachedPriorities(component);
+        entry.StartPriority = start;
+        entry.UpdatePriority = updatePriority;
+        entry.DestroyPriority = destroy;
         owner.Components.Add(entry);
         _instances.Add(component, AcceptedComponent);
         if (entry.Start is not null || entry.Methods.Update is not null) _pendingStarts.Add(entry);
+    }
+
+    internal void SetComponentPriority(SceneObject item, object component, ComponentLifecycle kind, int priority)
+    {
+        EnsureMutationAllowed();
+        if (!_objects.TryGetValue(item, out var owner))
+            throw new InvalidOperationException("Component is not part of this runtime.");
+        Invocation? found = null;
+        foreach (var candidate in owner.Components)
+        {
+            if (ReferenceEquals(candidate.Component, component))
+            {
+                found = candidate;
+                break;
+            }
+        }
+        if (found is null)
+            throw new InvalidOperationException("Component is not part of this runtime.");
+        if (kind == ComponentLifecycle.Destroy)
+        {
+            if (found.Destroyed)
+                throw new InvalidOperationException("Destroy Priority can only be changed before Destroy runs.");
+            found.DestroyPriority = priority;
+            return;
+        }
+        if (owner.Removed)
+            throw new InvalidOperationException($"{kind} Priority can only be changed before removal and the first Start.");
+        var pending = false;
+        foreach (var candidate in _pendingStarts)
+        {
+            if (ReferenceEquals(candidate, found))
+            {
+                pending = true;
+                break;
+            }
+        }
+        if (!pending)
+            throw new InvalidOperationException($"{kind} Priority can only be changed before the first Start.");
+        if (kind == ComponentLifecycle.Start) found.StartPriority = priority;
+        else found.UpdatePriority = priority;
     }
 
     internal bool Remove(SceneObject item)
@@ -167,6 +221,9 @@ public sealed class SceneRuntime : IDisposable
     {
         // Snapshot only the count: callbacks append to this list without joining the current batch.
         var count = _pendingStarts.Count;
+        // Order the current batch by Start Priority; additions during the batch wait for the next Step.
+        if (count > 1) _pendingStarts.Sort(0, count, StartOrder);
+        var updatesBefore = _updates.Count;
         for (var i = 0; i < count && !_stopRequested; i++)
         {
             var entry = _pendingStarts[i];
@@ -180,6 +237,8 @@ public sealed class SceneRuntime : IDisposable
             if (!entry.Owner.Removed && !_stopRequested && entry.Methods.Update is not null) _updates.Add(entry);
         }
         _pendingStarts.RemoveRange(0, count);
+        // Keep the whole update list ordered by Update Priority; steady frames without additions skip this.
+        if (_updates.Count > updatesBefore && _updates.Count > 1) _updates.Sort(UpdateOrder);
     }
 
     private void FinishStep()
@@ -189,12 +248,7 @@ public sealed class SceneRuntime : IDisposable
             if (!_stopRequested && _removals.Count != 0)
             {
                 _destroying = true;
-                foreach (var owner in _removals)
-                {
-                    Destroy(owner);
-                    Scene.RemoveImmediately(owner.Item);
-                    _objects.Remove(owner.Item);
-                }
+                DestroyRemoved();
                 _removals.Clear();
                 _updates.RemoveAll(static entry => entry.Owner.Removed);
                 _pendingStarts.RemoveAll(static entry => entry.Owner.Removed);
@@ -204,11 +258,7 @@ public sealed class SceneRuntime : IDisposable
             {
                 _stopped = true;
                 _destroying = true;
-                foreach (var owner in _objects.Values)
-                {
-                    Destroy(owner);
-                    Scene.RemoveImmediately(owner.Item);
-                }
+                DestroyRemaining();
                 _objects.Clear();
                 _instances.Clear();
                 _pendingStarts.Clear();
@@ -223,15 +273,43 @@ public sealed class SceneRuntime : IDisposable
         }
     }
 
-    private void Destroy(RuntimeObject owner)
+    private void DestroyRemoved()
     {
-        foreach (var entry in owner.Components)
+        // Order the whole frame's deletions by Destroy Priority across objects.
+        var targets = new List<Invocation>();
+        foreach (var owner in _removals)
+            targets.AddRange(owner.Components);
+        if (targets.Count > 1) targets.Sort(DestroyOrder);
+        foreach (var entry in targets)
         {
             if (entry.Destroyed) continue;
             entry.Destroyed = true;
             try { entry.Destroy?.Invoke(); }
             catch (Exception error) { Report(entry, entry.Methods.Destroy!.Name, error); }
         }
+        foreach (var owner in _removals)
+        {
+            Scene.RemoveImmediately(owner.Item);
+            _objects.Remove(owner.Item);
+        }
+    }
+
+    private void DestroyRemaining()
+    {
+        // Stop destroys everything still accepted, ordered by Destroy Priority across objects.
+        var targets = new List<Invocation>();
+        foreach (var owner in _objects.Values)
+            targets.AddRange(owner.Components);
+        if (targets.Count > 1) targets.Sort(DestroyOrder);
+        foreach (var entry in targets)
+        {
+            if (entry.Destroyed) continue;
+            entry.Destroyed = true;
+            try { entry.Destroy?.Invoke(); }
+            catch (Exception error) { Report(entry, entry.Methods.Destroy!.Name, error); }
+        }
+        foreach (var owner in _objects.Values)
+            Scene.RemoveImmediately(owner.Item);
     }
 
     private void Report(Invocation entry, string method, Exception error) =>
