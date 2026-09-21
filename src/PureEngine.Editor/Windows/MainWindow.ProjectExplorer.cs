@@ -153,12 +153,12 @@ public partial class MainWindow
                 {
                     var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
                     var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
+                    var isStartup = isScene && string.Equals(relative, startup, StringComparison.Ordinal);
                     entries.Add(new ProjectExplorerEntry(
                         isScene ? ProjectExplorerKind.Scene : ProjectExplorerKind.File,
-                        file, isScene && string.Equals(relative, startup, StringComparison.Ordinal) ? "Startup" : "",
-                        relative, relative,
+                        file, "", relative, relative,
                         Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar)),
-                        null, isScene && string.Equals(relative, startup, StringComparison.Ordinal)));
+                        null, isStartup));
                 }
             }
         }
