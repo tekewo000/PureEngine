@@ -19,11 +19,24 @@
       <Setter Property="CornerRadius" Value="6" />
     </Style>
     <Style Selector="ListBox#ProjectFiles ListBoxItem">
-      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="Width" Value="112" />
+      <Setter Property="MinHeight" Value="104" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="4" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Path.tileIcon">
+      <Setter Property="Width" Value="32" />
       <Setter Property="Height" Value="32" />
-      <Setter Property="Padding" Value="4,0" />
-      <Setter Property="Margin" Value="0,0" />
-      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Stroke" Value="#D5D5D5" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TreeView#ProjectTree TreeViewItem">
       <Setter Property="MinHeight" Value="0" />
@@ -31,13 +44,10 @@
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="CornerRadius" Value="6" />
     </Style>
-    <Style Selector="ListBox#ProjectFiles ListBoxItem">
-      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    </Style>
     <Style Selector="ListBox#ConsoleList ListBoxItem">
       <Setter Property="MinHeight" Value="0" />
-      <Setter Property="Height" Value="28" />
-      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Padding" Value="6,1" />
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="CornerRadius" Value="6" />
     </Style>
@@ -353,21 +363,20 @@
                 <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
                               ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               Cursor="SizeWestEast" AutomationProperties.Name="Resize Project tree" />
-                <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
-                  <Grid ColumnDefinitions="68,1,*,1,160" Margin="4,2,4,0">
-                    <TextBlock Text="KIND" Classes="columnHeader" HorizontalAlignment="Center" />
-                    <Rectangle Grid.Column="1" Classes="columnDivider" />
-                    <TextBlock Grid.Column="2" Text="NAME" Classes="columnHeader" Margin="0,0,8,0" />
-                    <Rectangle Grid.Column="3" Classes="columnDivider" />
-                    <TextBlock Grid.Column="4" Text="DETAIL" Classes="columnHeader" />
-                  </Grid>
-                  <Separator Grid.Row="1" Classes="divider" Margin="0,6" />
-                  <ListBox Grid.Row="2" x:Name="ProjectFiles" Background="Transparent" BorderThickness="0"
+                <Grid Grid.Column="2" RowDefinitions="Auto,*">
+                  <TextBlock x:Name="ProjectFilesCount" Classes="muted" FontSize="11" Margin="8,2,0,6" />
+                  <ListBox Grid.Row="1" x:Name="ProjectFiles" Background="Transparent" BorderThickness="0"
                            SelectionMode="Single"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                            AutomationProperties.Name="Project files"
                            DoubleTapped="OnProjectFilesDoubleTapped" KeyDown="OnProjectFilesKeyDown"
                            ContextRequested="OnProjectFilesContextRequested"
                            PointerPressed="OnProjectFilesPointerPressed">
+                  <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ListBox.ItemsPanel>
                   <ListBox.ContextMenu>
                     <ContextMenu>
                       <MenuItem x:Name="FilesOpenMenu" Header="Open" Click="OnExplorerOpen" />
@@ -385,25 +394,29 @@
                   </ListBox.ContextMenu>
                   <ListBox.ItemTemplate>
                     <DataTemplate DataType="editor:ProjectExplorerEntry">
-                      <Border BorderThickness="0,0,0,1" BorderBrush="#3A3A3A" Padding="0,2" ToolTip.Tip="{Binding ToolTip}">
-                        <Grid ColumnDefinitions="68,1,*,1,160" VerticalAlignment="Center">
-                          <Border Classes="kindBadge">
-                            <TextBlock Text="{Binding KindLabel}" FontSize="10" Foreground="#D5D5D5"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                          </Border>
-                          <Rectangle Grid.Column="1" Classes="columnDivider" />
-                          <TextBlock Grid.Column="2" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
-                                     VerticalAlignment="Center" Margin="0,0,8,0" />
-                          <Rectangle Grid.Column="3" Classes="columnDivider" />
-                          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11"
-                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                            <Border Classes="startupPill" IsVisible="{Binding IsStartup}">
-                              <TextBlock Text="Startup" FontSize="10" Foreground="#292929" FontWeight="SemiBold"
-                                         VerticalAlignment="Center" />
+                      <Border BorderBrush="{Binding TileBorderBrush}" BorderThickness="1" CornerRadius="8"
+                              Background="#333333" Padding="8,10,8,8" ToolTip.Tip="{Binding ToolTip}">
+                        <StackPanel Spacing="6" HorizontalAlignment="Stretch" VerticalAlignment="Top">
+                          <Panel Height="36" AutomationProperties.Name="{Binding KindLabel}">
+                            <Path Classes="tileIcon" Data="M3 19V4h5l2 2h11v13H3z" IsVisible="{Binding IsFolder}" />
+                            <Border Width="32" Height="32" BorderBrush="#D5D5D5" BorderThickness="2"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsScene}">
+                              <Path Width="12" Height="14" Stretch="Uniform" Fill="#D5D5D5"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" Data="M0 0L12 7L0 14z" />
                             </Border>
-                          </StackPanel>
-                        </Grid>
+                            <Path Classes="tileIcon" Data="M6 3h8l5 5v13H6z M14 3v5h5 M11 12l-2.5 3L11 18 M13 12l2.5 3L13 18" IsVisible="{Binding IsCSharpFile}" />
+                            <Path Classes="tileIcon" Data="M6 3h8l5 5v13H6z M14 3v5h5" IsVisible="{Binding IsPlainFile}" />
+                          </Panel>
+                          <TextBlock Text="{Binding DisplayName}" MaxLines="1"
+                                     TextTrimming="CharacterEllipsis" TextAlignment="Center" />
+                          <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="10"
+                                     TextTrimming="CharacterEllipsis" TextAlignment="Center"
+                                     IsVisible="{Binding HasDetail}" />
+                          <Border Classes="startupPill" IsVisible="{Binding IsStartup}" HorizontalAlignment="Center">
+                            <TextBlock Text="Startup" FontSize="10" Foreground="#292929" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                          </Border>
+                        </StackPanel>
                       </Border>
                     </DataTemplate>
                   </ListBox.ItemTemplate>

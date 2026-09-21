@@ -38,6 +38,24 @@ public sealed record ProjectExplorerEntry(
         ProjectExplorerKind.File => "File",
         _ => "C#",
     };
+
+    /// <summary>Tile frame. Scene reuses structural lavender (same as Startup pill/Engine border/focus ring);
+    /// others stay neutral so the grid reads calm.</summary>
+    public SolidColorBrush TileBorderBrush => IsScene
+        ? new SolidColorBrush(Color.Parse("#B2A0E0"))
+        : new SolidColorBrush(Color.Parse("#454545"));
+
+    /// <summary>Icon selectors. Exactly one is true per row; C# files are told apart from plain files by extension.</summary>
+    public bool IsFolder => Kind == ProjectExplorerKind.Folder;
+
+    public bool IsScene => Kind == ProjectExplorerKind.Scene;
+
+    public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
+        && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsPlainFile => !IsFolder && !IsScene && !IsCSharpFile;
+
+    public bool HasDetail => !string.IsNullOrEmpty(Detail);
 }
 
 public partial class MainWindow
@@ -166,6 +184,7 @@ public partial class MainWindow
             }
         }
         ProjectFiles.ItemsSource = entries;
+        ProjectFilesCount.Text = entries.Count == 0 ? "空のフォルダ" : $"{entries.Count} 件";
         ProjectFiles.SelectedItem = entries.FirstOrDefault(entry =>
             entry.FullPath is not null && string.Equals(entry.FullPath, _explorerSelectedFile, PathComparison()));
         if (ProjectFiles.SelectedItem is null && _explorerSelectedFile is not null
