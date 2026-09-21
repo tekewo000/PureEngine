@@ -1,9 +1,10 @@
 # PureEngine
 
 C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
-現在はペインを備えたエディターで、空のオブジェクトの追加・選択・名前変更・削除ができます。
+現在はLauncherからProjectを開き、オブジェクト・アタッチしたクラスの値を編集し、YAMLで保存・復元できます。
 
 設計方針・Attribute・Priority・保存データ・将来の構想は [EngineArchitecture.md](docs/EngineArchitecture.md) にまとめています。
+実装済みの範囲・制限・次の作業・検証状況は [実装計画・進捗](docs/ImplementationPlan.md) にまとめています。
 
 ## 現在できること
 
