@@ -348,20 +348,40 @@ public partial class MainWindow : Window
 
     private Control BuildMemberRow(object component, MemberInfo member)
     {
-        if (GetMemberType(member) == typeof(bool))
+        var memberType = GetMemberType(member);
+        if (memberType == typeof(bool))
         {
+            // bool も他型と同じ96pxラベル列に揃え、ボックスと文字の間隔をグリッドで保証する。
+            var boolRow = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), ColumnSpacing = 8 };
+            boolRow.Classes.Add("inspectorRow");
+            var boolLabel = new TextBlock
+            {
+                Text = member.Name,
+                Foreground = MemberLabelBrush,
+                FontWeight = FontWeight.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            boolLabel.SetValue(ToolTip.TipProperty, $"{member.Name} : bool");
+            Grid.SetColumn(boolLabel, 0);
             var check = (CheckBox)BuildMemberEditor(component, member);
-            check.Content = member.Name;
-            return check;
+            check.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+            Grid.SetColumn(check, 1);
+            boolRow.Children.Add(boolLabel);
+            boolRow.Children.Add(check);
+            return boolRow;
         }
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), ColumnSpacing = 8 };
+        row.Classes.Add("inspectorRow");
         var label = new TextBlock
         {
             Text = member.Name,
-            Classes = { "muted" },
+            Foreground = MemberLabelBrush,
+            FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
-        label.SetValue(ToolTip.TipProperty, member.Name);
+        label.SetValue(ToolTip.TipProperty, $"{member.Name} : {memberType.Name}");
         Grid.SetColumn(label, 0);
         var editor = BuildMemberEditor(component, member);
         Grid.SetColumn(editor, 1);
@@ -440,22 +460,40 @@ public partial class MainWindow : Window
             return check;
         }
 
-        return new TextBlock { Text = "対応外", Classes = { "muted" } };
+        return new Border
+        {
+            Classes = { "kindBadge" },
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Child = new TextBlock { Text = memberType.Name, FontSize = 10, Foreground = UnsupportedBadgeBrush },
+        };
     }
 
     private static readonly SolidColorBrush InvalidBrush = new(Color.Parse("#FF5252"));
+    private static readonly SolidColorBrush InvalidFieldBackground = new(Color.Parse("#4A1A1A"));
+
+    /// <summary>Inspector member labels. Brighter than muted so label/value pairs scan as units.</summary>
+    private static readonly SolidColorBrush MemberLabelBrush = new(Color.Parse("#D5D5D5"));
+    private static readonly SolidColorBrush UnsupportedBadgeBrush = new(Color.Parse("#AAAAAA"));
+
+    /// <summary>S/U/D priority label accents. The letter stays the primary cue; color is redundant.</summary>
+    private static readonly SolidColorBrush StartAccent = new(Color.Parse("#8AB4F8"));
+    private static readonly SolidColorBrush UpdateAccent = new(Color.Parse("#81C995"));
+    private static readonly SolidColorBrush DestroyAccent = new(Color.Parse("#F28B82"));
 
     private void MarkInvalid(TextBox box, string? message)
     {
         if (message is null)
         {
             box.ClearValue(TextBox.BorderBrushProperty);
+            box.ClearValue(TextBox.BackgroundProperty);
             ToolTip.SetTip(box, null);
             _invalidFields.Remove(box);
         }
         else
         {
             box.BorderBrush = InvalidBrush;
+            box.Background = InvalidFieldBackground;
             ToolTip.SetTip(box, message);
             _invalidFields.Add(box);
         }
