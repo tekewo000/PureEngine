@@ -14,6 +14,9 @@ static class PlayConnectionChecks
         typeof(MainWindow).GetMethod(method, AnyInstance)!.Invoke(window, args);
     private static T Field<T>(MainWindow window, string name) =>
         (T)typeof(MainWindow).GetField(name, AnyInstance)!.GetValue(window)!;
+    private static EditSceneStore EditStore(MainWindow window) =>
+        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+    private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;
     private static void Check(bool condition, string message)
@@ -56,7 +59,7 @@ static class PlayConnectionChecks
     private static void CloseEditor(MainWindow editor)
     {
         // Inspector検証で付けたDirtyを落として閉じる。確認ダイアログが出たらDiscardする。
-        typeof(MainWindow).GetField("_sceneDirty", AnyInstance)!.SetValue(editor, false);
+        EditStore(editor).MarkClean();
         editor.Close();
         Dispatcher.UIThread.RunJobs();
         var dialog = editor.OwnedWindows.SingleOrDefault(window => window.Title == "Unsaved Scene");
@@ -82,7 +85,7 @@ static class PlayConnectionChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "_editSession");
             var owner = Field<ProjectComponents>(editor, "_components");
             var item = scene.AddEmpty();
@@ -147,7 +150,7 @@ static class PlayConnectionChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "_editSession");
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
@@ -188,7 +191,7 @@ static class PlayConnectionChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "_editSession");
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
@@ -229,7 +232,7 @@ static class PlayConnectionChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             var item = scene.AddEmpty();
             // 不正なライフサイクル宣言で準備失敗させる。編集時のAttach自体は通る。
             item.Attach(new PlayBadLifecycle());
@@ -258,7 +261,7 @@ static class PlayConnectionChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "_editSession");
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayFailUpdate), services.Factory);
@@ -288,7 +291,7 @@ static class PlayConnectionChecks
     {
         PlayCounter.Reset();
         var editor = CreateEditor();
-        var scene = Field<Scene>(editor, "_scene");
+        var scene = EditScene(editor);
         var services = Field<GameSession>(editor, "_editSession");
         var item = scene.AddEmpty();
         Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
@@ -312,7 +315,7 @@ static class PlayConnectionChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             scene.AddEmpty().Attach(new PlayFailCleanup());
             Call(editor, "StartPlay");
             StopTimer(editor);

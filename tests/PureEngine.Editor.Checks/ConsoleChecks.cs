@@ -16,6 +16,9 @@ static class ConsoleChecks
         typeof(MainWindow).GetMethod(method, AnyInstance)!.Invoke(window, args);
     private static T Field<T>(MainWindow window, string name) =>
         (T)typeof(MainWindow).GetField(name, AnyInstance)!.GetValue(window)!;
+    private static EditSceneStore EditStore(MainWindow window) =>
+        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+    private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;
     private static void Check(bool condition, string message)
@@ -65,7 +68,7 @@ static class ConsoleChecks
 
     private static void CloseEditor(MainWindow editor)
     {
-        typeof(MainWindow).GetField("_sceneDirty", AnyInstance)!.SetValue(editor, false);
+        EditStore(editor).MarkClean();
         editor.Close();
         Dispatcher.UIThread.RunJobs();
         var dialog = editor.OwnedWindows.SingleOrDefault(window => window.Title == "Unsaved Scene");
@@ -370,7 +373,7 @@ static class ConsoleChecks
         var editor = CreateEditor();
         try
         {
-            Field<Scene>(editor, "_scene").AddEmpty().Attach(new ConsoleFailCleanup());
+            EditScene(editor).AddEmpty().Attach(new ConsoleFailCleanup());
             Call(editor, "StartPlay");
             Field<DispatcherTimer>(editor, "_playTimer").Stop();
             var play = Field<PlaySession>(editor, "_play");
@@ -444,7 +447,7 @@ static class ConsoleChecks
         var editor = CreateEditor();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = EditScene(editor);
             var item = scene.AddEmpty();
             item.Rename("Failer");
             item.Attach(new ConsoleFailCleanup());
@@ -519,7 +522,7 @@ static class ConsoleChecks
         var auto = CreateEditor();
         try
         {
-            var scene = Field<Scene>(auto, "_scene");
+            var scene = EditScene(auto);
             var services = Field<GameSession>(auto, "_editSession");
             var owner = Field<ProjectComponents>(auto, "_components");
             var item = scene.AddEmpty();
@@ -564,7 +567,7 @@ static class ConsoleChecks
         Check(Field<List<LogEntry>>(first, "_consoleHistory").Count == 1, "First window must intake.");
         var timerBefore = Field<DispatcherTimer?>(first, "_consoleTimer");
         Check(timerBefore is not null && timerBefore.IsEnabled, "Intake timer must run while open.");
-        typeof(MainWindow).GetField("_sceneDirty", AnyInstance)!.SetValue(first, false);
+        EditStore(first).MarkClean();
         first.Close();
         Dispatcher.UIThread.RunJobs();
         Check(Field<DispatcherTimer?>(first, "_consoleTimer") is null, "Close must release the intake timer.");
@@ -584,7 +587,7 @@ static class ConsoleChecks
         Call(second, "DrainConsole");
         Dispatcher.UIThread.RunJobs();
         Check(Field<List<LogEntry>>(second, "_consoleHistory").Count == 2, "Second window must continue intake.");
-        typeof(MainWindow).GetField("_sceneDirty", AnyInstance)!.SetValue(second, false);
+        EditStore(second).MarkClean();
         second.Close();
         Dispatcher.UIThread.RunJobs();
         _ = Log.Drain();

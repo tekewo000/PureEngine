@@ -29,7 +29,7 @@
 
 ## A2：MainWindowの責務分離
 
-**現状：未完了。** MainWindowはpartialファイルに分かれているが、同一クラスがInspector、Explorer、保存、Play、Console、コード再読み込みの状態と制御を持つ。ファイル分割だけでは、画面と処理の依存は分離されていない。
+**現状：未完了（統合待ち）。** MainWindowのpartial間に分散した保存・Play・再読み込み・終了の制御を整理し、画面操作と非UI中核を分離した単体では既存チェックが通る。A1・A3・A4・A5との接続（サービス登録・非同期化・プロジェクト単位所有・実行接続の移動先）は別worktreeで並列実装中のため、統合後の検証まで完了扱いにしない。
 
 コード再読み込みの準備・採用・失敗処理を最初の切り出し対象とする。保存やPlayの調整も、画面に依存しない処理は既存のSessionや適切な所有者へ移し、MainWindowは操作の受付、ダイアログ、表示更新を担当する。全面的なMVVM化や、行数を減らすだけの分割は完了条件にしない。
 
@@ -37,10 +37,21 @@
 
 完了条件：
 
-- [ ] コード再読み込みの中核処理をMainWindow外で実行・検証できる。
-- [ ] 編集Scene・実行Session・再読み込み状態の所有者と変更経路が明確になり、複数のpartialファイルで同じ制御を重複実装しない。
-- [ ] 保存・Play・再読み込みの競合条件をUIコントロールの直接参照に依存せず判定できる。入力エラーの有無などは画面から必要な情報として渡す。
-- [ ] 未保存確認、入力エラー中の保留、Play中の編集禁止、失敗表示、終了時の解放が従来どおり動く。
+- [x] コード再読み込みの中核処理をMainWindow外で実行・検証できる。
+- [x] 編集Scene・実行Session・再読み込み状態の所有者と変更経路が明確になり、複数のpartialファイルで同じ制御を重複実装しない。
+- [x] 保存・Play・再読み込みの競合条件をUIコントロールの直接参照に依存せず判定できる。入力エラーの有無などは画面から必要な情報として渡す。
+- [x] 未保存確認、入力エラー中の保留、Play中の編集禁止、失敗表示、終了時の解放が従来どおり動く。
+
+実装箇所（A2・単体検証済み、統合待ち）：
+- 新規・非UI：`src/PureEngine.Editor/Editing/EditorOperationGate.cs`（保存・Play・再読み込み・ファイル操作の競合判定。`HasInputErrors`などbool値で受け、Avalonia参照なし）、`src/PureEngine.Editor/Editing/EditSceneStore.cs`（編集Scene・パス・Dirtyの所有者。旧Scene返却でComponent→サービス終了順はMainWindowが保証）、`src/PureEngine.Editor/Compilation/UserCodeReloadCoordinator.cs`（準備・採用・後片付けの中核。`Prepare`/`Adopt`/`Discard`/`Reload`と`BuildCandidateRegistry`/`Unload`を公開。コンパイル成功だけでは採用せず移行成功後にpublish。Window/Control/Dispatcher参照なし）。
+- MainWindowは操作受付・ダイアログ・選択維持・表示更新に専念：`Windows/MainWindow.axaml.cs`（`_editScene`/`_reloadCoordinator`所有、`HasInputErrors`集約）、`Windows/MainWindow.UserCode.cs`（Coordinatorへ委譲し選択ID・Dirty維持・Console/ステータス・Explorer更新のみ行う）、`Windows/MainWindow.Persistence.cs`（Gate/Store経由の保存・開く・新規・終了。`CloseEditSession`の終了順を維持）、`Windows/MainWindow.Play.cs`（Gate経由の開始可否、`_editScene.Current`と`ComponentAssets.Registry`を`PlaySession.Prepare`へ渡して再利用）、`Windows/MainWindow.Project.cs`・`Windows/MainWindow.ProjectExplorer.cs`（`_editScene.Path`経由の参照付け替え）。
+- 境界遵守：Registry所有構造は作り直さず`ComponentRegistry`を引数で受ける（A4接続点）。`GameSession`/`PlaySession`の移動は行わずfactory・`Prepare`を再利用（A5接続点）。同期分離のみで非同期化なし（A3接続点）。
+- 画面なし検証：`tests/PureEngine.Editor.Checks/EditorSeparationChecks.cs`（Gate・Store・CoordinatorをWindowなしで確認。ID・未保存値・Priority維持、失敗時旧保持・未publish、競合時保留を検証）。既存チェックは新所有者に合わせて更新（`UserCodeChecks`・`PlayConnectionChecks`・`EditorOwnershipChecks`・`ConsoleChecks`・`PriorityInspectorChecks`・`Program.cs`）。
+
+検証結果（2026-09-21確認）：
+- `dotnet run --project tests/PureEngine.Core.Checks -c Release`：PASS（7行すべて）。
+- `dotnet run --project tests/PureEngine.Editor.Checks -c Release`：PASS（Play/Stop配線、所有権、Console、分離、ユーザーコード、Priority、Launcherの7行すべて。分離の1行は新規）。
+- 未検証・統合待ち：A1のプロジェクト側サービス登録との再Play・再読み込み確認、A3のバックグラウンド化後の採用時点判定、A4のプロジェクト単位Registry所有者への差し替え、A5の実行接続共有化後のPlay/終了確認。統合後に両チェック＋接続確認を再実行するまで完了にしない。
 
 ## A3：コンパイルのバックグラウンド実行
 

@@ -38,8 +38,8 @@ static class PriorityInspectorChecks
         Check(sceneObjects.Items.Count == 0, "Inspector checks require an empty scene.");
 
         // Attach a full-lifecycle component and a data-only component to separate objects.
-        var editorSceneField = typeof(MainWindow).GetField("_scene", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var scene = (Scene)editorSceneField.GetValue(editor)!;
+        var editStore = (EditSceneStore)typeof(MainWindow).GetField("_editScene", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
+        var scene = editStore.Current;
 
         var fullObject = scene.AddEmpty();
         fullObject.Rename("Full");

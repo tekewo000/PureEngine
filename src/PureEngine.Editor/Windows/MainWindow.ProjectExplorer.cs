@@ -187,9 +187,10 @@ public partial class MainWindow
         ProjectFilesCount.Text = entries.Count == 0 ? "空のフォルダ" : $"{entries.Count} 件";
         ProjectFiles.SelectedItem = entries.FirstOrDefault(entry =>
             entry.FullPath is not null && string.Equals(entry.FullPath, _explorerSelectedFile, PathComparison()));
+        var editPath = _editScene.Path;
         if (ProjectFiles.SelectedItem is null && _explorerSelectedFile is not null
-            && _scenePath is not null && entries.Any(entry => string.Equals(entry.FullPath, _scenePath, PathComparison())))
-            ProjectFiles.SelectedItem = entries.First(entry => string.Equals(entry.FullPath, _scenePath, PathComparison()));
+            && editPath is not null && entries.Any(entry => string.Equals(entry.FullPath, editPath, PathComparison())))
+            ProjectFiles.SelectedItem = entries.First(entry => string.Equals(entry.FullPath, editPath, PathComparison()));
     }
 
     private static StringComparison PathComparison() => OperatingSystem.IsWindows()
@@ -493,8 +494,9 @@ public partial class MainWindow
                 SetFileStatus("起動シーンを含むため削除できません。先に起動シーンを変更してください。", true);
                 return;
             }
-            var containsOpen = _scenePath is not null && (string.Equals(target, _scenePath, PathComparison())
-                || (isDirectory && (_scenePath + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison())));
+            var editPath = _editScene.Path;
+            var containsOpen = editPath is not null && (string.Equals(target, editPath, PathComparison())
+                || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison())));
             if (containsOpen)
             {
                 SetFileStatus("編集中のシーンを含むため削除できません。先に別のシーンを開いてください。", true);
@@ -522,12 +524,13 @@ public partial class MainWindow
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)
     {
         if (_project is null) return;
-        if (_scenePath is not null && (string.Equals(_scenePath, oldFull, PathComparison())
-            || (isDirectory && (_scenePath + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison()))))
+        var editPath = _editScene.Path;
+        if (editPath is not null && (string.Equals(editPath, oldFull, PathComparison())
+            || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison()))))
         {
-            _scenePath = isDirectory
-                ? Path.Combine(newFull, Path.GetRelativePath(oldFull, _scenePath))
-                : newFull;
+            _editScene.SetPath(isDirectory
+                ? Path.Combine(newFull, Path.GetRelativePath(oldFull, editPath))
+                : newFull);
             UpdateSceneTitle();
         }
         var startup = _project.StartupScenePath;

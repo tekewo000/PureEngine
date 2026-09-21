@@ -14,7 +14,10 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow : Window
 {
-    private Scene _scene = new();
+    /// <summary>編集Scene・パス・Dirtyの所有者。partial間の編集状態の変更経路を集約する。</summary>
+    private readonly EditSceneStore _editScene = new(new Scene());
+    /// <summary>コード再読み込みの準備・採用・後片付けと保留状態の所有者。画面なしで検証できる。</summary>
+    private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
     private GameSession _editSession;
     /// <summary>このウィンドウ（プロジェクト）の型所有者。Serializer・アタッチ・Play・再読み込みはここを明示的に使う。</summary>
     internal ProjectComponents _components;
@@ -27,6 +30,15 @@ public partial class MainWindow : Window
     private IReadOnlyList<Type>? _dragTypes;
     private readonly HashSet<TextBox> _invalidFields = [];
     private bool _viewportFitted;
+
+    /// <summary>画面由来の入力エラー有無。Gate判定へ値として渡す。</summary>
+    internal bool HasInputErrors => _invalidFields.Count > 0 || (NameError?.IsVisible == true);
+
+    internal EditSceneStore EditSceneStore => _editScene;
+
+    internal UserCodeReloadCoordinator ReloadCoordinator => _reloadCoordinator;
+
+    internal GameSession EditSession => _editSession;
 
     public MainWindow(ProjectSession session, GameSession? editServices = null) : this()
     {
@@ -63,7 +75,7 @@ public partial class MainWindow : Window
         Closing += OnEditorClosing;
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);
         UpdateSceneTitle();
-        SceneObjects.ItemsSource = _scene.Objects;
+        SceneObjects.ItemsSource = _editScene.Current.Objects;
         SceneObjects.SelectionChanged += OnObjectSelected;
         ObjectName.TextChanged += OnObjectNameChanged;
         RefreshProjectExplorer();
@@ -571,7 +583,7 @@ public partial class MainWindow : Window
     private void OnAddObject(object? sender, RoutedEventArgs e)
     {
         if (RejectWhenPlaying("追加")) return;
-        var item = _scene.AddEmpty();
+        var item = _editScene.Current.AddEmpty();
         MarkSceneChanged();
         SceneObjects.SelectedItem = item;
         SceneObjects.ScrollIntoView(item);
@@ -621,9 +633,9 @@ public partial class MainWindow : Window
         if (RejectWhenPlaying("削除")) return;
         if (SceneObjects.SelectedItem is not SceneObject item) return;
         var index = SceneObjects.SelectedIndex;
-        _scene.Remove(item);
+        _editScene.Current.Remove(item);
         MarkSceneChanged();
-        SceneObjects.SelectedIndex = Math.Min(index, _scene.Objects.Count - 1);
+        SceneObjects.SelectedIndex = Math.Min(index, _editScene.Current.Objects.Count - 1);
         SceneObjects.Focus();
         try { ComponentAssets.DisposeComponents(item.Components); }
         catch (Exception error) { SetFileStatus(error.ToString(), true); }

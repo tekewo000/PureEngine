@@ -6,8 +6,6 @@ namespace PureEngine.Editor;
 public partial class MainWindow
 {
     private UserCodeWatcher? _userCodeWatcher;
-    private bool _userCodePendingReload;
-    private bool _userCodeReloading;
 
     private void StartUserCodeWatching()
     {
@@ -29,140 +27,91 @@ public partial class MainWindow
     {
         _userCodeWatcher?.Dispose();
         _userCodeWatcher = null;
-        _userCodePendingReload = false;
+        _reloadCoordinator.ClearPending();
     }
 
     private void OnUserCodeReloadRequested()
     {
-        _userCodePendingReload = true;
+        _reloadCoordinator.RequestPending();
         if (IsPlaying) SetFileStatus("C#の変更を検知しました。Stop後に反映します。");
         FlushPendingUserCodeReload();
     }
 
+    /// <summary>
+    /// 操作受付・表示更新の担当。準備・採用・後片付けの中核は
+    /// <see cref="UserCodeReloadCoordinator"/> に委ね、ここでは選択状態・Dirty維持と
+    /// Console・ステータス表示・Explorer更新を行う。
+    /// </summary>
     internal void ReloadUserCode()
     {
-        if (_project is null || _userCodeReloading) return;
-        if (IsPlaying || _fileBusy || _invalidFields.Count > 0 || NameError.IsVisible)
+        if (_project is null || _reloadCoordinator.IsReloading) return;
+        if (EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null)
         {
-            _userCodePendingReload = true;
+            _reloadCoordinator.RequestPending();
             return;
         }
-        _userCodeReloading = true;
-        _userCodePendingReload = false;
-        UserCodeCompileResult? compiled = null;
-        Scene? migrated = null;
-        GameSession? candidateServices = null;
-        var adopted = false;
-        Exception? preparationError = null;
+
+        var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
+        var wasDirty = _editScene.IsDirty;
+        UserCodeReloadOutcome outcome;
         try
         {
-            compiled = UserCodeCompiler.CompileProject(_project.RootDirectory);
-            foreach (var diagnostic in compiled.Diagnostics)
+            // プロジェクト単位の所有者として現在のRegistryと編集用factoryを渡す。
+            // コンパイル成功だけでは採用せず、Scene移行の準備成功後にCoordinator内で採用する。
+            outcome = _reloadCoordinator.Reload(
+                _editScene.Current,
+                ComponentAssets.Registry,
+                _editSession.Factory,
+                _project.RootDirectory,
+                IsPlaying,
+                _fileBusy,
+                HasInputErrors);
+            if (outcome.IsDeferred)
+            {
+                // 競合により保留になった。状態はCoordinatorが保持する。
+                return;
+            }
+
+            foreach (var diagnostic in outcome.Diagnostics)
             {
                 var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
                 if (diagnostic.IsError) Log.Engine.Error(message);
                 else Log.Engine.Warning(message);
             }
-            if (!compiled.Success)
+
+            if (!outcome.Success || outcome.MigratedScene is null)
             {
-                SetFileStatus("C#のコンパイルに失敗しました。直前の状態を保持します。修正して保存してください。", true);
+                if (outcome.FailureException is not null)
+                {
+                    var message = outcome.AdoptedBeforeFailure ? "旧コードの解放に失敗しました。" : "C#を反映できません。直前の状態を保持します。";
+                    Log.Engine.Error(message, outcome.FailureException);
+                    SetFileStatus($"{message} {outcome.FailureException.GetBaseException().Message}", true);
+                }
+                else
+                {
+                    SetFileStatus("C#のコンパイルに失敗しました。直前の状態を保持します。修正して保存してください。", true);
+                }
                 return;
             }
-            var registry = ComponentAssets.CreateRegistry(compiled);
-            // 新コードの登録から候補サービス群を作る。曖昧・不正・登録中の失敗は旧状態を維持する。
-            try
-            {
-                candidateServices = GameSession.Create(compiled);
-            }
-            catch (Exception error)
-            {
-                preparationError = error;
-                Log.Engine.Error("C#のサービス登録に失敗しました。直前の状態を保持します。", error);
-                SetFileStatus($"C#のサービス登録に失敗しました。直前の状態を保持します。 {error.GetBaseException().Message}", true);
-                return;
-            }
-            try
-            {
-                migrated = SceneCodeMigrator.Migrate(_scene, ComponentAssets.Registry, registry, candidateServices.Factory);
-            }
-            catch (Exception error)
-            {
-                preparationError = error;
-                Log.Engine.Error("C#を反映できません。直前の状態を保持します。", error);
-                SetFileStatus($"C#を反映できません。直前の状態を保持します。 {error.GetBaseException().Message}", true);
-                return;
-            }
-            var previous = _scene;
-            var previousServices = _editSession;
-            var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
-            var wasDirty = _sceneDirty;
-            ComponentAssets.SetUserCode(compiled);
-            _scene = migrated;
-            migrated = null;
+
+            var previous = _editScene.Replace(outcome.MigratedScene, _editScene.Path, wasDirty);
             SceneObjects.SelectedItem = null;
-            SceneObjects.ItemsSource = _scene.Objects;
-            SceneObjects.SelectedItem = _scene.Objects.FirstOrDefault(item => item.Id == selectedId);
+            SceneObjects.ItemsSource = _editScene.Current.Objects;
+            SceneObjects.SelectedItem = _editScene.Current.Objects.FirstOrDefault(item => item.Id == selectedId);
             RefreshObjectInspector();
-            _sceneDirty = wasDirty;
             UpdateSceneTitle();
-            _editSession = candidateServices;
-            candidateServices = null;
-            adopted = true;
-            // 終了順：Component を先に、Scope・provider を後に解放する。一方が失敗しても他方を続ける。
-            var oldErrors = new List<Exception>();
-            try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
-            catch (Exception error) { oldErrors.Add(error); }
-            try { previousServices.Dispose(); }
-            catch (Exception error) { oldErrors.Add(error); }
-            if (oldErrors.Count != 0)
-                throw new AggregateException("旧コードの解放に失敗しました。", oldErrors);
-            Log.Engine.Info($"C#を反映しました：{ComponentAssets.UserTypes.Count}クラス。");
-            SetFileStatus($"C#を反映しました：{ComponentAssets.UserTypes.Count}クラス。");
+            ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components));
+            Log.Engine.Info($"C#を反映しました：{outcome.AttachableCount}クラス。");
+            SetFileStatus($"C#を反映しました：{outcome.AttachableCount}クラス。");
         }
         catch (Exception error)
         {
-            preparationError = preparationError ?? error;
-            var message = adopted ? "旧コードの解放に失敗しました。" : "C#を反映できません。直前の状態を保持します。";
-            Log.Engine.Error(message, error);
-            SetFileStatus($"{message} {error.GetBaseException().Message}", true);
-            if (!adopted && preparationError is not null && !ReferenceEquals(preparationError, error))
-            {
-                // 準備エラーの後に後片付けでも失敗した場合、両方を残す呼び出し側のために集約する情報はログに残す。
-                Log.Engine.Error("採用できなかったC#の後片付け中の追加エラー。", preparationError);
-            }
+            // Coordinator外の表示更新での失敗。編集Sceneの旧状態は保持されている。
+            Log.Engine.Error("C#を反映できません。直前の状態を保持します。", error);
+            SetFileStatus($"C#を反映できません。直前の状態を保持します。 {error.GetBaseException().Message}", true);
         }
         finally
         {
-            if (!adopted)
-            {
-                var cleanupErrors = new List<Exception>();
-                try
-                {
-                    if (migrated is not null) ComponentAssets.DisposeComponents(migrated.Objects.SelectMany(item => item.Components));
-                }
-                catch (Exception error)
-                {
-                    cleanupErrors.Add(error);
-                    Log.Engine.Error("採用できなかったC#の後片付けに失敗しました。", error);
-                }
-                try
-                {
-                    candidateServices?.Dispose();
-                }
-                catch (Exception error)
-                {
-                    cleanupErrors.Add(error);
-                    Log.Engine.Error("採用できなかったサービスの後片付けに失敗しました。", error);
-                }
-                finally { try { compiled?.LoadContext?.Unload(); } catch { } }
-                if (cleanupErrors.Count != 0 && preparationError is null)
-                {
-                    var message = "採用できなかったC#の後片付けに失敗しました。";
-                    Log.Engine.Error(message, cleanupErrors[0]);
-                    SetFileStatus($"{message} {cleanupErrors[0].GetBaseException().Message}", true);
-                }
-            }
-            _userCodeReloading = false;
             RefreshProjectExplorer();
             DrainConsole();
         }
@@ -170,8 +119,7 @@ public partial class MainWindow
 
     private void FlushPendingUserCodeReload()
     {
-        if (_userCodePendingReload && _userCodeWatcher is not null && !_userCodeReloading
-            && !IsPlaying && !_fileBusy && _invalidFields.Count == 0 && !NameError.IsVisible)
+        if (_userCodeWatcher is not null && _reloadCoordinator.ShouldReloadNow(IsPlaying, _fileBusy, HasInputErrors))
             ReloadUserCode();
     }
 
