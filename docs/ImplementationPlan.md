@@ -4,13 +4,13 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済みと動作確認済みは区別する。ライフサイクルの基本仕様は2026-09-21に合意済み。以下の実装工程は未着手であり、仕様の合意を実装完了とは扱わない。
+実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。PriorityとEditorのPlay／Stop接続は未着手。
 
 ## 現在の到達点
 
 **LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値を編集し、YAMLで保存・復元できる。**
 
-制作データを編集する基盤まで実装済み。Scene View／Gameはまだ描画・ゲーム実行を行わない。
+制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／Destroyを実行できる。Scene View／Gameはまだ描画・ゲーム実行を行わない。
 
 ## 実装済み
 
@@ -24,6 +24,7 @@
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
 | ドラッグ＆ドロップ | ComponentsからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
+| Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | Inspector | string・int・float・boolの表示と編集、数値の無効表示・エラー数、Escで復元、非有限floatの拒否 | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | シーン保存 | YAML version 1、ID・名前・typeId・Inspector値の保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
@@ -31,7 +32,7 @@
 
 ## まだできないこと・制限
 
-- Start／Update／Destroyは**検出まで**。呼び出す実行機構とPlay／Stopは未実装。
+- Start／Update／DestroyはCoreで実行できる。EditorのPlay／Stop接続は未実装。
 - Priorityの保持・Inspector表示・保存・実行順への適用は未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
 - クラスの登録はEditorにコンパイルされた共通のサンプルが対象。ProjectごとのC#コンパイル、外部 `.cs` の読み込み、自動探索は未実装。
@@ -42,23 +43,23 @@
 
 ## 仕様整理と次の実装順
 
-### 1. ライフサイクルの実行条件を確定する
+### 1. ライフサイクルの実行条件を確定する（完了）
 
 - [x] 基本のメソッド制約、不正な宣言の拒否、例外時の実行停止と後片付けを決める。
 - [x] 全Start後にUpdate、追加分は次フレームから、削除予約後の呼び出し抑止と末尾のDestroy、Stop時の破棄と再Play時の新規作成を決める。
 - [x] 編集用Sceneと実行用Sceneを分け、Play時に現在の制作データとInspector値を引き継ぎ、属性のないメンバーは初期値とする。
-- [ ] 実装時に、Start前の削除・Start途中の例外でのDestroy対象範囲など境界条件を具体化する。
+- [x] Start前の削除・Start途中の例外でのDestroy対象範囲、コールバック中のStop、Destroy中の変更拒否など境界条件を具体化する。
 
-基本仕様と呼び出し順の例は [EngineArchitecture.md](EngineArchitecture.md) に記載済み。性能面は、探索結果とデリゲートの再利用・変更時だけの更新リスト整列を実装方針とし、実装後に測定する。
+基本仕様・境界条件と呼び出し順の例は [EngineArchitecture.md](EngineArchitecture.md) に記載済み。探索結果・デリゲートの再利用と変更時だけの更新リスト変更を実装し、性能を測定した。
 
 完了条件：実装前に必要なルールがアーキテクチャ文書に明記され、サンプルの期待する呼び出し順を説明できる。
 
-### 2. Coreで最小の実行機構を作る
+### 2. Coreで最小の実行機構を作る（完了）
 
-- [ ] Startを開始時に1回、Updateを明示的な1ステップごとに実行する。
-- [ ] Destroyを確定した削除・停止のルールに従って実行する。
-- [ ] Editorに依存せず、サンプルクラスで回数・dt・停止後の状態をチェックする。
-- [ ] Play時の準備コストと、Update対象数ごとの1ステップの時間・割り当て量を分けて測定する。
+- [x] Startを開始時に1回、Updateを明示的な1ステップごとに実行する。
+- [x] Destroyを確定した削除・停止のルールに従って実行する。
+- [x] Editorに依存せず、サンプルクラスで回数・dt・停止後の状態をチェックする。
+- [x] Play時の準備コストと、Update対象数ごとの1ステップの時間・割り当て量を分けて測定する。
 
 完了条件：画面なしでサンプルクラスを開始・更新・終了できる。
 
@@ -93,18 +94,37 @@
 
 ## 検証状況
 
-2026-09-21、ライフサイクルの合意内容と性能の実装方針を文書へ反映。今回の変更は文書のみで、実行機構の実装・性能測定・テストの再実行は行っていない。
-
-2026-09-21、src／testsへの移動後の構成で以下を再実行し、両方PASS。
+2026-09-21、Coreの実行機構追加後に以下を実行し、両方PASS。
 
 ```powershell
-dotnet run --project tests/PureEngine.Core.Checks -c PlanCheck
-dotnet run --project tests/PureEngine.Editor.Checks -c PlanCheck
+dotnet run --project tests/PureEngine.Core.Checks -c Release
+dotnet run --project tests/PureEngine.Editor.Checks -c Release
 ```
 
 - Core：オブジェクト操作、アタッチ、属性検出、YAML往復、不正データの拒否、保存失敗時の保護、Projectの作成・移動・復元。
+- Core実行：全Start後のUpdate、回数・dt、Inspector値の複製と非Inspector値の初期化、再実行、次フレームへの追加、削除予約・自己削除・Start前の削除、例外時の停止と全対象の後片付け、Stopの再入、Destroy中の変更拒否、不正宣言と継承・override。
 - Editor：HeadlessでLauncher起動、新規作成、履歴からの再開、未保存確認のCancel／Discard、Launcher復帰、失敗時の表示、終了。
-- 実画面の見た目、ネイティブファイルダイアログ、Project Explorerの全操作をこれらのテストで網羅したとは扱わない。今回の文書更新では実画面の操作確認は行っていない。
+- 実画面の見た目、ネイティブファイルダイアログ、Project Explorerの全操作をこれらのテストで網羅したとは扱わない。今回、実画面の操作確認は行っていない。
+
+### 実行機構の性能測定（2026-09-21）
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark
+```
+
+Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Release。各ケース1オブジェクト1component、Inspectorのintを1つ持つ。Start／DestroyとUpdateは空で、Updateはインライン化を禁止。描画・ゲーム処理・追加削除は含めない。
+
+準備は複製・デリゲートの結び付け・Startを含み、元Sceneの作成とStopを含めない。同一プロセスで最初の準備を別に測り、その後5回の中央値を記録。定常Stepは各ケース500msウォームアップ後、10,000ステップ×5回の中央値。割り当て量は `GC.GetAllocatedBytesForCurrentThread` の差であり、保持メモリ量ではない。
+
+| オブジェクト数 | Update対象数 | 最初の準備 ms | 以後の準備 ms | 準備の割り当て B | Step µs | Stepの割り当て B |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0 | 3.210 | 0.001 | 1,248 | 0.004 | 0 |
+| 100 | 100 | 6.377 | 0.311 | 215,448 | 0.265 | 0 |
+| 1,000 | 1,000 | 4.623 | 7.145 | 2,113,280 | 3.391 | 0 |
+| 10,000 | 10,000 | 39.250 | 34.864 | 21,591,104 | 123.114 | 0 |
+| 10,000 | 0 | 61.587 | 32.542 | 18,403,880 | 0.011 | 0 |
+
+1万個の空Updateで約0.123ms／ステップ。型キャッシュ・JIT・GC・マシン負荷の影響を含む単一環境での測定であり、ゲーム全体のFPSを示すものではない。定常更新の0 Bは今回の空コールバック条件の値で、追加削除・エラー記録には割り当てがある。時間の固定しきい値をチェックの合否条件にはしない。
 
 ## この文書の更新ルール
 

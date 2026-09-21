@@ -91,7 +91,22 @@ dotnet run --project src/PureEngine.Editor
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
-Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値の編集、YAMLシーン保存は実装済み。ゲーム実行、Steam連携、ゲーム内UI配置はまだ実装していません。
+Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値の編集、YAMLシーン保存、Coreのライフサイクル実行は実装済み。Editorからのゲーム実行、Steam連携、ゲーム内UI配置はまだ実装していません。
+
+## Coreのライフサイクル実行
+
+既存のSceneとComponentRegistryから、編集データと独立した実行用Sceneを作れます。EditorのPlay／Stopへの接続はまだありません。
+
+```csharp
+using var runtime = new SceneRuntime(scene, registry);
+runtime.Start();
+if (runtime.IsRunning) runtime.Step(1f / 60f); // 呼び出し元が経過秒を渡す
+runtime.Stop();
+foreach (var error in runtime.Errors)
+    Console.WriteLine($"{error.ObjectName}/{error.ComponentType.Name}.{error.MethodName}: {error.Exception}");
+```
+
+実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroyします。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
 
 ## コアの動作確認
 
@@ -105,4 +120,10 @@ Launcherからの作成・履歴からの再開・未保存確認・Launcherへ�
 
 ```powershell
 dotnet run --project tests/PureEngine.Editor.Checks
+```
+
+Coreのチェックにはライフサイクル・編集データの分離・追加削除・例外時の後片付けも含みます。実行機構単体の性能測定は次で再実行できます。測定条件と結果は実装計画・進捗に記載しています。
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark
 ```

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
 using YamlDotNet.Serialization;
@@ -8,15 +9,22 @@ namespace PureEngine.Core;
 /// <summary>Version 1 YAML scenes. Restoring never mutates the caller's current scene.</summary>
 public sealed class SceneSerializer(ComponentRegistry registry)
 {
-    private readonly ISerializer _writer = new SerializerBuilder()
+    private static readonly ConcurrentDictionary<Type, MemberInfo[]> InspectorMembers = new();
+    private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .WithQuotingNecessaryStrings().DisableAliases().Build();
-    private readonly IDeserializer _reader = new DeserializerBuilder()
+        .WithQuotingNecessaryStrings().DisableAliases().Build());
+    private readonly Lazy<IDeserializer> _reader = new(static () => new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .WithDuplicateKeyChecking().Build();
+        .WithDuplicateKeyChecking().Build());
 
-    public string Serialize(Scene scene)
+    public string Serialize(Scene scene) => _writer.Value.Serialize(Capture(scene));
+
+    /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
+    public Scene Clone(Scene scene) => Restore(Capture(scene));
+
+    private SceneDocument Capture(Scene scene)
     {
+        ArgumentNullException.ThrowIfNull(scene);
         var document = new SceneDocument { Version = 1, Objects = [] };
         foreach (var item in scene.Objects)
         {
@@ -37,13 +45,17 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             }
             document.Objects.Add(saved);
         }
-        return _writer.Serialize(document);
+        return document;
     }
 
     public Scene Deserialize(string yaml)
     {
-        var document = _reader.Deserialize<SceneDocument>(yaml)
-            ?? throw new InvalidDataException("The scene document is empty.");
+        return Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
+            ?? throw new InvalidDataException("The scene document is empty."));
+    }
+
+    private Scene Restore(SceneDocument document)
+    {
         if (document.Version != 1)
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
@@ -79,13 +91,13 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         return scene;
     }
 
-    private static MemberInfo[] Members(Type type)
+    private static MemberInfo[] Members(Type type) => InspectorMembers.GetOrAdd(type, static type =>
     {
         var members = ComponentSchema.GetInspectorMembers(type).OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
         if (members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != members.Length)
             throw new InvalidDataException($"Ambiguous Inspector member names in {type.FullName}.");
         return members;
-    }
+    });
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field
         ? field.FieldType : ((PropertyInfo)member).PropertyType;
@@ -98,6 +110,13 @@ public sealed class SceneSerializer(ComponentRegistry registry)
 
     private static object? ReadValue(object? raw, Type type, string path)
     {
+        // Capture supplies typed scalars; the YAML reader supplies strings.
+        if (raw is not null && raw.GetType() == type && type != typeof(string))
+        {
+            if (raw is float number && !float.IsFinite(number))
+                throw new InvalidDataException($"{path}: a finite number is required.");
+            return raw;
+        }
         // Untyped YAML scalars are strings; collections are never coerced into a scalar.
         if (type == typeof(string) && (raw is null || raw is string)) return raw;
         if (raw is string text)

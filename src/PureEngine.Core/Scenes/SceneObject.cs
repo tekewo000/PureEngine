@@ -10,6 +10,7 @@ public sealed class SceneObject : INotifyPropertyChanged
 {
     private string _name;
     private readonly List<object> _components = [];
+    internal SceneRuntime? Runtime { get; set; }
 
     /// <summary>Attached component instances, in attach order.</summary>
     public IReadOnlyList<object> Components => _components.AsReadOnly();
@@ -50,6 +51,7 @@ public sealed class SceneObject : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(component);
         if (_components.Any(c => c.GetType() == component.GetType()))
             throw new InvalidOperationException($"Already attached: {component.GetType().Name}");
+        Runtime?.RegisterComponent(this, component);
         _components.Add(component);
     }
 

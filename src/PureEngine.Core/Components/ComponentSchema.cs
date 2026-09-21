@@ -1,117 +1,62 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using PureEngine.Core.Attributes;
 
 namespace PureEngine.Core;
 
-/// <summary>
-/// Reads attribute markers on plain C# components (detection only, no invocation).
-/// </summary>
+/// <summary>Reads and validates attribute markers on plain C# components.</summary>
 public static class ComponentSchema
 {
-    /// <summary>
-    /// Finds the single valid <see cref="StartAttribute"/> method, or null when absent.
-    /// Valid: instance, void, non-async, with no parameters.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Multiple valid methods found.</exception>
-    public static MethodInfo? GetStartMethod(Type type)
+    internal sealed record LifecycleMethods(MethodInfo? Start, MethodInfo? Update, MethodInfo? Destroy);
+    private static readonly ConcurrentDictionary<Type, LifecycleMethods> Lifecycles = new();
+
+    /// <summary>Validates the lifecycle declarations and returns the Start method, if present.</summary>
+    public static MethodInfo? GetStartMethod(Type type) => GetLifecycle(type).Start;
+
+    /// <summary>Validates the lifecycle declarations and returns the Update method, if present.</summary>
+    public static MethodInfo? GetUpdateMethod(Type type) => GetLifecycle(type).Update;
+
+    /// <summary>Validates the lifecycle declarations and returns the Destroy method, if present.</summary>
+    public static MethodInfo? GetDestroyMethod(Type type) => GetLifecycle(type).Destroy;
+
+    internal static LifecycleMethods GetLifecycle(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-
-        var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-        List<MethodInfo> found = [];
-
-        foreach (var m in methods)
-        {
-            if (!m.IsDefined(typeof(StartAttribute), inherit: true))
-                continue;
-
-            var ps = m.GetParameters();
-            var hasValidParameters = ps.Length == 0;
-
-            if (!m.IsStatic
-                && m.ReturnType == typeof(void)
-                && !m.IsDefined(typeof(AsyncStateMachineAttribute), false)
-                && hasValidParameters)
-                found.Add(m);
-        }
-
-        if (found.Count > 1)
-            throw new InvalidOperationException("Multiple [Start] methods found.");
-        if (found.Count == 1)
-            return found[0];
-        return null;
+        return Lifecycles.GetOrAdd(type, static type => new(
+            FindLifecycle(type, typeof(StartAttribute)),
+            FindLifecycle(type, typeof(UpdateAttribute)),
+            FindLifecycle(type, typeof(DestroyAttribute))));
     }
 
-    /// <summary>
-    /// Finds the single valid <see cref="UpdateAttribute"/> method, or null when absent.
-    /// Valid: instance, void, non-async, with zero or one float parameter.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Multiple valid methods found.</exception>
-    public static MethodInfo? GetUpdateMethod(Type type)
+    private static MethodInfo? FindLifecycle(Type type, Type attribute)
     {
-        ArgumentNullException.ThrowIfNull(type);
-
-        var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-        List<MethodInfo> found = [];
-
-        foreach (var m in methods)
+        MethodInfo? found = null;
+        var overrides = new HashSet<MethodInfo>();
+        for (var current = type; current is not null; current = current.BaseType)
         {
-            if (!m.IsDefined(typeof(UpdateAttribute), inherit: true))
-                continue;
-
-            var ps = m.GetParameters();
-            var hasValidParameters = ps.Length == 0 || (ps.Length == 1 && ps[0].ParameterType == typeof(float));
-
-            if (!m.IsStatic
-                && m.ReturnType == typeof(void)
-                && !m.IsDefined(typeof(AsyncStateMachineAttribute), false)
-                && hasValidParameters)
-                found.Add(m);
+            foreach (var method in current.GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance
+                         | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                // Visit the most derived implementation once, including inherited markers.
+                if (method.IsVirtual && !overrides.Add(method.GetBaseDefinition())) continue;
+                if (!method.IsDefined(attribute, inherit: true)) continue;
+                var parameters = method.GetParameters();
+                var validParameters = parameters.Length == 0 || (attribute == typeof(UpdateAttribute)
+                    && parameters.Length == 1 && parameters[0].ParameterType == typeof(float));
+                if (method.IsStatic || method.IsAbstract || method.ContainsGenericParameters
+                    || method.ReturnType != typeof(void)
+                    || method.IsDefined(typeof(AsyncStateMachineAttribute), false) || !validParameters)
+                    throw new InvalidOperationException($"{type.FullName}: {method.DeclaringType!.FullName}.{method.Name} "
+                        + $"[{attribute.Name}]: requires a non-static, non-generic, synchronous void method "
+                        + (attribute == typeof(UpdateAttribute) ? "with no parameters or one float parameter." : "with no parameters."));
+                if (found is not null)
+                    throw new InvalidOperationException($"{type.FullName}: multiple [{attribute.Name}] methods: "
+                        + $"{found.DeclaringType!.FullName}.{found.Name}, {method.DeclaringType!.FullName}.{method.Name}.");
+                found = method;
+            }
         }
-
-        if (found.Count > 1)
-            throw new InvalidOperationException("Multiple [Update] methods found.");
-        if (found.Count == 1)
-            return found[0];
-        return null;
-    }
-
-    /// <summary>
-    /// Finds the single valid <see cref="DestroyAttribute"/> method, or null when absent.
-    /// Valid: instance, void, non-async, with no parameters.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Multiple valid methods found.</exception>
-    public static MethodInfo? GetDestroyMethod(Type type)
-    {
-        ArgumentNullException.ThrowIfNull(type);
-
-        var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-        List<MethodInfo> found = [];
-
-        foreach (var m in methods)
-        {
-            if (!m.IsDefined(typeof(DestroyAttribute), inherit: true))
-                continue;
-
-            var ps = m.GetParameters();
-            var hasValidParameters = ps.Length == 0;
-
-            if (!m.IsStatic
-                && m.ReturnType == typeof(void)
-                && !m.IsDefined(typeof(AsyncStateMachineAttribute), false)
-                && hasValidParameters)
-                found.Add(m);
-        }
-
-        if (found.Count > 1)
-            throw new InvalidOperationException("Multiple [Destroy] methods found.");
-        if (found.Count == 1)
-            return found[0];
-        return null;
+        return found;
     }
 
     /// <summary>

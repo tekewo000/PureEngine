@@ -1,6 +1,12 @@
 using PureEngine.Core;
 using PureEngine.Core.Attributes;
 
+if (args.Contains("--runtime-benchmark"))
+{
+    RuntimeBenchmarks.Run();
+    return;
+}
+
 static void Check(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
@@ -104,6 +110,7 @@ Check(PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, typeof(PureEngine.
 
 ScenePersistenceChecks.Run();
 ProjectPersistenceChecks.Run();
+SceneRuntimeChecks.Run();
 Console.WriteLine("PASS: add, rename, validation, identity, notifications, removal, attach, get-component, schema, asset drop policy, YAML persistence, and projects.");
 
 sealed class PlayerController
