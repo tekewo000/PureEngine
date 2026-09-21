@@ -15,6 +15,12 @@ static class UserCodeChecks
         typeof(MainWindow).GetMethod(name, Instance)!.Invoke(window, args);
     private static T Field<T>(MainWindow window, string name) =>
         (T)typeof(MainWindow).GetField(name, Instance)!.GetValue(window)!;
+    private static Scene EditScene(MainWindow window) =>
+        ((EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!).Current;
+    private static EditSceneStore EditStore(MainWindow window) =>
+        (EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!;
+    private static bool HasPendingReload(MainWindow window) =>
+        ((UserCodeReloadCoordinator)typeof(MainWindow).GetField("_reloadCoordinator", Instance)!.GetValue(window)!).HasPending;
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -47,7 +53,7 @@ static class UserCodeChecks
         public class Generic<T> { public class Nested { } }
         internal class Hidden { public class Nested { } }
         """;
-    private static object Player(MainWindow editor) => Field<Scene>(editor, "_scene").Objects.Single().Components.Single();
+    private static object Player(MainWindow editor) => EditScene(editor).Objects.Single().Components.Single();
     private static int Version(MainWindow editor) => (int)Player(editor).GetType().GetProperty("Version")!.GetValue(Player(editor))!;
     private static TextBox HealthBox(MainWindow editor) => editor.GetVisualDescendants().OfType<TextBox>()
         .Single(box => AutomationProperties.GetName(box) == "Player.Health");
@@ -100,7 +106,7 @@ static class UserCodeChecks
             File.WriteAllText(file, Source(2) + "\npublic record Extra { }\npublic class Second { }");
             PumpUntil(() => Version(editor) == 2, "Saving C# must reload automatically.");
             Check(ComponentAssets.GetTypesForFile(file).Count == 3, "Multiple classes and records must map to the source file.");
-            var current = Field<Scene>(editor, "_scene").Objects.Single();
+            var current = EditScene(editor).Objects.Single();
             Check(current.Id == id && current.Name == "Unsaved player"
                 && current.GetStartPriority(Player(editor)) == -9 && current.GetUpdatePriority(Player(editor)) == 5
                 && (int)Player(editor).GetType().GetField("Health")!.GetValue(Player(editor))! == 73
@@ -113,7 +119,7 @@ static class UserCodeChecks
             HealthBox(editor).Text = "invalid";
             Dispatcher.UIThread.RunJobs();
             File.WriteAllText(file, Source(3));
-            PumpUntil(() => Field<bool>(editor, "_userCodePendingReload"), "Invalid Inspector input must defer reload.");
+            PumpUntil(() => HasPendingReload(editor), "Invalid Inspector input must defer reload.");
             Check(Version(editor) == 2 && HealthBox(editor).Text == "invalid", "Invalid text must not be discarded.");
             HealthBox(editor).Text = "81";
             Dispatcher.UIThread.RunJobs();
@@ -122,7 +128,7 @@ static class UserCodeChecks
             Call(editor, "StartPlay");
             Check(editor.IsPlaying, "User code must run.");
             File.WriteAllText(file, Source(4));
-            PumpUntil(() => Field<bool>(editor, "_userCodePendingReload"), "Play must defer source changes.");
+            PumpUntil(() => HasPendingReload(editor), "Play must defer source changes.");
             Check(Version(editor) == 3, "Play must retain its code version.");
             Call(editor, "StopPlay");
             Check(Version(editor) == 4, "Stop must apply the pending source version.");
@@ -174,7 +180,7 @@ static class UserCodeChecks
             Check(Player(editor).GetType().FullName == "Renamed.Game.Hero"
                 && ComponentAssets.Registry.GetId(Player(editor).GetType()) == "user.Game.Player"
                 && (int)Player(editor).GetType().GetField("Health")!.GetValue(Player(editor))! == 81
-                && Field<Scene>(editor, "_scene").Objects.Single().GetStartPriority(Player(editor)) == -9,
+                && EditScene(editor).Objects.Single().GetStartPriority(Player(editor)) == -9,
                 "Renames must retain component identity, Inspector values and Priority.");
 
             // Failed opening of another project must not mutate active code registrations.
@@ -191,7 +197,7 @@ static class UserCodeChecks
         }
         finally
         {
-            typeof(MainWindow).GetField("_sceneDirty", Instance)!.SetValue(editor, false);
+            EditStore(editor).MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }

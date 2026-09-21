@@ -39,14 +39,13 @@ public partial class MainWindow
     internal void StartPlay()
     {
         if (_play is not null) return;
-        if (_fileBusy)
+        var playBlock = EditorOperationGate.PlayBlockReason(alreadyPlaying: false, _fileBusy, HasInputErrors);
+        if (playBlock is not null)
         {
-            SetFileStatus("ファイル操作中はPlayできません。", true);
-            return;
-        }
-        if (_invalidFields.Count > 0 || NameError.IsVisible)
-        {
-            SetFileStatus("Playできません。Inspectorの入力エラーを修正してください。", true);
+            var message = _fileBusy ? "ファイル操作中はPlayできません。"
+                : HasInputErrors ? "Playできません。Inspectorの入力エラーを修正してください。"
+                : playBlock;
+            SetFileStatus(message, true);
             return;
         }
 
@@ -57,7 +56,8 @@ public partial class MainWindow
         PlaySession? session;
         try
         {
-            session = PlaySession.Prepare(_scene, ComponentAssets.Registry);
+            // 編集中Sceneの複製で開始し、編集側は変更しない。Registryはプロジェクト単位の所有者として渡す。
+            session = PlaySession.Prepare(_editScene.Current, ComponentAssets.Registry);
         }
         catch (Exception error)
         {

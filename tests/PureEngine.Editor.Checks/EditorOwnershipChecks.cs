@@ -15,8 +15,15 @@ static class EditorOwnershipChecks
         typeof(MainWindow).GetMethod(method, Private)!.Invoke(window, args);
     private static T Field<T>(MainWindow window, string name) =>
         (T)typeof(MainWindow).GetField(name, Private)!.GetValue(window)!;
-    private static void Dirty(MainWindow window, bool value) =>
-        typeof(MainWindow).GetField("_sceneDirty", Private)!.SetValue(window, value);
+    private static EditSceneStore EditStore(MainWindow window) =>
+        (EditSceneStore)typeof(MainWindow).GetField("_editScene", Private)!.GetValue(window)!;
+    private static Scene EditScene(MainWindow window) => EditStore(window).Current;
+    private static void Dirty(MainWindow window, bool value)
+    {
+        var store = EditStore(window);
+        if (value) store.MarkChanged();
+        else store.MarkClean();
+    }
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -27,7 +34,7 @@ static class EditorOwnershipChecks
         ComponentAssets.Registry.Register<OwnershipProbe>("checks.ownership");
         var editor = new MainWindow();
         editor.Show();
-        var scene = Field<Scene>(editor, "_scene");
+        var scene = EditScene(editor);
         var services = Field<GameSession>(editor, "_editSession");
         var item = scene.AddEmpty();
         ComponentAssets.TryAttach(item, typeof(OwnershipProbe), services.Factory);
@@ -73,7 +80,7 @@ static class EditorOwnershipChecks
         var failingEditor = new MainWindow();
         failingEditor.Show();
         var failingServices = Field<GameSession>(failingEditor, "_editSession");
-        var failingScene = Field<Scene>(failingEditor, "_scene");
+        var failingScene = EditScene(failingEditor);
         var probes = Enumerable.Range(0, 2).Select(_ =>
         {
             var target = failingScene.AddEmpty();

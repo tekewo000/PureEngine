@@ -40,8 +40,8 @@ public partial class MainWindow
         }
         else
         {
-            if (_scenePath is null && !await SaveSceneAsync(false)) return;
-            _project.SetStartupScene(_scenePath!);
+            if (_editScene.Path is null && !await SaveSceneAsync(false)) return;
+            _project.SetStartupScene(_editScene.Path!);
         }
         RefreshProjectExplorer();
         SetFileStatus($"起動シーンに設定しました: {_project.Document.StartupScene}");

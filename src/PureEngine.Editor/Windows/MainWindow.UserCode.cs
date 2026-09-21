@@ -6,8 +6,6 @@ namespace PureEngine.Editor;
 public partial class MainWindow
 {
     private UserCodeWatcher? _userCodeWatcher;
-    private bool _userCodePendingReload;
-    private bool _userCodeReloading;
 
     private void StartUserCodeWatching()
     {
@@ -29,79 +27,91 @@ public partial class MainWindow
     {
         _userCodeWatcher?.Dispose();
         _userCodeWatcher = null;
-        _userCodePendingReload = false;
+        _reloadCoordinator.ClearPending();
     }
 
     private void OnUserCodeReloadRequested()
     {
-        _userCodePendingReload = true;
+        _reloadCoordinator.RequestPending();
         if (IsPlaying) SetFileStatus("C#の変更を検知しました。Stop後に反映します。");
         FlushPendingUserCodeReload();
     }
 
+    /// <summary>
+    /// 操作受付・表示更新の担当。準備・採用・後片付けの中核は
+    /// <see cref="UserCodeReloadCoordinator"/> に委ね、ここでは選択状態・Dirty維持と
+    /// Console・ステータス表示・Explorer更新を行う。
+    /// </summary>
     internal void ReloadUserCode()
     {
-        if (_project is null || _userCodeReloading) return;
-        if (IsPlaying || _fileBusy || _invalidFields.Count > 0 || NameError.IsVisible)
+        if (_project is null || _reloadCoordinator.IsReloading) return;
+        if (EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null)
         {
-            _userCodePendingReload = true;
+            _reloadCoordinator.RequestPending();
             return;
         }
-        _userCodeReloading = true;
-        _userCodePendingReload = false;
-        UserCodeCompileResult? compiled = null;
-        Scene? migrated = null;
-        var adopted = false;
+
+        var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
+        var wasDirty = _editScene.IsDirty;
+        UserCodeReloadOutcome outcome;
         try
         {
-            compiled = UserCodeCompiler.CompileProject(_project.RootDirectory);
-            foreach (var diagnostic in compiled.Diagnostics)
+            // プロジェクト単位の所有者として現在のRegistryと編集用factoryを渡す。
+            // コンパイル成功だけでは採用せず、Scene移行の準備成功後にCoordinator内で採用する。
+            outcome = _reloadCoordinator.Reload(
+                _editScene.Current,
+                ComponentAssets.Registry,
+                _editSession.Factory,
+                _project.RootDirectory,
+                IsPlaying,
+                _fileBusy,
+                HasInputErrors);
+            if (outcome.IsDeferred)
+            {
+                // 競合により保留になった。状態はCoordinatorが保持する。
+                return;
+            }
+
+            foreach (var diagnostic in outcome.Diagnostics)
             {
                 var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
                 if (diagnostic.IsError) Log.Engine.Error(message);
                 else Log.Engine.Warning(message);
             }
-            if (!compiled.Success)
+
+            if (!outcome.Success || outcome.MigratedScene is null)
             {
-                SetFileStatus("C#のコンパイルに失敗しました。直前の状態を保持します。修正して保存してください。", true);
+                if (outcome.FailureException is not null)
+                {
+                    var message = outcome.AdoptedBeforeFailure ? "旧コードの解放に失敗しました。" : "C#を反映できません。直前の状態を保持します。";
+                    Log.Engine.Error(message, outcome.FailureException);
+                    SetFileStatus($"{message} {outcome.FailureException.GetBaseException().Message}", true);
+                }
+                else
+                {
+                    SetFileStatus("C#のコンパイルに失敗しました。直前の状態を保持します。修正して保存してください。", true);
+                }
                 return;
             }
-            var registry = ComponentAssets.CreateRegistry(compiled);
-            migrated = SceneCodeMigrator.Migrate(_scene, ComponentAssets.Registry, registry, _editSession.Factory);
-            var previous = _scene;
-            var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
-            var wasDirty = _sceneDirty;
-            ComponentAssets.SetUserCode(compiled);
-            adopted = true;
-            _scene = migrated;
+
+            var previous = _editScene.Replace(outcome.MigratedScene, _editScene.Path, wasDirty);
             SceneObjects.SelectedItem = null;
-            SceneObjects.ItemsSource = _scene.Objects;
-            SceneObjects.SelectedItem = _scene.Objects.FirstOrDefault(item => item.Id == selectedId);
+            SceneObjects.ItemsSource = _editScene.Current.Objects;
+            SceneObjects.SelectedItem = _editScene.Current.Objects.FirstOrDefault(item => item.Id == selectedId);
             RefreshObjectInspector();
-            _sceneDirty = wasDirty;
             UpdateSceneTitle();
             ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components));
-            Log.Engine.Info($"C#を反映しました：{compiled.AttachableTypes.Count}クラス。");
-            SetFileStatus($"C#を反映しました：{compiled.AttachableTypes.Count}クラス。");
+            Log.Engine.Info($"C#を反映しました：{outcome.AttachableCount}クラス。");
+            SetFileStatus($"C#を反映しました：{outcome.AttachableCount}クラス。");
         }
         catch (Exception error)
         {
-            var message = adopted ? "旧コードの解放に失敗しました。" : "C#を反映できません。直前の状態を保持します。";
-            Log.Engine.Error(message, error);
-            SetFileStatus($"{message} {error.GetBaseException().Message}", true);
+            // Coordinator外の表示更新での失敗。編集Sceneの旧状態は保持されている。
+            Log.Engine.Error("C#を反映できません。直前の状態を保持します。", error);
+            SetFileStatus($"C#を反映できません。直前の状態を保持します。 {error.GetBaseException().Message}", true);
         }
         finally
         {
-            if (!adopted)
-            {
-                try
-                {
-                    if (migrated is not null) ComponentAssets.DisposeComponents(migrated.Objects.SelectMany(item => item.Components));
-                }
-                catch (Exception error) { Log.Engine.Error("採用できなかったC#の後片付けに失敗しました。", error); }
-                finally { compiled?.LoadContext?.Unload(); }
-            }
-            _userCodeReloading = false;
             RefreshProjectExplorer();
             DrainConsole();
         }
@@ -109,8 +119,7 @@ public partial class MainWindow
 
     private void FlushPendingUserCodeReload()
     {
-        if (_userCodePendingReload && _userCodeWatcher is not null && !_userCodeReloading
-            && !IsPlaying && !_fileBusy && _invalidFields.Count == 0 && !NameError.IsVisible)
+        if (_userCodeWatcher is not null && _reloadCoordinator.ShouldReloadNow(IsPlaying, _fileBusy, HasInputErrors))
             ReloadUserCode();
     }
 

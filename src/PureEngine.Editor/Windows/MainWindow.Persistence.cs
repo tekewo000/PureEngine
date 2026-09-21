@@ -14,18 +14,18 @@ public partial class MainWindow
     private readonly SceneSerializer _sceneSerializer = new(ComponentAssets.Registry);
     private static readonly FilePickerFileType SceneFileType = new("PureEngine scene")
         { Patterns = ["*.pure.scene.yaml", "*.yaml", "*.yml"] };
-    private string? _scenePath;
-    private bool _sceneDirty;
     private bool _fileBusy;
     private bool _allowClose;
 
+    internal bool IsFileBusy => _fileBusy;
+
     private void MarkSceneChanged()
     {
-        _sceneDirty = true;
+        _editScene.MarkChanged();
         UpdateSceneTitle();
     }
 
-    private void UpdateSceneTitle() => Title = $"{(_sceneDirty ? "* " : "")}{Path.GetFileName(_scenePath) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
+    private void UpdateSceneTitle() => Title = $"{(_editScene.IsDirty ? "* " : "")}{Path.GetFileName(_editScene.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
 
     private void SetFileStatus(string message, bool error = false)
     {
@@ -40,12 +40,12 @@ public partial class MainWindow
 
     private async Task RunFileOperation(Func<Task> operation)
     {
-        if (IsPlaying)
+        var blockReason = EditorOperationGate.FileOperationBlockReason(IsPlaying, _fileBusy);
+        if (blockReason is not null)
         {
-            SetFileStatus("Play中はシーン操作できません。先にStopしてください。", true);
+            if (IsPlaying) SetFileStatus(blockReason, true);
             return;
         }
-        if (_fileBusy) return;
         _fileBusy = true;
         EditorSurface.IsEnabled = false;
         try { await operation(); }
@@ -55,14 +55,15 @@ public partial class MainWindow
 
     private async Task<bool> SaveSceneAsync(bool saveAs)
     {
-        if (_invalidFields.Count > 0 || NameError.IsVisible)
+        var saveBlock = EditorOperationGate.SaveBlockReason(HasInputErrors);
+        if (saveBlock is not null)
         {
-            SetFileStatus("保存できません。Inspectorの入力エラーを修正してください。", true);
+            SetFileStatus($"保存できません。{saveBlock}", true);
             return false;
         }
         // Validation happens before picking or touching a destination file.
-        var yaml = _sceneSerializer.Serialize(_scene);
-        var path = _scenePath;
+        var yaml = _sceneSerializer.Serialize(_editScene.Current);
+        var path = _editScene.Path;
         if (saveAs || path is null)
         {
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -79,9 +80,8 @@ public partial class MainWindow
         }
         _project?.ValidateScenePath(path);
         SceneFile.Write(path, yaml);
-        _scenePath = path;
+        _editScene.MarkSaved(path);
         _explorerSelectedFile = path;
-        _sceneDirty = false;
         UpdateSceneTitle();
         RefreshProjectExplorer();
         SetFileStatus($"保存しました: {path}");
@@ -127,13 +127,10 @@ public partial class MainWindow
             SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
             return;
         }
-        var previous = _scene;
-        _scene = restored;
+        var previous = _editScene.Replace(restored, path, dirty: false);
         SceneObjects.SelectedItem = null;
-        SceneObjects.ItemsSource = _scene.Objects;
-        SceneObjects.SelectedIndex = _scene.Objects.Count > 0 ? 0 : -1;
-        _scenePath = path;
-        _sceneDirty = false;
+        SceneObjects.ItemsSource = _editScene.Current.Objects;
+        SceneObjects.SelectedIndex = _editScene.Current.Objects.Count > 0 ? 0 : -1;
         // Selection may already have been empty; explicitly reset the Inspector as well.
         RefreshObjectInspector();
         UpdateSceneTitle();
@@ -146,6 +143,8 @@ public partial class MainWindow
     private void CloseEditSession()
     {
         // プロジェクトの切り替え・終了時には、そのプロジェクトの監視を終了する。
+        // 終了順：Play停止→編集SceneのComponent破棄→編集サービス解放→コード登録解除。
+        // 各破棄は単発で、失敗しても残りの解放は続けて例外を集約する。
         StopUserCodeWatching();
         _playTimer?.Stop();
         try
@@ -155,8 +154,7 @@ public partial class MainWindow
         catch (Exception error)
         {
             // 実行中の後片付け失敗でも編集側の解放は続ける。例外は集約して報告する。
-            var previous = _scene;
-            _scene = new Scene();
+            var previous = _editScene.Reset();
             var errors = new List<Exception> { error };
             try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
             catch (Exception disposeError) { errors.Add(disposeError); }
@@ -165,8 +163,7 @@ public partial class MainWindow
             ComponentAssets.ClearUserCode();
             throw new AggregateException("Editor cleanup failed.", errors);
         }
-        var previousScene = _scene;
-        _scene = new Scene();
+        var previousScene = _editScene.Reset();
         var editErrors = new List<Exception>();
         try { ComponentAssets.DisposeComponents(previousScene.Objects.SelectMany(item => item.Components)); }
         catch (Exception error) { editErrors.Add(error); }
@@ -199,7 +196,7 @@ public partial class MainWindow
 
     private async Task<bool> ConfirmUnsavedChanges()
     {
-        if (!_sceneDirty && _invalidFields.Count == 0 && !NameError.IsVisible) return true;
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty, HasInputErrors)) return true;
         var dialog = new Window
         {
             Title = "Unsaved Scene", Width = 420, SizeToContent = SizeToContent.Height,
@@ -235,7 +232,7 @@ public partial class MainWindow
                 return;
             }
         }
-        if (!_sceneDirty && _invalidFields.Count == 0 && !NameError.IsVisible) return;
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty, HasInputErrors)) return;
         e.Cancel = true;
         await RunFileOperation(async () =>
         {
