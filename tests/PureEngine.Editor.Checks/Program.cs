@@ -41,6 +41,7 @@ internal static class Program
             PlayConnectionChecks.Run();
             EditorOwnershipChecks.Run(root);
             ConsoleChecks.Run();
+            UserCodeChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";
             Click(Control<Button>(launcher, "CreateProjectButton"));

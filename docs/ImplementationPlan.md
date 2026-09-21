@@ -32,13 +32,14 @@
 | ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Game側の一箇所登録、編集・Play別のprovider＋Scope、factory生成、終了順と失敗時解放 | [GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Editor/Game/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs) |
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
 | 共通ログとConsole | `Log.Info/Warning/Error` の共有API、呼び出し元・例外詳細の保持、有界キュー。Consoleの一覧・フィルター・検索・詳細・コピー・Clear／Clear on Play、Play開始・停止・失敗とRuntime全件の重複なし取り込み | [Log](../src/PureEngine.Core/Log.cs)、[MainWindow.Console](../src/PureEngine.Editor/Windows/MainWindow.Console.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
+| ProjectごとのC# | 任意フォルダのC#からアタッチ、保存・移動の監視、Stop後の反映、未保存値・Priority保持、失敗時の旧状態保持とConsole診断 | [UserCodeCompiler](../src/PureEngine.Editor/Compilation/UserCodeCompiler.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) |
 | ソース構成 | srcに実装、testsにチェック、docsに文書、toolsに起動スクリプト | [PureEngine.slnx](../PureEngine.slnx) |
 
 ## まだできないこと・制限
 
 - Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。ゲーム画面の描画・プレビューは未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
-- クラスの登録はEditorにコンパイルされた共通のサンプルが対象。ProjectごとのC#コンパイル、外部 `.cs` の読み込み、自動探索は未実装。サンプルにコンストラクタ注入の `InjectedPlayer`、`BattleSession`、`IRandomService` を追加済み。
+- Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはUIスレッドで行う。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
 - ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
@@ -83,12 +84,20 @@
 
 完了条件：Editorでサンプルを実行・停止し、再実行できる。描画技術の選定は別途扱う。
 
+### 5. 自作C#の読み込み・自動反映（完了）
+
+- [x] 任意フォルダのC#をコンパイルし、元のファイル位置からアタッチする。
+- [x] ファイル変更をまとめて検知し、Play中とInspector入力エラー中は反映を保留する。
+- [x] 既存シーンの未保存値・ID・名前・Priorityを保持し、移行不能時は旧コードとデータを保護する。
+- [x] Consoleの診断、保存後の復帰、Project切替時の登録・監視終了を確認する。
+
+アタッチ条件・複数クラス・制限はREADMEの「自作C#と自動反映」を参照。
+
 ### その後の候補（順番は未決定）
 
 | 候補 | 着手前に決めること |
 | --- | --- |
 | Parentと参照 | 循環の拒否、親削除時の子の扱い、参照切れの扱い |
-| Projectごとのゲームコード | コンパイル方法、クラス登録、エラー表示、再読み込み |
 | ゲーム内UI・描画・プレビュー | 描画方式、Editorへの埋め込み、実行アプリとの共有 |
 | Undo／Redo・Editor設定 | 対象操作、履歴の単位、設定の保存場所 |
 | ローカル複数実行・通信 | ホストとクライアント、状態同期、テスト用起動方式 |
@@ -97,6 +106,9 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+自作C#の自動反映追加時：Core・EditorのReleaseチェックがPASS。Editor Headlessで実ファイルを保存・移動し、コンパイル、自動更新、複数クラス／recordの対応付け、Play中の保留、Inspector入力エラーの保持、未保存値・Priority・選択フォルダの保持、コンパイル／スキーマ／コンストラクタ失敗からの復帰、保存・再開、別Projectの読み込み失敗時の既存登録保護を確認。ネイティブ画面でのドラッグ操作は今回の自動チェック対象外。
+
 
 2026-09-23、共通ログAPIとEditorのConsole・Play接続の実装後に以下を実行し、両方PASS。
 

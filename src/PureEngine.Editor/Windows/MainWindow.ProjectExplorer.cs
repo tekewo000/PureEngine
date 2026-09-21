@@ -128,7 +128,7 @@ public partial class MainWindow
         var entries = new List<ProjectExplorerEntry>();
         if (_explorerComponentsSelected || _project is not { } project)
         {
-            entries.AddRange(ComponentAssets.Types.Select(type => new ProjectExplorerEntry(
+            entries.AddRange(ComponentAssets.Types.Where(type => !ComponentAssets.UserTypes.Contains(type)).Select(type => new ProjectExplorerEntry(
                 ProjectExplorerKind.Component, type.Name, type.Namespace ?? "", type.FullName ?? type.Name,
                 null, null, type, false)));
         }
@@ -154,11 +154,25 @@ public partial class MainWindow
                     var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
                     var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
                     var isStartup = isScene && string.Equals(relative, startup, StringComparison.Ordinal);
-                    entries.Add(new ProjectExplorerEntry(
-                        isScene ? ProjectExplorerKind.Scene : ProjectExplorerKind.File,
-                        file, "", relative, relative,
-                        Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar)),
-                        null, isStartup));
+                    var full = Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar));
+                    if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // 自作C#はフォルダ構成のまま表示する。専用フォルダへの配置やComponents一覧への集約は要求しない。
+                        var types = ComponentAssets.GetTypesForFile(full);
+                        var detail = types.Count == 0 ? "C#（アタッチ対象なし／未反映）"
+                            : types.Count == 1 ? $"C# {types[0].Name}"
+                            : $"C# {types.Count}クラス";
+                        var tip = types.Count == 0 ? $"{relative}（アタッチ対象なし）"
+                            : $"{relative}: {string.Join(", ", types.Select(t => t.FullName ?? t.Name))}";
+                        entries.Add(new ProjectExplorerEntry(
+                            ProjectExplorerKind.File, file, detail, tip, relative, full, null, false));
+                    }
+                    else
+                    {
+                        entries.Add(new ProjectExplorerEntry(
+                            isScene ? ProjectExplorerKind.Scene : ProjectExplorerKind.File,
+                            file, "", relative, relative, full, null, isStartup));
+                    }
                 }
             }
         }

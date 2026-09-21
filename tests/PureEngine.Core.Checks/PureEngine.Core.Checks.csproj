@@ -8,7 +8,9 @@
   <ItemGroup>
     <ProjectReference Include="../../src/PureEngine.Core/PureEngine.Core.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
     <Compile Include="../../src/PureEngine.Editor/Components/ComponentAssets.cs" Link="ComponentAssets.cs" />
+    <Compile Include="../../src/PureEngine.Editor/Compilation/UserCodeCompiler.cs" Link="Compilation/UserCodeCompiler.cs" />
     <Compile Include="../../src/PureEngine.Editor/Game/*.cs" Link="Game/%(Filename)%(Extension)" />
     <Compile Include="../../src/PureEngine.Editor/Scenes/SceneFile.cs" Link="SceneFile.cs" />
     <Compile Include="../../src/PureEngine.Editor/Projects/ProjectFile.cs" Link="ProjectFile.cs" />

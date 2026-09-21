@@ -142,6 +142,8 @@ public partial class MainWindow
             Log.Info("Playを停止しました。");
             SetFileStatus("Playを停止しました。");
         }
+        // Play中の変更は保留し、Stop後に反映する。
+        FlushPendingUserCodeReload();
         return stopError is null && errors.Count == 0;
     }
 
@@ -207,6 +209,7 @@ public partial class MainWindow
         var detail = message + FormatPlayErrors(errors);
         if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
         SetFileStatus(detail, true);
+        FlushPendingUserCodeReload();
     }
 
     private void FinishPlayAfterStepError(PlaySession session, string message)
@@ -236,6 +239,7 @@ public partial class MainWindow
         var detail = message + FormatPlayErrors(errors);
         if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
         SetFileStatus(detail, true);
+        FlushPendingUserCodeReload();
     }
 
     private void FinishPlayAfterAutoStop(PlaySession session)
@@ -275,6 +279,7 @@ public partial class MainWindow
             Log.Info("Playが停止しました。");
             SetFileStatus("Playが停止しました。");
         }
+        FlushPendingUserCodeReload();
     }
 
     /// <summary>ウィンドウ終了時など、確実に終了・解放するための内部停止。表示は呼び出し側に任せる。</summary>

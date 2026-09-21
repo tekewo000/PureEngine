@@ -8,16 +8,54 @@ public sealed record ProjectSession(ProjectFile Project, Scene Scene)
     public static ProjectSession Open(string manifestPath, Func<Type, object>? factory = null)
     {
         var project = ProjectFile.Open(manifestPath);
-        var scene = new SceneSerializer(ComponentAssets.Registry).Deserialize(File.ReadAllText(project.StartupScenePath), factory);
-        _ = project.ListDirectories();
-        _ = project.ListFiles("Scenes");
-        return new(project, scene);
+        var compiled = UserCodeCompiler.CompileProject(project.RootDirectory);
+        var adopted = false;
+        Scene? scene = null;
+        try
+        {
+            foreach (var diagnostic in compiled.Diagnostics)
+            {
+                var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
+                if (diagnostic.IsError) Log.Error(message);
+                else Log.Warning(message);
+            }
+            // Validate against a candidate registry; a failed project open must not change the active one.
+            var registry = ComponentAssets.CreateRegistry(compiled);
+            _ = project.ListDirectories();
+            _ = project.ListFiles("Scenes");
+            try
+            {
+                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), factory);
+            }
+            catch (Exception error) when (!compiled.Success)
+            {
+                throw new InvalidDataException("C#のコンパイルに失敗したため起動シーンを開けません。\n"
+                    + string.Join(Environment.NewLine, compiled.Diagnostics.Where(d => d.IsError)
+                        .Select(UserCodeCompiler.FormatDiagnostic)), error);
+            }
+            ComponentAssets.SetUserCode(compiled.Success ? compiled : null);
+            adopted = true;
+            return new(project, scene);
+        }
+        finally
+        {
+            if (!adopted)
+            {
+                try
+                {
+                    if (scene is not null) ComponentAssets.DisposeComponents(scene.Objects.SelectMany(item => item.Components));
+                }
+                finally { compiled.LoadContext?.Unload(); }
+            }
+        }
     }
 
     public static ProjectSession Create(string parentDirectory, string name)
     {
         var scene = new Scene();
         var yaml = new SceneSerializer(ComponentAssets.Registry).Serialize(scene);
-        return new(ProjectFile.Create(parentDirectory, name, yaml), scene);
+        var project = ProjectFile.Create(parentDirectory, name, yaml);
+        ComponentAssets.ClearUserCode();
+        return new(project, scene);
     }
 }

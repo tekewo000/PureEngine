@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using PureEngine.Core.Attributes;
@@ -9,7 +8,7 @@ namespace PureEngine.Core;
 public static class ComponentSchema
 {
     internal sealed record LifecycleMethods(MethodInfo? Start, MethodInfo? Update, MethodInfo? Destroy);
-    private static readonly ConcurrentDictionary<Type, LifecycleMethods> Lifecycles = new();
+    private static readonly ConditionalWeakTable<Type, LifecycleMethods> Lifecycles = new();
 
     /// <summary>Validates the lifecycle declarations and returns the Start method, if present.</summary>
     public static MethodInfo? GetStartMethod(Type type) => GetLifecycle(type).Start;
@@ -23,7 +22,7 @@ public static class ComponentSchema
     internal static LifecycleMethods GetLifecycle(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        return Lifecycles.GetOrAdd(type, static type => new(
+        return Lifecycles.GetValue(type, static type => new(
             FindLifecycle(type, typeof(StartAttribute)),
             FindLifecycle(type, typeof(UpdateAttribute)),
             FindLifecycle(type, typeof(DestroyAttribute))));

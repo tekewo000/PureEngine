@@ -6,7 +6,7 @@ objects:
   - typeId: sample.player-stats
     values:
       Hp: 100
-      Name: "001"
+      Name: tests
   - typeId: sample.round-settings
     values:
       MaxRounds: 5

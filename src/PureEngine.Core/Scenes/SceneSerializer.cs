@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Globalization;
 using System.Reflection;
 using YamlDotNet.Serialization;
@@ -9,7 +9,7 @@ namespace PureEngine.Core;
 /// <summary>Version 1 YAML scenes. Restoring never mutates the caller's current scene.</summary>
 public sealed class SceneSerializer(ComponentRegistry registry)
 {
-    private static readonly ConcurrentDictionary<Type, MemberInfo[]> InspectorMembers = new();
+    private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = new();
     private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .WithQuotingNecessaryStrings().DisableAliases()
@@ -161,7 +161,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         return created;
     }
 
-    private static MemberInfo[] Members(Type type) => InspectorMembers.GetOrAdd(type, static type =>
+    private static MemberInfo[] Members(Type type) => InspectorMembers.GetValue(type, static type =>
     {
         var members = ComponentSchema.GetInspectorMembers(type).OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
         if (members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != members.Length)

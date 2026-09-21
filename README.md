@@ -11,7 +11,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - 灰色のダークテーマで、タブの切り替えとペインのサイズ変更ができる。
 - 起動時にLauncherを表示し、Projectの新規作成・既存Projectの選択・最近開いたProjectからの再開ができる。
 - 下部のProject Explorerは左にフォルダツリー、右にファイル一覧を表示する。Componentsからコンパイル済みの `PlayerStats` と `RoundSettings` を選べる。
-- 一覧と保存用の型IDは `ComponentAssets.cs` の `Registry.Register<T>("固定ID")` に明示登録する。自動探索や外部C#ファイルの取り込みは未実装。
+- 自作C#はProject内の任意フォルダから読み込み、元のフォルダ内のファイルをドラッグしてアタッチできる。エンジン側への手動登録は不要。Componentsには組み込みサンプルを表示する。
 - Scene View／Gameは左、Stuffsは中央、Inspectorは右に配置する。
 - Project ExplorerのComponentsにあるクラスをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
@@ -64,7 +64,36 @@ MyGame/
 
 [サンプルProject](Examples/SampleProject/Project.pure.project.yaml)にはMainとMenuの2シーンが入っている。
 既存の単体シーンを利用する場合は、新しいProjectのScenesフォルダに `.pure.scene.yaml` ファイルをコピーし、Project ExplorerをRefreshして開く。
-現在のProject機能はシーン管理が対象。C#クラスの登録は共通の `ComponentAssets` を使い、ProjectごとのC#コンパイルや素材の取り込みは未実装。
+ProjectごとのC#読み込み・自動反映に対応。素材の取り込みは未実装。
+
+
+## 自作C#と自動反映
+
+Project内に、例えば `Gameplay/Actors/Player.cs` を作成します。専用のComponentsフォルダは不要です。
+
+```csharp
+using PureEngine.Core;
+using PureEngine.Core.Attributes;
+
+namespace MyGame;
+
+public class Player
+{
+    [Inspector] public int Health = 100;
+    [Start] public void Start() => Log.Info($"Health: {Health}");
+}
+```
+
+- プロジェクトを開くとC#をコンパイルし、Project欄の元のフォルダに表示します。ファイルをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグするとアタッチできます。
+- アタッチ対象は外部から見えるpublicの具象クラス（record classを含む）。internal・abstract・static・未確定の型引数を持つクラスは補助コードとして扱います。属性や専用の基底クラスは必須ではありません。生成には呼び出し可能なコンストラクタと、必要なら既存Gameサービスへの依存登録が必要です。
+- 1ファイルに複数の対象クラスがあれば、未アタッチのクラスをすべて追加します。partial classは宣言のある各ファイルから同じ型をアタッチできます。
+- 保存・追加・削除・ファイルやフォルダの移動を検知し、約600msの待機で連続通知をまとめます。停止中に反映し、Play中はStop後、Inspectorの入力エラー中は修正後まで保留します。
+- 未保存のオブジェクト・Inspector値・Priority・選択を引き継ぎます。新しいInspectorメンバーは初期値を使います。
+- コンパイル失敗、生成失敗、アタッチ済みクラスの削除、保存対象メンバーの削除・型変更、設定済みPriorityの移行不能時は反映を中止し、直前の正常なコードと編集データを保持します。理由をConsoleに表示し、修正して保存すると再試行します。
+- 保存用の型IDは `user.名前空間.クラス名`。ファイルやフォルダの移動では変わりませんが、クラス名・名前空間の改名にはデータ移行が必要です。
+- 起動時からコンパイルに失敗し、起動シーンがその自作型を参照している場合は、ソースを修正してから開き直してください。自作型を使わない起動シーンなら、エラーをConsoleに残して開けます。
+
+現在はProject内のソースをまとめてコンパイルします。`bin`・`obj`・隠しフォルダ・リンク先フォルダは対象外です。独自csprojの設定、外部NuGet依存の復元、Playの実行状態を保ったコード差し替えは未対応です。コンパイルはEditorのUIスレッド上で行うため、大きなプロジェクトでは反映中に操作が止まります。
 
 ## 起動
 

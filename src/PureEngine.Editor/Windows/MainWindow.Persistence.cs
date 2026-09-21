@@ -50,7 +50,7 @@ public partial class MainWindow
         EditorSurface.IsEnabled = false;
         try { await operation(); }
         catch (Exception error) { SetFileStatus($"操作に失敗しました: {error.GetBaseException().Message}", true); }
-        finally { EditorSurface.IsEnabled = true; _fileBusy = false; }
+        finally { EditorSurface.IsEnabled = true; _fileBusy = false; FlushPendingUserCodeReload(); }
     }
 
     private async Task<bool> SaveSceneAsync(bool saveAs)
@@ -145,6 +145,8 @@ public partial class MainWindow
 
     private void CloseEditSession()
     {
+        // プロジェクトの切り替え・終了時には、そのプロジェクトの監視を終了する。
+        StopUserCodeWatching();
         _playTimer?.Stop();
         try
         {
@@ -160,6 +162,7 @@ public partial class MainWindow
             catch (Exception disposeError) { errors.Add(disposeError); }
             try { _editSession.Dispose(); }
             catch (Exception disposeError) { errors.Add(disposeError); }
+            ComponentAssets.ClearUserCode();
             throw new AggregateException("Editor cleanup failed.", errors);
         }
         var previousScene = _scene;
@@ -169,6 +172,7 @@ public partial class MainWindow
         catch (Exception error) { editErrors.Add(error); }
         try { _editSession.Dispose(); }
         catch (Exception error) { editErrors.Add(error); }
+        ComponentAssets.ClearUserCode();
         if (editErrors.Count != 0) throw new AggregateException("Editor cleanup failed.", editErrors);
     }
 

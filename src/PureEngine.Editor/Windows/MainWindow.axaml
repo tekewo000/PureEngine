@@ -214,7 +214,7 @@
         <ColumnDefinition Width="8" />
         <ColumnDefinition Width="472" MinWidth="160" />
       </Grid.ColumnDefinitions>
-      <Grid>
+      <Grid x:Name="CenterGrid">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" MinWidth="240" />
           <ColumnDefinition Width="8" />
@@ -223,7 +223,7 @@
         <Grid.RowDefinitions>
           <RowDefinition Height="*" MinHeight="180" />
           <RowDefinition Height="8" />
-          <RowDefinition Height="164" MinHeight="80" />
+          <RowDefinition Height="328" MinHeight="80" />
         </Grid.RowDefinitions>
         <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
                       ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -256,10 +256,10 @@
             </TabItem>
           </TabControl>
         </Border>
-        <Border Classes="pane">
-          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View"><Grid /></TabItem>
-            <TabItem Header="Game" AutomationProperties.Name="Game"><Grid /></TabItem>
+        <Border x:Name="SceneViewPane" Classes="pane">
+          <TabControl x:Name="ViewportTabs" Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View"><Grid x:Name="SceneViewport" /></TabItem>
+            <TabItem Header="Game" AutomationProperties.Name="Game"><Grid x:Name="GameViewport" /></TabItem>
           </TabControl>
         </Border>
         <Border Grid.Row="2" Grid.ColumnSpan="3" Classes="pane">

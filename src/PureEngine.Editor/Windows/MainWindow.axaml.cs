@@ -17,10 +17,13 @@ public partial class MainWindow : Window
     private GameSession _editSession;
     private static readonly DataFormat<Type> ComponentFormat =
         DataFormat.CreateInProcessFormat<Type>("PureEngine.ComponentType");
+    private static readonly DataFormat<IReadOnlyList<Type>> ComponentTypesFormat =
+        DataFormat.CreateInProcessFormat<IReadOnlyList<Type>>("PureEngine.ComponentTypes");
     private PointerPressedEventArgs? _assetPress;
     private Point _assetPressPosition;
-    private Type? _dragType;
+    private IReadOnlyList<Type>? _dragTypes;
     private readonly HashSet<TextBox> _invalidFields = [];
+    private bool _viewportFitted;
 
     public MainWindow(ProjectSession session, GameSession? editServices = null) : this()
     {
@@ -33,11 +36,14 @@ public partial class MainWindow : Window
         _project = session.Project;
         SetCurrentScene(session.Scene, session.Project.StartupScenePath);
         ProjectTab.IsSelected = true;
+        StartUserCodeWatching();
     }
 
     public MainWindow()
     {
         InitializeComponent();
+        // 起動時1回だけ、Scene View/Gameの実幅から16:9になるよう下ペイン高さを初期調整する。
+        CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
         // 編集期間の専用サービス群。同じ登録から作り、Play 用とは独立させる。
         _editSession = GameSession.Create();
         Closed += (_, _) => CloseEditSession();
@@ -65,10 +71,25 @@ public partial class MainWindow : Window
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
     {
         _assetPress = null;
+        _dragTypes = null;
         if (!e.GetCurrentPoint(ProjectFiles).Properties.IsLeftButtonPressed) return;
-        _dragType = ((e.Source as Visual)?.GetSelfAndVisualAncestors()
-            .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as ProjectExplorerEntry)?.ComponentType;
-        if (_dragType is null) return;
+        var entry = ((e.Source as Visual)?.GetSelfAndVisualAncestors()
+            .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as ProjectExplorerEntry);
+        if (entry is null) return;
+        if (entry.ComponentType is not null)
+        {
+            _dragTypes = [entry.ComponentType];
+        }
+        else if (entry.Kind == ProjectExplorerKind.File && entry.FullPath is not null
+            && entry.FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        {
+            // Project欄のC#ファイルからアタッチ対象のクラスをD&Dできる。
+            // 1ファイルに複数クラスがある場合はそのファイルの未アタッチ分をすべて付ける。
+            var types = ComponentAssets.GetTypesForFile(entry.FullPath);
+            if (types.Count == 0) return;
+            _dragTypes = types;
+        }
+        else return;
         _assetPressPosition = e.GetPosition(ProjectFiles);
         _assetPress = e;
     }
@@ -79,15 +100,19 @@ public partial class MainWindow : Window
         if (!e.GetCurrentPoint(ProjectFiles).Properties.IsLeftButtonPressed)
         {
             _assetPress = null;
+            _dragTypes = null;
             return;
         }
         var delta = e.GetPosition(ProjectFiles) - _assetPressPosition;
         if (Math.Abs(delta.X) < 4 && Math.Abs(delta.Y) < 4) return;
         var press = _assetPress;
-        var type = _dragType!;
+        var types = _dragTypes!;
         _assetPress = null;
+        _dragTypes = null;
         using var data = new DataTransfer();
-        data.Add(DataTransferItem.Create(ComponentFormat, type));
+        data.Add(DataTransferItem.Create(ComponentTypesFormat, types));
+        if (types.Count == 1)
+            data.Add(DataTransferItem.Create(ComponentFormat, types[0]));
         await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy);
     }
 
@@ -105,9 +130,22 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        e.DragEffects = ComponentAssets.CanAttach(DropTarget(sender, e), e.DataTransfer.TryGetValue(ComponentFormat))
-            ? DragDropEffects.Copy : DragDropEffects.None;
+        var target = DropTarget(sender, e);
+        var canAny = false;
+        foreach (var type in GetDragTypes(e))
+        {
+            if (ComponentAssets.CanAttach(target, type)) { canAny = true; break; }
+        }
+        e.DragEffects = canAny ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
+    }
+
+    private static IReadOnlyList<Type> GetDragTypes(DragEventArgs e)
+    {
+        var list = e.DataTransfer.TryGetValue(ComponentTypesFormat);
+        if (list is not null && list.Count > 0) return list;
+        var single = e.DataTransfer.TryGetValue(ComponentFormat);
+        return single is not null ? [single] : [];
     }
 
     private void OnComponentDrop(object? sender, DragEventArgs e)
@@ -116,19 +154,37 @@ public partial class MainWindow : Window
         e.DragEffects = DragDropEffects.None;
         if (RejectWhenPlaying("アタッチ")) return;
         var target = DropTarget(sender, e);
-        var type = e.DataTransfer.TryGetValue(ComponentFormat);
-        if (!ComponentAssets.CanAttach(target, type)) return;
+        var types = GetDragTypes(e).Where(t => ComponentAssets.CanAttach(target, t)).ToArray();
+        if (types.Length == 0) return;
         SceneObjects.SelectedItem = target;
-        try
+        var attached = 0;
+        string? firstError = null;
+        Type? errorType = null;
+        foreach (var type in types)
         {
-            if (!ComponentAssets.TryAttach(target, type, _editSession.Factory)) return;
+            try
+            {
+                if (!ComponentAssets.TryAttach(target, type, _editSession.Factory)) continue;
+                attached++;
+            }
+            catch (Exception error)
+            {
+                if (firstError is null)
+                {
+                    firstError = error.GetBaseException().Message;
+                    errorType = type;
+                }
+            }
+        }
+        if (attached > 0)
+        {
             MarkSceneChanged();
             RefreshComponents();
             e.DragEffects = DragDropEffects.Copy;
         }
-        catch (Exception error)
+        if (firstError is not null)
         {
-            AttachError.Text = $"{type!.Name} を追加できませんでした: {error.GetBaseException().Message}";
+            AttachError.Text = $"{errorType!.Name} を追加できませんでした: {firstError}";
             AttachError.IsVisible = true;
         }
     }
@@ -158,19 +214,25 @@ public partial class MainWindow : Window
     {
         var type = component.GetType();
         var body = new StackPanel { Spacing = 4 };
-        var title = new TextBlock { Text = type.Name, FontWeight = FontWeight.SemiBold };
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 8 };
+        var title = new TextBlock { Text = type.Name, FontWeight = FontWeight.SemiBold,
+            MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis };
         ToolTip.SetTip(title, type.FullName);
-        body.Children.Add(title);
+        header.Children.Add(title);
+        var priorities = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+        foreach (var field in BuildPriorityFields(item, component))
+            priorities.Children.Add(field);
+        Grid.SetColumn(priorities, 1);
+        header.Children.Add(priorities);
+        body.Children.Add(header);
         body.Children.Add(new Separator { Classes = { "divider" } });
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
             body.Children.Add(BuildMemberRow(component, member));
-        foreach (var row in BuildPriorityRows(item, component))
-            body.Children.Add(row);
         return new Border { Classes = { "componentCard" }, Child = body };
     }
 
     /// <summary>Attach settings, separate from Inspector members. Only lifecycles present on the class are shown.</summary>
-    private List<Control> BuildPriorityRows(SceneObject item, object component)
+    private List<Control> BuildPriorityFields(SceneObject item, object component)
     {
         List<Control> rows = [];
         bool hasStart, hasUpdate, hasDestroy;
@@ -186,14 +248,13 @@ public partial class MainWindow : Window
             return rows;
         }
         if (!hasStart && !hasUpdate && !hasDestroy) return rows;
-        rows.Add(new Separator { Classes = { "divider" } });
-        if (hasStart) rows.Add(BuildPriorityRow(item, component, ComponentLifecycle.Start, "Start Priority"));
-        if (hasUpdate) rows.Add(BuildPriorityRow(item, component, ComponentLifecycle.Update, "Update Priority"));
-        if (hasDestroy) rows.Add(BuildPriorityRow(item, component, ComponentLifecycle.Destroy, "Destroy Priority"));
+        if (hasStart) rows.Add(BuildPriorityField(item, component, ComponentLifecycle.Start, "Start Priority"));
+        if (hasUpdate) rows.Add(BuildPriorityField(item, component, ComponentLifecycle.Update, "Update Priority"));
+        if (hasDestroy) rows.Add(BuildPriorityField(item, component, ComponentLifecycle.Destroy, "Destroy Priority"));
         return rows;
     }
 
-    private Control BuildPriorityRow(SceneObject item, object component, ComponentLifecycle kind, string displayName)
+    private Control BuildPriorityField(SceneObject item, object component, ComponentLifecycle kind, string displayName)
     {
         var type = component.GetType();
         Func<int> getter = kind switch
@@ -208,16 +269,14 @@ public partial class MainWindow : Window
             ComponentLifecycle.Update => value => item.SetUpdatePriority(component, value),
             _ => value => item.SetDestroyPriority(component, value),
         };
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), ColumnSpacing = 8 };
-        var label = new TextBlock
+        var box = new TextBox
         {
-            Text = displayName,
-            Classes = { "muted" },
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            Text = getter().ToString(CultureInfo.InvariantCulture),
+            Width = 36, MinHeight = 22, Height = 22,
+            FontSize = 10, Padding = new Thickness(3, 1),
+            TextAlignment = TextAlignment.Center,
         };
-        label.SetValue(ToolTip.TipProperty, $"{displayName} (attach setting)");
-        Grid.SetColumn(label, 0);
-        var box = new TextBox { Text = getter().ToString(CultureInfo.InvariantCulture) };
+        ToolTip.SetTip(box, displayName);
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, $"{type.Name}.{kind}Priority");
         box.TextChanged += (_, _) =>
@@ -231,6 +290,7 @@ public partial class MainWindow : Window
                     MarkSceneChanged();
                 }
                 MarkInvalid(box, null);
+                ToolTip.SetTip(box, displayName);
             }
             else
             {
@@ -243,10 +303,7 @@ public partial class MainWindow : Window
             box.Text = getter().ToString(CultureInfo.InvariantCulture);
             e.Handled = true;
         };
-        Grid.SetColumn(box, 1);
-        row.Children.Add(label);
-        row.Children.Add(box);
-        return row;
+        return box;
     }
 
     private Control BuildMemberRow(object component, MemberInfo member)
@@ -363,6 +420,7 @@ public partial class MainWindow : Window
             _invalidFields.Add(box);
         }
         UpdateErrorBadge();
+        QueuePendingUserCodeReload();
     }
 
     /// <summary>Escで編集中の数値欄を最後の正常値へ戻す。TextChanged経由で無効表示も解除される。</summary>
@@ -455,6 +513,7 @@ public partial class MainWindow : Window
             item.Rename(ObjectName.Text!);
             MarkSceneChanged();
         }
+        QueuePendingUserCodeReload();
     }
 
     private void OnDeleteObject(object? sender, RoutedEventArgs e) => DeleteSelectedObject();
@@ -483,5 +542,32 @@ public partial class MainWindow : Window
     {
         if (sender is TabControl pane && !pane.IsKeyboardFocusWithin)
             pane.Focus();
+    }
+
+    private void OnCenterLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (_viewportFitted) return;
+        FitViewportToSixteenNine();
+    }
+
+    /// <summary>
+    /// 起動時1回だけ、Scene View/Gameビューポートの横幅を変えずに映像エリアが16:9になるよう
+    /// 下ペインの高さを調整する。タブヘッダー等のクローム分は実測から差し引く。以後はスプリッターで自由に変更できる。
+    /// </summary>
+    private void FitViewportToSixteenNine()
+    {
+        if (CenterGrid.Bounds.Height <= 0 || SceneViewPane.Bounds.Width <= 0) return;
+        var viewport = (Control)(ViewportTabs.SelectedIndex == 1 ? GameViewport : SceneViewport);
+        if (viewport.Bounds.Width <= 0 || viewport.Bounds.Height <= 0) return;
+        var chrome = Math.Max(0, SceneViewPane.Bounds.Height - viewport.Bounds.Height);
+        var targetPane = viewport.Bounds.Width * 9.0 / 16.0 + chrome;
+        var viewportRow = CenterGrid.RowDefinitions[0];
+        var bottomRow = CenterGrid.RowDefinitions[2];
+        targetPane = Math.Clamp(targetPane, viewportRow.MinHeight,
+            CenterGrid.Bounds.Height - 8 - bottomRow.MinHeight);
+        var bottom = CenterGrid.Bounds.Height - 8 - targetPane;
+        if (bottom < bottomRow.MinHeight) return;
+        bottomRow.Height = new GridLength(bottom, GridUnitType.Pixel);
+        _viewportFitted = true;
     }
 }

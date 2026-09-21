@@ -56,14 +56,20 @@ static class PriorityInspectorChecks
 
         Dispatcher.UIThread.RunJobs();
 
-        // Full shows all three with display names.
+        // Full shows three compact fields beside the component name, in lifecycle order.
         sceneObjects.SelectedItem = fullObject;
         Dispatcher.UIThread.RunJobs();
         var fullBoxes = PriorityBoxes(editor, nameof(InspectorFullProbe));
         Check(fullBoxes.Count == 3, $"Full must show 3 priorities, got {fullBoxes.Count}.");
-        var labels = editor.GetVisualDescendants().OfType<TextBlock>()
-            .Where(t => t.Text is "Start Priority" or "Update Priority" or "Destroy Priority").ToList();
-        Check(labels.Count == 3, "Display names must be Start/Update/Destroy Priority.");
+        Check(fullBoxes.Select(box => ToolTip.GetTip(box) as string)
+            .SequenceEqual(new[] { "Start Priority", "Update Priority", "Destroy Priority" }),
+            "Priority tooltips must identify each lifecycle in order.");
+        var priorityPanel = fullBoxes[0].Parent as StackPanel;
+        Check(priorityPanel?.Orientation == Avalonia.Layout.Orientation.Horizontal
+            && fullBoxes.All(box => box.Parent == priorityPanel && box.Width == 36 && box.FontSize == 10)
+            && priorityPanel.Parent is Grid header
+            && header.Children.OfType<TextBlock>().Single().Text == nameof(InspectorFullProbe),
+            "Compact priority fields must share the component title header.");
 
         // Partial shows only Start.
         sceneObjects.SelectedItem = partialObject;
