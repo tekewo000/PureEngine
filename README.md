@@ -194,20 +194,27 @@ Log.Engine.Error("エンジン側の処理に失敗しました", exception);
 
 ## ゲームのサービス登録とコンストラクタ注入
 
-Game側で一度だけ登録を書き、Component は普通のコンストラクタで受け取ります（`src/PureEngine.Editor/Game/GameServices.cs`）。
+エンジンを変更せず、Project内の自作C#に次の登録を1つだけ書きます。組み込み登録（`src/PureEngine.Editor/Game/GameServices.cs`）に加えて適用されます。登録がない既存Projectは従来どおり組み込み登録だけで動きます。
 
 ```csharp
-services.AddScoped<IRandomService, RandomService>();
-services.AddScoped<BattleSession>();
+using Microsoft.Extensions.DependencyInjection;
 
-public sealed class InjectedPlayer(IRandomService random, BattleSession session)
+public static class GameSetup
 {
-    [Inspector] public int Hp { get; set; } = 100;
+    public static void ConfigureGameServices(IServiceCollection services)
+    {
+        services.AddScoped<QuestLog>();
+    }
+}
+
+public sealed class QuestBoard(QuestLog log)
+{
+    [Inspector] public int Score { get; set; } = 10;
     [Start] private void OnStart() { /* 保存値を使う初期化はここ */ }
 }
 ```
 
-Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
+形式は `public static void ConfigureGameServices(IServiceCollection services)` の1つのみです。同名が複数ある場合や形式が違う場合は、理由を表示して新しい登録を採用しません。Component 自体の DI 登録や専用基底クラスは不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
 
 ```csharp
 using var play = PlaySession.Prepare(scene, ComponentAssets.Registry);

@@ -46,6 +46,12 @@ public static class ComponentAssets
         get { lock (Sync) return new Dictionary<string, IReadOnlyList<Type>>(_userFileTypes, StringComparer.OrdinalIgnoreCase); }
     }
 
+    /// <summary>現在採用中のユーザーコード（なければ null）。編集・Play のサービス群を作る際の登録元。</summary>
+    internal static UserCodeCompileResult? CurrentUserCode
+    {
+        get { lock (Sync) return _userCode; }
+    }
+
     /// <summary>指定C#ファイルに含まれるアタッチ対象の型。ヘルパーのみのファイルは空。</summary>
     public static IReadOnlyList<Type> GetTypesForFile(string? fullPath)
     {

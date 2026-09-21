@@ -4,13 +4,13 @@
 
 以下の5項目をすべて完了してから、描画・入力・Parent・Undo／Redo・通信・Steamなどの新機能追加へ進む。改善に必要な実装と検証は先に行う。
 
-**現在は0／5項目完了。5項目とも未完了。** 今回は課題・対応範囲・完了条件を文書化した段階で、改善実装はまだ行っていない。
+**現在は1／5項目完了。A1が完了し、A2〜A5は未完了。** A2〜A5は課題・対応範囲・完了条件を文書化した段階で、改善実装はまだ行っていない。
 
 「完了」はコードの変更だけでなく、各項目の完了条件を満たし、対応する動作チェックが通った状態を指す。着手後も完了条件が残っている項目は「未完了（対応中）」とする。
 
 | ID | 改善項目 | 状態 | 完了の証跡 |
 | --- | --- | --- | --- |
-| A1 | プロジェクト側からゲーム用サービスを登録できるようにする | 未完了（未着手） | — |
+| A1 | プロジェクト側からゲーム用サービスを登録できるようにする | 完了 | プロジェクト登録口（`src/PureEngine.Editor/Game/ProjectGameServices.cs`）、編集・Play接続（`GameSession.cs`、`PlaySession.cs`）、再読み込み・Project読み込み（`MainWindow.UserCode.cs`、`Projects/ProjectSession.cs`、`Windows/LauncherWindow.axaml.cs`）。2026-09-22に `dotnet run --project tests/PureEngine.Core.Checks -c Release` と `dotnet run --project tests/PureEngine.Editor.Checks -c Release` がPASS（Editor側に `ProjectServiceRegistrationChecks` を追加）。 |
 | A2 | MainWindowに集中した責務を分離する | 未完了（未着手） | — |
 | A3 | C#コンパイルをUIスレッドから分離する | 未完了（未着手） | — |
 | A4 | 型登録と読込コードをプロジェクト単位で所有する | 未完了（未着手） | — |
@@ -18,16 +18,14 @@
 
 ## A1：プロジェクト側のサービス登録
 
-**現状：未完了。** コンストラクタ注入自体は実装済みだが、登録処理はEditor内の [GameServices.Configure](../src/PureEngine.Editor/Game/GameServices.cs) に固定され、組み込みサンプルのサービスを登録している。プロジェクトの自作C#からサービスを登録する入口がない。
-
-プロジェクト側に登録処理の入口を1つ設け、編集とPlayの両方で同じ登録を使う。Coreは引き続き `Func<Type, object>` だけを受け取り、DIライブラリに依存させない。
+**現状：完了（2026-09-22確認）。** プロジェクトの自作C#に `public static void ConfigureGameServices(IServiceCollection services)` を1つだけ定義し、エンジンのソースを変更せずにサービスを登録できる。編集・Play・再Playで同じ登録を使い、各セッションのサービス群は Singleton も含めて分離する。Coreは引き続き `Func<Type, object>` だけを受け、DIライブラリに依存しない。
 
 完了条件：
 
-- [ ] エンジンのソースを変更せず、プロジェクト側でサービスを登録し、Componentのコンストラクタで受け取れる。
-- [ ] 編集時・Play時・再Play時に登録が適用され、サービスのインスタンスは既存仕様どおり分離される。
-- [ ] 登録や依存解決の失敗を報告し、生成済み資源を解放する。コード再読み込みでは、準備に失敗した新しい登録を採用しない。
-- [ ] サービス登録を含むコード変更の再読み込みを確認し、Componentとサービスの終了順・単発解放を維持する。
+- [x] エンジンのソースを変更せず、プロジェクト側でサービスを登録し、Componentのコンストラクタで受け取れる。
+- [x] 編集時・Play時・再Play時に登録が適用され、サービスのインスタンスは既存仕様どおり分離される。
+- [x] 登録や依存解決の失敗を報告し、生成済み資源を解放する。コード再読み込みでは、準備に失敗した新しい登録を採用しない。
+- [x] サービス登録を含むコード変更の再読み込みを確認し、Componentとサービスの終了順・単発解放を維持する。
 
 ## A2：MainWindowの責務分離
 

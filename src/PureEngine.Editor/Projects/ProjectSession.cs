@@ -5,13 +5,21 @@ namespace PureEngine.Editor;
 /// <summary>A project and its validated startup scene, ready to hand to an editor.</summary>
 public sealed record ProjectSession(ProjectFile Project, Scene Scene)
 {
-    public static ProjectSession Open(string manifestPath, Func<Type, object>? factory = null)
+    /// <summary>
+    /// Projectを開き、起動シーンとその編集用サービス群を返す。
+    /// 新コードの登録・サービス生成・Scene移行がすべて成功してから採用し、
+    /// 失敗時は直前の正常なコード・登録・Sceneを維持する。
+    /// 返した EditServices は呼び出し側が所有し、Scene の編集用 Component を解放してから終了する。
+    /// </summary>
+    public static (ProjectSession Session, GameSession EditServices) Open(string manifestPath)
     {
         var project = ProjectFile.Open(manifestPath);
         ProjectCodeWorkspace.Ensure(project);
         var compiled = UserCodeCompiler.CompileProject(project.RootDirectory);
         var adopted = false;
         Scene? scene = null;
+        GameSession? candidateServices = null;
+        Exception? preparationError = null;
         try
         {
             foreach (var diagnostic in compiled.Diagnostics)
@@ -24,9 +32,21 @@ public sealed record ProjectSession(ProjectFile Project, Scene Scene)
             var registry = ComponentAssets.CreateRegistry(compiled);
             _ = project.ListDirectories();
             _ = project.ListFiles("Scenes");
+            // 候補コードの登録から編集用サービス群を作る。曖昧・不正・登録中の失敗はここで報告する。
+            // コンパイル自体に失敗した場合はプロジェクト登録なし（組み込みのみ）で開けるか試す。
             try
             {
-                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), factory);
+                candidateServices = GameSession.Create(compiled.Success ? compiled : null);
+            }
+            catch (Exception error)
+            {
+                throw new InvalidDataException(
+                    $"C#のサービス登録に失敗したため起動シーンを開けません: {error.GetBaseException().Message}", error);
+            }
+            try
+            {
+                scene = new SceneSerializer(registry).Deserialize(
+                    File.ReadAllText(project.StartupScenePath), candidateServices.Factory);
             }
             catch (Exception error) when (!compiled.Success)
             {
@@ -36,17 +56,35 @@ public sealed record ProjectSession(ProjectFile Project, Scene Scene)
             }
             ComponentAssets.SetUserCode(compiled.Success ? compiled : null);
             adopted = true;
-            return new(project, scene);
+            var session = new ProjectSession(project, scene);
+            var services = candidateServices;
+            candidateServices = null;
+            scene = null;
+            return (session, services);
+        }
+        catch (Exception error)
+        {
+            preparationError = error;
+            throw;
         }
         finally
         {
             if (!adopted)
             {
+                var cleanupErrors = new List<Exception>();
                 try
                 {
                     if (scene is not null) ComponentAssets.DisposeComponents(scene.Objects.SelectMany(item => item.Components));
                 }
-                finally { compiled.LoadContext?.Unload(); }
+                catch (Exception error) { cleanupErrors.Add(error); }
+                try
+                {
+                    candidateServices?.Dispose();
+                }
+                catch (Exception error) { cleanupErrors.Add(error); }
+                finally { try { compiled.LoadContext?.Unload(); } catch { } }
+                if (cleanupErrors.Count != 0 && preparationError is not null)
+                    throw new AggregateException("Project open and cleanup failed.", [preparationError, .. cleanupErrors]);
             }
         }
     }

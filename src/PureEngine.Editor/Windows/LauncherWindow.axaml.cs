@@ -90,25 +90,18 @@ public partial class LauncherWindow : Window
             { Title = "Open Project", AllowMultiple = false, FileTypeFilter = [ProjectType] });
         if (files.Count == 0) return;
         var path = files[0].TryGetLocalPath() ?? throw new IOException("ローカルのProjectを選択してください。");
-        var editServices = GameSession.Create();
-        ProjectSession session;
+        // 候補コードの登録・サービス生成・Scene移行が成功してから採用する。
+        // 失敗時は Open 側で候補資源を解放し、既存の登録を維持する。ここで作る資源はない。
+        var (session, editServices) = ProjectSession.Open(path);
         try
         {
-            session = ProjectSession.Open(path, editServices.Factory);
+            OpenEditor(session, editServices);
         }
-        catch (Exception openError)
+        catch
         {
-            try
-            {
-                editServices.Dispose();
-            }
-            catch (Exception cleanupError)
-            {
-                throw new AggregateException("Project open and cleanup failed.", openError, cleanupError);
-            }
+            try { editServices.Dispose(); } catch { }
             throw;
         }
-        OpenEditor(session, editServices);
     });
 
     private async void OnRecentDoubleTapped(object? sender, TappedEventArgs e)
@@ -126,25 +119,16 @@ public partial class LauncherWindow : Window
 
     private Task OpenRecent(RecentProject project) => RunOperation(() =>
     {
-        var editServices = GameSession.Create();
-        ProjectSession session;
+        var (session, editServices) = ProjectSession.Open(project.ManifestPath);
         try
         {
-            session = ProjectSession.Open(project.ManifestPath, editServices.Factory);
+            OpenEditor(session, editServices);
         }
-        catch (Exception openError)
+        catch
         {
-            try
-            {
-                editServices.Dispose();
-            }
-            catch (Exception cleanupError)
-            {
-                throw new AggregateException("Project open and cleanup failed.", openError, cleanupError);
-            }
+            try { editServices.Dispose(); } catch { }
             throw;
         }
-        OpenEditor(session, editServices);
         return Task.CompletedTask;
     });
 

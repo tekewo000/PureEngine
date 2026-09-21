@@ -4,7 +4,8 @@ namespace PureEngine.Editor;
 
 /// <summary>
 /// 独立した一組のサービス群（provider＋明示 Scope）と Core 用の生成関数。
-/// 同じ <see cref="GameServices.Configure"/> から作り、編集と各 Play で別インスタンスを持つ。
+/// 組み込みの <see cref="GameServices.Configure"/> に加え、採用中のプロジェクト登録
+/// （<see cref="ProjectGameServices"/>）があれば同じ登録処理から作り、編集と各 Play で別インスタンスを持つ。
 /// 編集と Play、異なる Play の間で Singleton も含めて状態を共有しない。
 /// Root provider から Scoped を直接解決せず、必ずこの Scope を通す。
 /// </summary>
@@ -30,15 +31,45 @@ public sealed class GameSession : IDisposable
 
     public static GameSession Create()
     {
+        return CreateFromUserCode(ComponentAssets.CurrentUserCode);
+    }
+
+    /// <summary>
+    /// 候補コードの登録からサービス群を作る。コード再読み込み・Project読み込みの準備用。
+    /// まだ採用していないコンパイル結果を渡し、成功してから採用する。
+    /// null はプロジェクト登録なし（組み込みのみ）を意味する。
+    /// 登録口の曖昧・不正・登録中の例外は理由付きで投げ、provider は残さない。
+    /// </summary>
+    public static GameSession Create(UserCodeCompileResult? userCode)
+    {
+        return CreateFromUserCode(userCode);
+    }
+
+    private static GameSession CreateFromUserCode(UserCodeCompileResult? userCode)
+    {
         var services = new ServiceCollection();
         GameServices.Configure(services);
-        var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        // プロジェクト登録の検証・適用。失敗時は provider を作らず報告する。
+        ProjectGameServices.Apply(userCode, services);
+        ServiceProvider? provider = null;
+        try
         {
-            ValidateScopes = true,
-            ValidateOnBuild = true,
-        });
-        var scope = provider.CreateScope();
-        return new GameSession(provider, scope);
+            provider = services.BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateScopes = true,
+                ValidateOnBuild = true,
+            });
+            var scope = provider.CreateScope();
+            var session = new GameSession(provider, scope);
+            provider = null;
+            return session;
+        }
+        finally
+        {
+            // Build 後の CreateScope 失敗など、provider だけ残った場合に解放する。
+            // Build 自体が投げた場合は provider がなく、解放対象はない。
+            provider?.Dispose();
+        }
     }
 
     public void Dispose()
