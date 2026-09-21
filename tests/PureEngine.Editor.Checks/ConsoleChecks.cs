@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Core.Attributes;
 using PureEngine.Editor;
+using PureEngine.Runtime;
 
 static class ConsoleChecks
 {

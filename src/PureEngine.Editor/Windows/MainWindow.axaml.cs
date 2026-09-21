@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using PureEngine.Core;
+using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
 
@@ -57,7 +58,7 @@ public partial class MainWindow : Window
         _components = new ProjectComponents();
         _sceneSerializer = new SceneSerializer(_components.Registry);
         // 編集期間の専用サービス群。同じ登録から作り、Play 用とは独立させる。
-        _editSession = GameSession.Create();
+        _editSession = GameSession.Create(GameServices.Configure);
         Closed += (_, _) => CloseEditSession();
         Closing += OnEditorClosing;
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);

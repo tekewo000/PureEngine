@@ -1,11 +1,13 @@
+using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 
-namespace PureEngine.Editor;
+namespace PureEngine.Runtime;
 
 /// <summary>
 /// 一回の Play（単体実行を含む）。Play 用 provider・Scope を作り、factory を SceneRuntime に渡す。
 /// 生成・復元・検証の成功後に Start し、Stop では Runtime の終了処理を完了してから Scope・provider を終了する。
 /// 準備失敗時も生成済みの所有資源を解放し、元の例外と後始末中の例外を保持する。
+/// Editor・Avaloniaに依存しない。RegistryはA4の所有者から引数で受け取り、登録処理は外部から受け取る。
 /// </summary>
 public sealed class PlaySession : IDisposable
 {
@@ -19,12 +21,16 @@ public sealed class PlaySession : IDisposable
         runtime.Stopped += ReleaseServices;
     }
 
-    /// <summary>Play 用の独立したサービス群で準備する。Start は呼ばない。</summary>
-    public static PlaySession Prepare(Scene source, ComponentRegistry registry)
+    /// <summary>
+    /// Play 用の独立したサービス群で準備する。Start は呼ばない。
+    /// registryは呼び出し側のプロジェクト所有から渡し、configureはゲーム用サービス登録（A1接続後はプロジェクト側の登録）を受け取る。
+    /// </summary>
+    public static PlaySession Prepare(Scene source, ComponentRegistry registry, Action<IServiceCollection> configure)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(registry);
-        var services = GameSession.Create();
+        ArgumentNullException.ThrowIfNull(configure);
+        var services = GameSession.Create(configure);
         SceneRuntime runtime;
         try
         {

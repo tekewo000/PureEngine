@@ -7,6 +7,7 @@ using PureEngine.Core;
 using PureEngine.Core.Attributes;
 using PureEngine.Editor;
 using PureEngine.Editor.Samples;
+using PureEngine.Runtime;
 
 static class EditorOwnershipChecks
 {
