@@ -48,15 +48,16 @@ static class GameDependencyChecks
 
     private static void EditAddSaveReload()
     {
+        using var owner = new ProjectComponents();
         using var edit = GameSession.Create();
         var target = new SceneObject("Edit me");
-        Check(ComponentAssets.TryAttach(target, typeof(InjectedPlayer), edit.Factory),
+        Check(owner.TryAttach(target, typeof(InjectedPlayer), edit.Factory),
             "Edit attach must inject through the registered services.");
         var added = target.GetComponent<InjectedPlayer>()!;
         Check(added.Random is not null && added.Session is not null, "Edit instance must have services.");
         added.Hp = 37;
 
-        var serializer = new SceneSerializer(ComponentAssets.Registry);
+        var serializer = new SceneSerializer(owner.Registry);
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Hero");
@@ -74,6 +75,7 @@ static class GameDependencyChecks
 
     private static void PlayInjectionAndInspector()
     {
+        using var owner = new ProjectComponents();
         var source = new Scene();
         var item = source.AddEmpty();
         item.Rename("Hero");
@@ -81,7 +83,7 @@ static class GameDependencyChecks
         var authoringSession = new BattleSession();
         item.Attach(new InjectedPlayer(authoringRandom, authoringSession) { Hp = 63 });
 
-        using var play = PlaySession.Prepare(source, ComponentAssets.Registry);
+        using var play = PlaySession.Prepare(source, owner.Registry);
         var copy = play.Runtime.Scene.Objects[0].GetComponent<InjectedPlayer>()!;
         Check(copy.Hp == 63, "Play must restore Inspector values.");
         Check(!ReferenceEquals(copy.Random, authoringRandom) && !ReferenceEquals(copy.Session, authoringSession),
@@ -95,6 +97,7 @@ static class GameDependencyChecks
 
     private static void ScopedSharingAndIsolation()
     {
+        using var owner = new ProjectComponents();
         var source = new Scene();
         for (var i = 0; i < 2; i++)
             source.AddEmpty().Attach(new InjectedPlayer(new RandomService(), new BattleSession()) { Hp = 10 + i });
@@ -106,7 +109,7 @@ static class GameDependencyChecks
 
         BattleSession firstSession;
         IRandomService firstRandom;
-        using (var first = PlaySession.Prepare(source, ComponentAssets.Registry))
+        using (var first = PlaySession.Prepare(source, owner.Registry))
         {
             var copies = first.Runtime.Scene.Objects.Select(o => o.GetComponent<InjectedPlayer>()!).ToArray();
             Check(ReferenceEquals(copies[0].Session, copies[1].Session)
@@ -120,7 +123,7 @@ static class GameDependencyChecks
             Check(firstSession.Members == 2, "Play state must accumulate within the Play.");
         }
 
-        using (var second = PlaySession.Prepare(source, ComponentAssets.Registry))
+        using (var second = PlaySession.Prepare(source, owner.Registry))
         {
             var copies = second.Runtime.Scene.Objects.Select(o => o.GetComponent<InjectedPlayer>()!).ToArray();
             Check(!ReferenceEquals(copies[0].Session, firstSession)
@@ -169,11 +172,12 @@ static class GameDependencyChecks
 
     private static void TerminationAndOwnership()
     {
+        using var owner = new ProjectComponents();
         var source = new Scene();
         source.AddEmpty().Attach(new InjectedPlayer(new RandomService(), new BattleSession()) { Hp = 5 });
         InjectedPlayer copy;
         BattleSession playSession;
-        using (var play = PlaySession.Prepare(source, ComponentAssets.Registry))
+        using (var play = PlaySession.Prepare(source, owner.Registry))
         {
             copy = play.Runtime.Scene.Objects[0].GetComponent<InjectedPlayer>()!;
             playSession = copy.Session;

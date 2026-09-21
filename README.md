@@ -217,7 +217,8 @@ public sealed class QuestBoard(QuestLog log)
 形式は `public static void ConfigureGameServices(IServiceCollection services)` の1つのみです。同名が複数ある場合や形式が違う場合は、理由を表示して新しい登録を採用しません。Component 自体の DI 登録や専用基底クラスは不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
 
 ```csharp
-using var play = PlaySession.Prepare(scene, ComponentAssets.Registry);
+using var components = new ProjectComponents();
+using var play = PlaySession.Prepare(scene, components.Registry);
 play.Start();
 if (play.Runtime.IsRunning) play.Step(1f / 60f);
 ```

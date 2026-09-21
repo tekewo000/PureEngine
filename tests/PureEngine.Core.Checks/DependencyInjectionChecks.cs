@@ -98,7 +98,8 @@ static class DependencyInjectionChecks
         }
 
         var target = new SceneObject("Drop");
-        Check(ComponentAssets.CanAttach(target, typeof(PureEngine.Editor.Samples.PlayerStats)),
+        using var policyOwner = new PureEngine.Editor.ProjectComponents();
+        Check(PureEngine.Editor.ComponentAssets.CanAttach(policyOwner.Registry, target, typeof(PureEngine.Editor.Samples.PlayerStats)),
             "Existing asset policy must stay intact.");
         var attachTarget = new SceneObject("Attach");
         var localRegistry = RegistryFor((typeof(CtorProbe), "di.probe"));
@@ -232,32 +233,33 @@ static class DependencyInjectionChecks
 
     private static void TryAttachPolicy()
     {
+        using var owner = new PureEngine.Editor.ProjectComponents();
         var target = new SceneObject("Target");
         var calls = 0;
         Func<Type, object> counting = type => { calls++; return Activator.CreateInstance(type)!; };
-        Check(!PureEngine.Editor.ComponentAssets.TryAttach(null, typeof(CtorProbe), counting) && calls == 0,
+        Check(!owner.TryAttach(null, typeof(CtorProbe), counting) && calls == 0,
             "Attach without a target must not call the factory.");
-        Check(!PureEngine.Editor.ComponentAssets.TryAttach(target, typeof(CtorProbe), counting) && calls == 0,
+        Check(!owner.TryAttach(target, typeof(CtorProbe), counting) && calls == 0,
             "Unlisted types must be rejected without calling the factory.");
 
         var listed = new SceneObject("Listed");
         var assetType = typeof(PureEngine.Editor.Samples.PlayerStats);
-        Check(PureEngine.Editor.ComponentAssets.TryAttach(listed, assetType, counting) && calls == 1,
+        Check(owner.TryAttach(listed, assetType, counting) && calls == 1,
             "Listed assets must attach through the factory path.");
         Check(listed.GetComponent<PureEngine.Editor.Samples.PlayerStats>() is not null,
             "Factory attach must produce the requested exact type.");
-        Check(!PureEngine.Editor.ComponentAssets.TryAttach(listed, assetType, counting) && calls == 1,
+        Check(!owner.TryAttach(listed, assetType, counting) && calls == 1,
             "Duplicate attach must be rejected without calling the factory.");
 
         var failure = new SceneObject("Failure");
         var boom = new InvalidOperationException("Unable to resolve service.");
-        var attachError = Reject<InvalidOperationException>(() => PureEngine.Editor.ComponentAssets.TryAttach(
+        var attachError = Reject<InvalidOperationException>(() => owner.TryAttach(
             failure, assetType, _ => throw boom));
         Check(ReferenceEquals(attachError.InnerException, boom) && failure.Components.Count == 0,
             "Failed edit attach must report and leave no incomplete component.");
 
         var wrong = new SceneObject("Wrong");
-        Reject<InvalidOperationException>(() => PureEngine.Editor.ComponentAssets.TryAttach(
+        Reject<InvalidOperationException>(() => owner.TryAttach(
             wrong, assetType, _ => new object()));
         Check(wrong.Components.Count == 0, "Wrong-type factory results must leave no component.");
     }

@@ -13,7 +13,7 @@
 | A1 | プロジェクト側からゲーム用サービスを登録できるようにする | 完了 | プロジェクト登録口（`src/PureEngine.Editor/Game/ProjectGameServices.cs`）、編集・Play接続（`GameSession.cs`、`PlaySession.cs`）、再読み込み・Project読み込み（`MainWindow.UserCode.cs`、`Projects/ProjectSession.cs`、`Windows/LauncherWindow.axaml.cs`）。2026-09-22に `dotnet run --project tests/PureEngine.Core.Checks -c Release` と `dotnet run --project tests/PureEngine.Editor.Checks -c Release` がPASS（Editor側に `ProjectServiceRegistrationChecks` を追加）。 |
 | A2 | MainWindowに集中した責務を分離する | 未完了（未着手） | — |
 | A3 | C#コンパイルをUIスレッドから分離する | 未完了（未着手） | — |
-| A4 | 型登録と読込コードをプロジェクト単位で所有する | 未完了（未着手） | — |
+| A4 | 型登録と読込コードをプロジェクト単位で所有する | 未完了（統合待ち） | A4節に実装箇所・検証結果・確認日を記録。Core/Editor Checks PASS。A1/A2/A3/A5統合は未検証。全体件数の更新は統合担当が行う。 |
 | A5 | ゲーム実行の接続部分をEditorから独立させる | 未完了（未着手） | — |
 
 ## A1：プロジェクト側のサービス登録
@@ -58,17 +58,22 @@
 
 ## A4：プロジェクト単位の型登録と読込コードの所有
 
-**現状：未完了。** [ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs) のRegistry、自作型一覧、ファイルとの対応、読込コードはstaticで共有されている。現在のプロジェクト切替はできるが、複数プロジェクトの独立した同時保持を保証する構造ではない。
+**現状：完了（A1/A2/A3/A5との統合は未検証のため統合待ち）。** 可変なstatic登録を解消し、`ProjectComponents` がプロジェクト単位にRegistry・自作型一覧とソース対応・採用中のコンパイル結果と読込コード（ALC）を所有する。`ComponentAssets` は状態を持たない共通処理（破棄・組み込み登録・候補生成・明示登録のアタッチ）のみを提供する。`ProjectSession` は `Project`・`Components`・`Scene` を束ね、開処理は候補Registryで検証してから `Adopt` する。`MainWindow` はSessionから所有権を移して `Serializer`・Inspectorのアタッチ・コード移行・Playにそのプロジェクトの登録を明示的に渡す。
 
 型登録と読込コードをProjectSessionなどのプロジェクト単位の所有者へ移す。Serializer、Inspector、コンパイル結果の採用、Playには、そのプロジェクトの登録を明示的に渡す。複数ウィンドウを開く新しいUIの追加は必要としない。
 
 完了条件：
 
-- [ ] プロジェクトごとにRegistry、ファイルと型の対応、読込コードの寿命を管理し、可変なstatic登録に依存しない。
-- [ ] 2つのプロジェクトを同時に保持し、一方の再読み込み・終了が他方の型解決、保存、Playへ影響しないことをチェックする。
-- [ ] プロジェクトを開く処理や再読み込みに失敗しても、既存の登録とSceneを保持する。
-- [ ] Component・サービスの終了とコードの解放要求の順序が明確で、不要な旧コードへの参照を所有者に残さない。
-- [ ] 既存のtypeIdと `.pureengine/types.json` の保存互換を維持する。
+- [x] プロジェクトごとにRegistry、ファイルと型の対応、読込コードの寿命を管理し、可変なstatic登録に依存しない。
+- [x] 2つのプロジェクトを同時に保持し、一方の再読み込み・終了が他方の型解決、保存、Playへ影響しないことをチェックする。
+- [x] プロジェクトを開く処理や再読み込みに失敗しても、既存の登録とSceneを保持する。
+- [x] Component・サービスの終了とコードの解放要求の順序が明確で、不要な旧コードへの参照を所有者に残さない。
+- [x] 既存のtypeIdと `.pureengine/types.json` の保存互換を維持する。
+
+実装箇所：`src/PureEngine.Editor/Projects/ProjectComponents.cs`（所有者：Registry・UserTypes・UserFileTypes・Adopt/Clear/Dispose・CreateCandidateRegistry）、`src/PureEngine.Editor/Components/ComponentAssets.cs`（stateless化：RegisterBuiltins・CreateCandidateRegistry・CanAttach/TryAttach(registry, ...)・DisposeComponents）、`src/PureEngine.Editor/Projects/ProjectSession.cs`（Components所有・候補検証・失敗時旧状態保持・TransferOwnership/Dispose）、`src/PureEngine.Editor/Windows/MainWindow.*`（所有権移譲・明示登録のSerializer/アタッチ/Play/再読み込み・終了順序）、`tests/PureEngine.Editor.Checks/ProjectIsolationChecks.cs`（2プロジェクト同時保持・同名クラス・型解決/保存/Play独立・再読み込み/失敗/終了後の独立）、既存チェックの所有者対応（Core/Editor Checks全経路）。
+検証：`dotnet run --project tests/PureEngine.Core.Checks -c Release` PASS、`dotnet run --project tests/PureEngine.Editor.Checks -c Release` PASS（EditorはPlay/所有権/Console/ユーザコード/分離/Priority/Launcherの全PASSを含む）。確認日：2026-09-22。
+所有構造の変更は `docs/EngineArchitecture.md`（生成箇所・所有者・終了順序・C#再読み込み節）へ反映済み。組み込み型は所有者生成時に各Registryへ登録（sample.*維持、user.*のみ差し替え）する方針を明示した。
+他項目との接続：A2・A3は `ProjectComponents.CreateCandidateRegistry`／`Adopt`／`Dispose`（状態確認は `ActiveUserCode`）を入口に使うこと。A1のサービス登録契約・A5の実行Session配置は作り直していない。A1/A2/A3/A5との統合動作は未検証（統合待ち）。
 
 ## A5：Editorに依存しない実行接続
 

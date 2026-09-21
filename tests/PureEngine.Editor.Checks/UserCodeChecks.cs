@@ -54,7 +54,9 @@ static class UserCodeChecks
 
     public static void Run(string parent)
     {
-        var project = ProjectSession.Create(parent, "UserCode").Project;
+        using var created = ProjectSession.Create(parent, "UserCode");
+        var project = created.Project;
+        created.Dispose();
         var workspacePath = Path.Combine(project.RootDirectory, ProjectCodeWorkspace.ProjectName);
         Check(File.Exists(workspacePath) && File.Exists(Path.Combine(project.RootDirectory, "global.json")),
             "New projects must include C# editor workspace and SDK selection.");
@@ -74,21 +76,22 @@ static class UserCodeChecks
         Directory.CreateDirectory(folder);
         var file = Path.Combine(folder, "Player.cs");
         File.WriteAllText(file, Source(1));
-        var opened = ProjectSession.Open(project.ManifestPath);
-        var session = opened.Session;
+        var session = ProjectSession.Open(project.ManifestPath);
         Check(File.Exists(workspacePath), "Opening an existing project must fill missing editor metadata.");
         Check(File.Exists(solutionPath), "Opening an existing project must fill missing solution metadata.");
-        Check(ComponentAssets.UserTypes.Count == 1, "Only visible concrete nongeneric classes should be attachable.");
-        var type = ComponentAssets.GetTypesForFile(file).Single();
+        Check(session.Components.UserTypes.Count == 1, "Only visible concrete nongeneric classes should be attachable.");
+        var type = session.Components.GetTypesForFile(file).Single();
         var item = session.Scene.AddEmpty();
         item.Rename("Unsaved player");
-        Check(ComponentAssets.TryAttach(item, type), "A class from an arbitrary project folder must attach.");
+        Check(session.Components.TryAttach(item, type), "A class from an arbitrary project folder must attach.");
         var player = item.Components.Single();
         type.GetField("Health")!.SetValue(player, 73);
         item.SetStartPriority(player, -9);
         item.SetUpdatePriority(player, 5);
         var id = item.Id;
-        var editor = new MainWindow(session, opened.EditServices);
+        var editor = new MainWindow(session);
+        var owner = Field<ProjectComponents>(editor, "_components");
+        Check(ReferenceEquals(owner, session.Components), "Editor must adopt the session owner.");
         editor.Show();
         Call(editor, "MarkSceneChanged");
         Dispatcher.UIThread.RunJobs();
@@ -100,7 +103,7 @@ static class UserCodeChecks
             Check(editor.FindControl<ListBox>("ProjectFiles")!.Items.Count == 1, "C# must appear in its own folder.");
             File.WriteAllText(file, Source(2) + "\npublic record Extra { }\npublic class Second { }");
             PumpUntil(() => Version(editor) == 2, "Saving C# must reload automatically.");
-            Check(ComponentAssets.GetTypesForFile(file).Count == 3, "Multiple classes and records must map to the source file.");
+            Check(owner.GetTypesForFile(file).Count == 3, "Multiple classes and records must map to the source file.");
             var current = Field<Scene>(editor, "_scene").Objects.Single();
             Check(current.Id == id && current.Name == "Unsaved player"
                 && current.GetStartPriority(Player(editor)) == -9 && current.GetUpdatePriority(Player(editor)) == 5
@@ -160,7 +163,7 @@ static class UserCodeChecks
             // Both absolute targets are below this freshly created test project.
             Directory.Move(folder, moved);
             file = Path.Combine(moved, "Player.cs");
-            PumpUntil(() => ComponentAssets.GetTypesForFile(file).Count == 1, "Folder moves must update source mapping.");
+            PumpUntil(() => owner.GetTypesForFile(file).Count == 1, "Folder moves must update source mapping.");
             File.Move(file, file + ".disabled");
             PumpUntil(() => editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("反映できません"),
                 "Renaming away the .cs extension must be detected.");
@@ -173,7 +176,7 @@ static class UserCodeChecks
                 .Replace("class Player", "class Hero"));
             PumpUntil(() => Version(editor) == 8, "Class and namespace renames must reload automatically.");
             Check(Player(editor).GetType().FullName == "Renamed.Game.Hero"
-                && ComponentAssets.Registry.GetId(Player(editor).GetType()) == "user.Game.Player"
+                && owner.Registry.GetId(Player(editor).GetType()) == "user.Game.Player"
                 && (int)Player(editor).GetType().GetField("Health")!.GetValue(Player(editor))! == 81
                 && Field<Scene>(editor, "_scene").Objects.Single().GetStartPriority(Player(editor)) == -9,
                 "Renames must retain component identity, Inspector values and Priority.");
@@ -182,9 +185,9 @@ static class UserCodeChecks
             var other = ProjectFile.Create(parent, "BrokenUserCodeProject", "version: 999\nobjects: []");
             File.WriteAllText(Path.Combine(other.RootDirectory, "Other.cs"), "public class Other {}");
             var activeType = Player(editor).GetType();
-            try { ProjectSession.Open(other.ManifestPath); throw new Exception("Expected failure."); }
+            try { using var failed = ProjectSession.Open(other.ManifestPath); throw new Exception("Expected failure."); }
             catch (InvalidDataException) { }
-            Check(ComponentAssets.Registry.GetType("user.Game.Player") == activeType, "Failed project open changed active registration.");
+            Check(owner.Registry.GetType("user.Game.Player") == activeType, "Failed project open changed active registration.");
 
             // Round-trip the reloaded instance, then reopen in a new editor.
             var save = (Task<bool>)Call(editor, "SaveSceneAsync", false)!;
@@ -197,21 +200,14 @@ static class UserCodeChecks
             Dispatcher.UIThread.RunJobs();
         }
         Check(Field<UserCodeWatcher?>(editor, "_userCodeWatcher") is null, "Closing must stop watching.");
-        var reopened = ProjectSession.Open(project.ManifestPath);
-        try
-        {
-            var restored = reopened.Session.Scene.Objects.Single();
-            Check(restored.Components.Single().GetType().FullName == "Renamed.Game.Hero",
-                "Renamed identity must survive closing and reopening the project.");
-            Check(restored.Id == id && (int)restored.Components.Single().GetType().GetField("Health")!.GetValue(restored.Components.Single())! == 81,
-                "Saved user components must restore after a fresh compile.");
-        }
-        finally
-        {
-            reopened.EditServices.Dispose();
-        }
-        var next = ProjectSession.Create(parent, "NoUserCode");
-        Check(ComponentAssets.UserTypes.Count == 0, "Switching projects must clear previous user code.");
+        using var reopened = ProjectSession.Open(project.ManifestPath);
+        var restored = reopened.Scene.Objects.Single();
+        Check(restored.Components.Single().GetType().FullName == "Renamed.Game.Hero",
+            "Renamed identity must survive closing and reopening the project.");
+        Check(restored.Id == id && (int)restored.Components.Single().GetType().GetField("Health")!.GetValue(restored.Components.Single())! == 81,
+            "Saved user components must restore after a fresh compile.");
+        using var next = ProjectSession.Create(parent, "NoUserCode");
+        Check(next.Components.UserTypes.Count == 0, "New projects must start without user code.");
         Check(!File.Exists(Path.Combine(next.Project.RootDirectory, "Player.cs")), "User sources must stay project-local.");
         CheckCreateCSharp(next);
         var nextWorkspace = Path.Combine(next.Project.RootDirectory, ProjectCodeWorkspace.ProjectName);
@@ -231,37 +227,36 @@ static class UserCodeChecks
 
     private static void CheckIdentitySafety(string parent)
     {
-        var project = ProjectSession.Create(parent, "IdentityUpgrade").Project;
+        using var created = ProjectSession.Create(parent, "IdentityUpgrade");
+        var project = created.Project;
+        created.Dispose();
         var source = Path.Combine(project.RootDirectory, "Legacy.cs");
         var code = "using PureEngine.Core.Attributes; public class Legacy { [Inspector] public int Value = 5; }";
         File.WriteAllText(source, code);
         // Emulate a scene made by the old version, without any identity catalog.
+        // A4: 専用の所有者へ採用し、保存互換（typeId・types.json）を維持する。
+        using var legacyOwner = new ProjectComponents();
         var compiled = UserCodeCompiler.CompileFiles([source]);
         Check(compiled.Success, "Legacy test compilation failed.");
-        ComponentAssets.SetUserCode(compiled);
+        legacyOwner.Adopt(compiled);
         var scene = new Scene();
         var item = scene.AddEmpty();
-        ComponentAssets.TryAttach(item, compiled.AttachableTypes.Single());
+        legacyOwner.TryAttach(item, compiled.AttachableTypes.Single());
         compiled.AttachableTypes.Single().GetField("Value")!.SetValue(item.Components.Single(), 99);
-        SceneFile.Write(project.StartupScenePath, new SceneSerializer(ComponentAssets.Registry).Serialize(scene));
+        SceneFile.Write(project.StartupScenePath, new SceneSerializer(legacyOwner.Registry).Serialize(scene));
+        legacyOwner.Dispose();
         File.WriteAllText(source, code.Replace("public class Legacy", "namespace NewNamespace; public class Legacy"));
-        var legacyOpened = ProjectSession.Open(project.ManifestPath);
-        try
-        {
-            var component = legacyOpened.Session.Scene.Objects.Single().Components.Single();
-            Check(component.GetType().FullName == "NewNamespace.Legacy"
-                && ComponentAssets.Registry.GetId(component.GetType()) == "user.Legacy"
-                && (int)component.GetType().GetField("Value")!.GetValue(component)! == 99,
-                "Pre-catalog scenes must survive a uniquely identifiable namespace change.");
-        }
-        finally
-        {
-            legacyOpened.EditServices.Dispose();
-        }
+        using var opened = ProjectSession.Open(project.ManifestPath);
+        var component = opened.Scene.Objects.Single().Components.Single();
+        Check(component.GetType().FullName == "NewNamespace.Legacy"
+            && opened.Components.Registry.GetId(component.GetType()) == "user.Legacy"
+            && (int)component.GetType().GetField("Value")!.GetValue(component)! == 99,
+            "Pre-catalog scenes must survive a uniquely identifiable namespace change.");
+        opened.Dispose();
 
         var duo = Path.Combine(project.RootDirectory, "Duo.cs");
         File.WriteAllText(duo, "public class A {} public class B {}");
-        using (var duoOpened = ProjectSession.Open(project.ManifestPath).EditServices) { }
+        using (var first = ProjectSession.Open(project.ManifestPath)) { first.Dispose(); }
         var metadataPath = Path.Combine(project.RootDirectory, ".pureengine", "types.json");
         var metadata = File.ReadAllText(metadataPath);
         File.WriteAllText(duo, "public class C {} public class D {}");
@@ -269,16 +264,16 @@ static class UserCodeChecks
         Check(!ambiguous.Success && ambiguous.Diagnostics.Any(d => d.Id == "PE-IDENTITY")
             && File.ReadAllText(metadataPath) == metadata, "Ambiguous renames must fail without changing IDs.");
         File.WriteAllText(duo, "namespace Moved; public class A {} public class B {}");
-        using (var movedOpened = ProjectSession.Open(project.ManifestPath).EditServices) { }
-        Check(ComponentAssets.Registry.GetType("user.A").FullName == "Moved.A"
-            && ComponentAssets.Registry.GetType("user.B").FullName == "Moved.B",
+        using var moved = ProjectSession.Open(project.ManifestPath);
+        Check(moved.Components.Registry.GetType("user.A").FullName == "Moved.A"
+            && moved.Components.Registry.GetType("user.B").FullName == "Moved.B",
             "Multiple classes may change namespace when names identify them uniquely.");
-        ComponentAssets.ClearUserCode();
     }
 
     private static void CheckCreateCSharp(ProjectSession session)
     {
         var editor = new MainWindow(session);
+        var owner = Field<ProjectComponents>(editor, "_components");
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         void Create(string menuName, string? name)
@@ -314,7 +309,7 @@ static class UserCodeChecks
             Create("FilesCreateCSharpMenu", null);
             Check(Directory.GetFiles(session.Project.ScenesDirectory, "*.cs").Length == 2,
                 "Cancellation and invalid names must not create files.");
-            PumpUntil(() => ComponentAssets.GetTypesForFile(path).Count == 1 && ComponentAssets.GetTypesForFile(second).Count == 1,
+            PumpUntil(() => owner.GetTypesForFile(path).Count == 1 && owner.GetTypesForFile(second).Count == 1,
                 "Created scripts must enter the normal automatic compilation flow.");
         }
         finally

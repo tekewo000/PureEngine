@@ -57,7 +57,7 @@ public partial class MainWindow
         PlaySession? session;
         try
         {
-            session = PlaySession.Prepare(_scene, ComponentAssets.Registry);
+            session = PlaySession.Prepare(_scene, _components.Registry);
         }
         catch (Exception error)
         {

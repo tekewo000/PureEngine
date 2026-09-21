@@ -24,11 +24,6 @@ static class ConsoleChecks
 
     public static void Run()
     {
-        ComponentAssets.Registry.Register<ConsoleProbe>("checks.console-probe");
-        ComponentAssets.Registry.Register<ConsoleFailUpdate>("checks.console-fail-update");
-        ComponentAssets.Registry.Register<ConsoleFailCleanup>("checks.console-fail-cleanup");
-        ComponentAssets.Registry.Register<ConsoleFailCleanupB>("checks.console-fail-cleanup-b");
-
         BasicDisplay();
         FiltersSearchAndSelection();
         EngineSourceFilter();
@@ -41,10 +36,21 @@ static class ConsoleChecks
         Console.WriteLine("PASS: console list/detail, filters/search, clear/clear-on-play, play errors dedup, and close/reopen.");
     }
 
+    private static void EnsureChecks(MainWindow editor)
+    {
+        // A4: 各ウィンドウの所有者に明示登録する。共有staticには依存しない。
+        var components = Field<ProjectComponents>(editor, "_components");
+        components.Registry.Register<ConsoleProbe>("checks.console-probe");
+        components.Registry.Register<ConsoleFailUpdate>("checks.console-fail-update");
+        components.Registry.Register<ConsoleFailCleanup>("checks.console-fail-cleanup");
+        components.Registry.Register<ConsoleFailCleanupB>("checks.console-fail-cleanup-b");
+    }
+
     private static MainWindow CreateEditor()
     {
         _ = Log.Drain();
         var editor = new MainWindow();
+        EnsureChecks(editor);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         // Deterministic: stop play timer, drain console manually.
@@ -514,8 +520,9 @@ static class ConsoleChecks
         {
             var scene = Field<Scene>(auto, "_scene");
             var services = Field<GameSession>(auto, "_editSession");
+            var owner = Field<ProjectComponents>(auto, "_components");
             var item = scene.AddEmpty();
-            ComponentAssets.TryAttach(item, typeof(ConsoleFailUpdate), services.Factory);
+            owner.TryAttach(item, typeof(ConsoleFailUpdate), services.Factory);
             Dispatcher.UIThread.RunJobs();
             Control<CheckBox>(auto, "ConsoleClearOnPlay").IsChecked = true;
             Dispatcher.UIThread.RunJobs();
