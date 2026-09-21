@@ -40,6 +40,11 @@ public partial class MainWindow
 
     private async Task RunFileOperation(Func<Task> operation)
     {
+        if (IsPlaying)
+        {
+            SetFileStatus("Play中はシーン操作できません。先にStopしてください。", true);
+            return;
+        }
         if (_fileBusy) return;
         _fileBusy = true;
         EditorSurface.IsEnabled = false;
@@ -97,6 +102,11 @@ public partial class MainWindow
 
     private async Task OpenScenePathAsync(string path)
     {
+        if (IsPlaying)
+        {
+            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            return;
+        }
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
         // 編集用 factory でコンストラクタ注入し、Play 用とは別のサービス群を使う。
@@ -112,6 +122,11 @@ public partial class MainWindow
 
     private void SetCurrentScene(Scene restored, string? path)
     {
+        if (IsPlaying)
+        {
+            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            return;
+        }
         var previous = _scene;
         _scene = restored;
         SceneObjects.SelectedItem = null;
@@ -130,14 +145,31 @@ public partial class MainWindow
 
     private void CloseEditSession()
     {
-        var previous = _scene;
+        _playTimer?.Stop();
+        try
+        {
+            ForceStopPlayForShutdown();
+        }
+        catch (Exception error)
+        {
+            // 実行中の後片付け失敗でも編集側の解放は続ける。例外は集約して報告する。
+            var previous = _scene;
+            _scene = new Scene();
+            var errors = new List<Exception> { error };
+            try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
+            catch (Exception disposeError) { errors.Add(disposeError); }
+            try { _editSession.Dispose(); }
+            catch (Exception disposeError) { errors.Add(disposeError); }
+            throw new AggregateException("Editor cleanup failed.", errors);
+        }
+        var previousScene = _scene;
         _scene = new Scene();
-        var errors = new List<Exception>();
-        try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
-        catch (Exception error) { errors.Add(error); }
+        var editErrors = new List<Exception>();
+        try { ComponentAssets.DisposeComponents(previousScene.Objects.SelectMany(item => item.Components)); }
+        catch (Exception error) { editErrors.Add(error); }
         try { _editSession.Dispose(); }
-        catch (Exception error) { errors.Add(error); }
-        if (errors.Count != 0) throw new AggregateException("Editor cleanup failed.", errors);
+        catch (Exception error) { editErrors.Add(error); }
+        if (editErrors.Count != 0) throw new AggregateException("Editor cleanup failed.", editErrors);
     }
 
     /// <summary>開いたシーンのフォルダをExplorerで選び直し、右ペインでそのファイルを選択する。</summary>
@@ -189,6 +221,16 @@ public partial class MainWindow
     {
         if (_allowClose) return;
         if (_fileBusy) { e.Cancel = true; return; }
+        if (_play is not null)
+        {
+            // 実行中なら確実に終了・解放してから未保存確認へ進む。編集Sceneは実行前の状態を保つ。
+            if (!StopPlay())
+            {
+                // エラーを読めるよう今回は閉じない。次のCloseでは通常の未保存確認へ進む。
+                e.Cancel = true;
+                return;
+            }
+        }
         if (!_sceneDirty && _invalidFields.Count == 0 && !NameError.IsVisible) return;
         e.Cancel = true;
         await RunFileOperation(async () =>

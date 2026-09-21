@@ -4,13 +4,13 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。EditorのPlay／Stopボタン接続は未着手。
+実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。
 
 ## 現在の到達点
 
 **LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値とPriorityを編集し、YAMLで保存・復元できる。**
 
-制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。Scene View／Gameはまだ描画・ゲーム実行を行わない。
+制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene View／Gameの描画はまだ行わない。
 
 ## 実装済み
 
@@ -25,6 +25,7 @@
 | ドラッグ＆ドロップ | ComponentsからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
+| EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | Inspector | string・int・float・boolの表示と編集、数値の無効表示・エラー数、Escで復元、非有限floatの拒否、存在するライフサイクルのPriority表示と編集 | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | シーン保存 | YAML version 1、ID・名前・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
@@ -34,7 +35,7 @@
 
 ## まだできないこと・制限
 
-- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stop接続は未実装。
+- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。ゲーム画面の描画・プレビューは未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
 - クラスの登録はEditorにコンパイルされた共通のサンプルが対象。ProjectごとのC#コンパイル、外部 `.cs` の読み込み、自動探索は未実装。サンプルにコンストラクタ注入の `InjectedPlayer`、`BattleSession`、`IRandomService` を追加済み。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
@@ -75,9 +76,9 @@
 
 ### 4. Editorから実行・停止する
 
-- [ ] 既存のPreview部分を実際の開始・停止操作につなぐ（`PlaySession` が接続口として準備済み）。
-- [ ] 実行中の状態・例外を確認できるようにする。
-- [ ] 停止後に編集用データが意図せず変わらないことを確認する。
+- [x] 既存のPreview部分を実際の開始・停止操作につなぐ（`PlaySession` が接続口として準備済み）。
+- [x] 実行中の状態・例外を確認できるようにする。
+- [x] 停止後に編集用データが意図せず変わらないことを確認する。
 
 完了条件：Editorでサンプルを実行・停止し、再実行できる。描画技術の選定は別途扱う。
 
@@ -95,6 +96,17 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+2026-09-21、EditorのPlay／Stop接続の実装後に以下を実行し、両方PASS。
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release
+dotnet run --project tests/PureEngine.Editor.Checks -c Release
+```
+
+- Editor（Play／Stop接続）：ツールバーのPlay／Stopと実行状態に応じた有効化、独立SceneでのStart1回・継続Update・Stop時のDestroy1回、再Play時の新規SceneRuntime、編集中Sceneの実行前状態の保持、Inspector入力エラー時の開始拒否と理由表示、実行中の編集・切替の無効化とStop後の復帰、開始失敗・更新失敗時の後片付けと画面下部への表示、二重停止のno-op、実行中のウィンドウ終了時の終了・解放をHeadlessで確認。
+- 既存分：前回（ゲーム用コンストラクタ注入後）の全項目を再確認。
+- 実画面のPlay操作の見た目とタイマーの実測間隔は自動チェックの対象外。画面下部のメッセージで開始・停止を確認する。
 
 - DI 終了処理の回帰確認：Stop 単独、Start 前の停止、コールバック中の Dispose／Stop、Runtime 直接停止、Start／Update 失敗で、Component → サービスの終了順序と単発解放を確認。Editor Headless では再読込・キャンセル・新規シーン切替・削除・終了時の Component 解放と、解放例外後の継続を確認。
 

@@ -66,7 +66,7 @@ public partial class MainWindow
     private void RefreshProjectExplorer()
     {
         CloseProjectMenu.IsEnabled = _project is not null;
-        StartupSceneMenu.IsEnabled = _project is not null;
+        StartupSceneMenu.IsEnabled = _project is not null && !IsPlaying;
         ToolTip.SetTip(ProjectTab, _project is null ? null : $"{_project.Document.Name} — Start: {_project.Document.StartupScene}");
         _explorerRefreshing = true;
         try
@@ -263,6 +263,11 @@ public partial class MainWindow
 
     private async Task OpenSelectedExplorerEntry()
     {
+        if (IsPlaying)
+        {
+            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            return;
+        }
         if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
         if (entry.Kind == ProjectExplorerKind.Folder && entry.RelativePath is not null)
         {

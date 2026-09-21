@@ -38,6 +38,7 @@ internal static class Program
             desktop.MainWindow = launcher;
             launcher.Show();
             Dispatcher.UIThread.RunJobs();
+            PlayConnectionChecks.Run();
             EditorOwnershipChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";

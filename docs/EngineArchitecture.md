@@ -86,7 +86,7 @@ private void Tick(float dt) { }
 `dt` は前フレームからの経過秒。見た目やアニメーションに使う。
 ホストとクライアントで一致しないため、勝敗・配札などのゲームルールを `dt` に依存させない。
 
-以下は2026-09-21に合意した仕様。Coreの `SceneRuntime` で実装済み。EditorのPlay／Stop接続は未実装。
+以下は2026-09-21に合意した仕様。Coreの `SceneRuntime` で実装済み。EditorのPlay／Stop接続も実装済み。
 
 - 各クラスでStart・Update・Destroyはそれぞれ最大1つ。継承を含めて判定し、overrideは1つの実行対象として扱う。
 - 非public（基底クラスのprivateを含む）も対象とし、非static・非generic・同期のvoidメソッドに限定する。async voidも認めない。abstractは具象overrideを実行対象とする。
@@ -134,7 +134,7 @@ private void Tick(float dt) { }
 - オブジェクトのID・名前・アタッチ構成と、対応済みの制作データ、Priorityを引き継ぐ。クラスのメンバーは `[Inspector]` の値を引き継ぎ、それ以外は新しいインスタンスの初期値を使う。
 - 実行中の変更を編集用Sceneに自動で書き戻さない。コピーはPlay時に行い、毎フレームは行わない。実行用SceneでのPriority変更も編集用Sceneに漏れない。
 - この分離はSceneとそのインスタンスが対象。ゲームコードのstatic変数や外部への副作用の巻き戻しを意味しない。
-- 複製には `SceneSerializer.Clone` を使い、既存の制作データ変換・検証を共有する。YAML文字列やファイルを経由しない。Play 時の Clone には Play 用 factory を渡し、注入されたサービス参照は保存・コピーせず Clone 先のサービス群から新しく解決する。Editor の Play／Stop ボタン接続は未実装のため、Play 実行には `PlaySession` を使う。ボタンの配線は後続作業。
+- 複製には `SceneSerializer.Clone` を使い、既存の制作データ変換・検証を共有する。YAML文字列やファイルを経由しない。Play 時の Clone には Play 用 factory を渡し、注入されたサービス参照は保存・コピーせず Clone 先のサービス群から新しく解決する。Editor の Play／Stop ボタンは `PlaySession` を使う。
 
 ### 実行コスト（実装・測定済み）
 
@@ -145,7 +145,7 @@ private void Tick(float dt) { }
 - 変更のないフレームでは実行機構が一時配列やリストを生成しない。空Updateの測定では定常Stepの割り当て量は0 Bだった（Priority適用後も0 Bを維持）。ゲームコード側の割り当ては別。
 - 開始時の複製・結び付け・Startと、Update対象数ごとの1ステップ時間・割り当て量を分けて測定済み。条件と結果は [ImplementationPlan.md](ImplementationPlan.md) に記載。実際のゲームのFPSや対応個数は保証しない。
 
-### Priority（Core・Editorで実装済み。EditorのPlay／Stop接続は未実装）
+### Priority（Core・Editorで実装済み。Play／Stop接続を含む）
 
 - Priorityはアタッチごと、かつライフサイクルごとのエンジン側設定とする。ゲーム側クラスに基底クラス・インターフェース・Priority用メンバーを要求しない。
 - Start／Update／Destroyそれぞれに独立した整数値を持ち、初期値は `0`、負の値も許可する。同じ型でも別オブジェクトへのアタッチなら別の値を設定できる。

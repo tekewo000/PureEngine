@@ -182,19 +182,19 @@
           <MenuItem Header="File">
             <MenuItem x:Name="CloseProjectMenu" Header="Return to Launcher" InputGesture="Ctrl+Shift+O" Click="OnCloseProject" />
             <Separator />
-            <MenuItem Header="New Scene" InputGesture="Ctrl+N" Click="OnNewScene" />
-            <MenuItem Header="Open Scene…" InputGesture="Ctrl+O" Click="OnOpenScene" />
-            <MenuItem Header="Save Scene" InputGesture="Ctrl+S" Click="OnSaveScene" />
-            <MenuItem Header="Save Scene As…" InputGesture="Ctrl+Shift+S" Click="OnSaveSceneAs" />
+            <MenuItem x:Name="NewSceneMenu" Header="New Scene" InputGesture="Ctrl+N" Click="OnNewScene" />
+            <MenuItem x:Name="OpenSceneMenu" Header="Open Scene…" InputGesture="Ctrl+O" Click="OnOpenScene" />
+            <MenuItem x:Name="SaveSceneMenu" Header="Save Scene" InputGesture="Ctrl+S" Click="OnSaveScene" />
+            <MenuItem x:Name="SaveSceneAsMenu" Header="Save Scene As…" InputGesture="Ctrl+Shift+S" Click="OnSaveSceneAs" />
             <MenuItem x:Name="StartupSceneMenu" Header="Set Current Scene as Startup" Click="OnSetStartupScene" IsEnabled="False" />
           </MenuItem>
         </Menu>
         <TextBlock Text="Edit" Classes="muted" />
         <TextBlock Text="View" Classes="muted" />
       </StackPanel>
-      <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="22">
-        <Path Data="M 0,0 L 0,12 L 9,6 Z" Fill="#B8AFF1" Width="9" Height="12" VerticalAlignment="Center" />
-        <TextBlock Text="Preview" Classes="muted" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+        <Button x:Name="PlayButton" Content="▶ Play" Click="OnPlayClicked" AutomationProperties.Name="Play" />
+        <Button x:Name="StopButton" Content="■ Stop" Click="OnStopClicked" IsEnabled="False" AutomationProperties.Name="Stop" />
       </StackPanel>
     </Grid>
 
@@ -227,7 +227,7 @@
               <Grid x:Name="SceneSurface" Background="Transparent" DragDrop.AllowDrop="True">
                 <Grid.ContextMenu>
                   <ContextMenu>
-                    <MenuItem Header="Add Empty" Click="OnAddObject" />
+                    <MenuItem x:Name="AddObjectMenuItem" Header="Add Empty" Click="OnAddObject" />
                     <Separator />
                     <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
                               InputGesture="Delete" IsEnabled="False" />

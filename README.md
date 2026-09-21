@@ -19,6 +19,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - Inspectorで `[Inspector]` 付きのstring・int・float・boolを編集し、YAMLで保存・読み込みできる。
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
+- ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -93,11 +94,11 @@ dotnet run --project src/PureEngine.Editor
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
-Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）は実装済み。Editorからのゲーム実行、Steam連携、ゲーム内UI配置はまだ実装していません。
+Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。ゲーム画面の描画、Steam連携、ゲーム内UI配置はまだ実装していません。
 
 ## Coreのライフサイクル実行
 
-既存のSceneとComponentRegistryから、編集データと独立した実行用Sceneを作れます。EditorのPlay／Stopへの接続はまだありません。
+既存のSceneとComponentRegistryから、編集データと独立した実行用Sceneを作れます。ツールバーのPlay／Stopで開始・停止できます。
 
 ```csharp
 using var runtime = new SceneRuntime(scene, registry);
@@ -109,6 +110,10 @@ foreach (var error in runtime.Errors)
 ```
 
 実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroy＋Disposeします。各ライフサイクルはPriorityの小さい順に実行し、同値は順序を保証しません。動的追加分は最初のStartより前に `SetStartPriority` などで設定できます。全Componentの生成・復元・検証が成功してからStartし、準備失敗時はStart／Destroyせず生成済み `IDisposable` のみ解放します。Start途中失敗でも受入済み全対象をDestroy＋Disposeし、一つの終了処理の例外でも残りを続けて `Errors` に報告します。`Stop()`／`Dispose()` の重複はno-opで二重終了しません。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
+
+ツールバーのPlayは編集中Sceneの複製で `PlaySession` を作り、約60Hzのタイマーで実測の経過秒を渡して更新します。Inspectorに入力エラーがある間は開始せず、画面下部に理由を表示します。実行中はシーン編集・切替とシーン操作メニューを無効化し、Stopで終了します。開始・更新・終了の失敗とSceneRuntimeのErrorsは画面下部に表示し、失敗後も操作可能な状態へ戻します。ウィンドウを閉じる際も実行中なら終了・解放します。再Playは新しいSceneRuntimeで開始します。描画はまだ行いません。
+
+Playの実行・終了エラーは画面下部に表示し、ツールチップで全件の発生箇所と例外詳細を確認できます。ウィンドウ終了時にPlayの後片付けでエラーが発生した場合は、その回の終了を取り消して表示を残します。内容を確認してもう一度閉じると終了できます。
 
 ## ゲームのサービス登録とコンストラクタ注入
 
@@ -125,7 +130,7 @@ public sealed class InjectedPlayer(IRandomService random, BattleSession session)
 }
 ```
 
-Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlay／Stopボタン接続は未実装のため、ボタン配線の接続口として使います。
+Component 自体の DI 登録は不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
 
 ```csharp
 using var play = PlaySession.Prepare(scene, ComponentAssets.Registry);

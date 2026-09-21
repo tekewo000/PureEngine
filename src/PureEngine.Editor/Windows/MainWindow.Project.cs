@@ -17,6 +17,11 @@ public partial class MainWindow
 
     private async Task NewSceneAsync()
     {
+        if (IsPlaying)
+        {
+            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            return;
+        }
         if (!await ConfirmUnsavedChanges()) return;
         SetCurrentScene(new Scene(), null);
         MarkSceneChanged();

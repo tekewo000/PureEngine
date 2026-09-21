@@ -58,6 +58,7 @@ public partial class MainWindow : Window
             surface.AddHandler(DragDrop.DragOverEvent, OnComponentDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
             surface.AddHandler(DragDrop.DropEvent, OnComponentDrop, RoutingStrategies.Bubble, handledEventsToo: true);
         }
+        InitPlayControls();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
@@ -97,6 +98,12 @@ public partial class MainWindow : Window
 
     private void OnComponentDragOver(object? sender, DragEventArgs e)
     {
+        if (IsPlaying)
+        {
+            e.DragEffects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
         e.DragEffects = ComponentAssets.CanAttach(DropTarget(sender, e), e.DataTransfer.TryGetValue(ComponentFormat))
             ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -106,6 +113,7 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
         e.DragEffects = DragDropEffects.None;
+        if (RejectWhenPlaying("アタッチ")) return;
         var target = DropTarget(sender, e);
         var type = e.DataTransfer.TryGetValue(ComponentFormat);
         if (!ComponentAssets.CanAttach(target, type)) return;
@@ -213,6 +221,7 @@ public partial class MainWindow : Window
         box.SetValue(AutomationProperties.NameProperty, $"{type.Name}.{kind}Priority");
         box.TextChanged += (_, _) =>
         {
+            if (IsPlaying) return;
             if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
             {
                 if (getter() != value)
@@ -389,6 +398,7 @@ public partial class MainWindow : Window
 
     private void SetMemberValue(object component, MemberInfo member, object? value)
     {
+        if (IsPlaying) return;
         if (Equals(GetMemberValue(component, member), value)) return;
         switch (member)
         {
@@ -410,6 +420,7 @@ public partial class MainWindow : Window
 
     private void OnAddObject(object? sender, RoutedEventArgs e)
     {
+        if (RejectWhenPlaying("追加")) return;
         var item = _scene.AddEmpty();
         MarkSceneChanged();
         SceneObjects.SelectedItem = item;
@@ -423,7 +434,7 @@ public partial class MainWindow : Window
     private void RefreshObjectInspector()
     {
         var item = SceneObjects.SelectedItem as SceneObject;
-        DeleteObjectMenuItem.IsEnabled = item is not null;
+        DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying;
         ObjectInspector.IsVisible = item is not null;
         ObjectName.Text = item?.Name ?? "";
         var id = item?.Id.ToString() ?? "";
@@ -435,6 +446,7 @@ public partial class MainWindow : Window
 
     private void OnObjectNameChanged(object? sender, TextChangedEventArgs e)
     {
+        if (IsPlaying) return;
         if (SceneObjects.SelectedItem is not SceneObject item) return;
         NameError.IsVisible = string.IsNullOrWhiteSpace(ObjectName.Text);
         if (!NameError.IsVisible && item.Name != ObjectName.Text!.Trim())
@@ -455,6 +467,7 @@ public partial class MainWindow : Window
 
     private void DeleteSelectedObject()
     {
+        if (RejectWhenPlaying("削除")) return;
         if (SceneObjects.SelectedItem is not SceneObject item) return;
         var index = SceneObjects.SelectedIndex;
         _scene.Remove(item);
