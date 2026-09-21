@@ -17,6 +17,10 @@ public sealed record UserCodeDiagnostic(
 /// <summary>プロジェクト内の自作C#ファイルのコンパイル結果。</summary>
 public sealed class UserCodeCompileResult
 {
+    internal Dictionary<Type, string> TypeIds { get; } = [];
+    internal string? IdentityPath { get; set; }
+    internal string? IdentityContent { get; set; }
+    internal string GetTypeId(Type type) => TypeIds.GetValueOrDefault(type) ?? UserCodeCompiler.TypeIdFor(type);
     public bool Success { get; init; }
     public IReadOnlyList<UserCodeDiagnostic> Diagnostics { get; init; } = [];
     public IReadOnlyList<string> SourceFiles { get; init; } = [];
@@ -64,7 +68,7 @@ public static class UserCodeCompiler
         return true;
     }
 
-    /// <summary>安定した保存ID。C#のクラス名・名前空間を変更しても固定IDは維持できないため、FullName基準とする。改名は削除＋追加として扱う。</summary>
+    /// <summary>初回登録用のID。Project内ではUserCodeIdentityが改名後も元のIDを保持する。</summary>
     public static string TypeIdFor(Type type) => "user." + (type.FullName ?? type.Name);
 
     /// <summary>プロジェクト直下の .cs を再帰列挙する。bin/obj/.git/.vs は除外する。</summary>
@@ -118,7 +122,19 @@ public static class UserCodeCompiler
     public static UserCodeCompileResult CompileProject(string rootDirectory)
     {
         var files = ListSourceFiles(rootDirectory);
-        return CompileFiles(files);
+        var result = CompileFiles(files);
+        if (!result.Success) return result;
+        try { UserCodeIdentity.Resolve(rootDirectory, result); }
+        catch (Exception error)
+        {
+            result.LoadContext?.Unload();
+            return new UserCodeCompileResult
+            {
+                Success = false, SourceFiles = files,
+                Diagnostics = [new UserCodeDiagnostic("", 0, 0, "PE-IDENTITY", error.Message, true)],
+            };
+        }
+        return result;
     }
 
     public static UserCodeCompileResult CompileFiles(IReadOnlyList<string> files)

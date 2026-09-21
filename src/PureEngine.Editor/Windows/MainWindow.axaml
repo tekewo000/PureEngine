@@ -278,6 +278,7 @@
                     <TreeView.ContextMenu>
                       <ContextMenu>
                         <MenuItem x:Name="TreeCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />
+                        <MenuItem x:Name="TreeCreateCSharpMenu" Header="Create C#" Click="OnExplorerCreateCSharp" />
                         <MenuItem x:Name="TreeCreateSceneMenu" Header="Create Scene" Click="OnExplorerCreateScene" />
                         <Separator />
                         <MenuItem x:Name="TreeRenameMenu" Header="Rename" Click="OnExplorerRename" />
@@ -312,6 +313,7 @@
                       <MenuItem x:Name="FilesStartupMenu" Header="Set as Startup Scene" Click="OnSetStartupScene" />
                       <Separator />
                       <MenuItem x:Name="FilesCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />
+                      <MenuItem x:Name="FilesCreateCSharpMenu" Header="Create C#" Click="OnExplorerCreateCSharp" />
                       <MenuItem x:Name="FilesCreateSceneMenu" Header="Create Scene" Click="OnExplorerCreateScene" />
                       <Separator />
                       <MenuItem x:Name="FilesRenameMenu" Header="Rename" Click="OnExplorerRename" />

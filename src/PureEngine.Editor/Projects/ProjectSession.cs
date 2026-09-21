@@ -8,6 +8,7 @@ public sealed record ProjectSession(ProjectFile Project, Scene Scene)
     public static ProjectSession Open(string manifestPath, Func<Type, object>? factory = null)
     {
         var project = ProjectFile.Open(manifestPath);
+        ProjectCodeWorkspace.Ensure(project);
         var compiled = UserCodeCompiler.CompileProject(project.RootDirectory);
         var adopted = false;
         Scene? scene = null;
@@ -55,6 +56,7 @@ public sealed record ProjectSession(ProjectFile Project, Scene Scene)
         var scene = new Scene();
         var yaml = new SceneSerializer(ComponentAssets.Registry).Serialize(scene);
         var project = ProjectFile.Create(parentDirectory, name, yaml);
+        ProjectCodeWorkspace.Ensure(project);
         ComponentAssets.ClearUserCode();
         return new(project, scene);
     }

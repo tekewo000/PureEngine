@@ -50,6 +50,7 @@ public partial class MainWindow
         _userCodeReloading = true;
         _userCodePendingReload = false;
         UserCodeCompileResult? compiled = null;
+        Scene? migrated = null;
         var adopted = false;
         try
         {
@@ -66,7 +67,7 @@ public partial class MainWindow
                 return;
             }
             var registry = ComponentAssets.CreateRegistry(compiled);
-            var migrated = SceneCodeMigrator.Migrate(_scene, ComponentAssets.Registry, registry, _editSession.Factory);
+            migrated = SceneCodeMigrator.Migrate(_scene, ComponentAssets.Registry, registry, _editSession.Factory);
             var previous = _scene;
             var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
             var wasDirty = _sceneDirty;
@@ -91,7 +92,15 @@ public partial class MainWindow
         }
         finally
         {
-            if (!adopted) compiled?.LoadContext?.Unload();
+            if (!adopted)
+            {
+                try
+                {
+                    if (migrated is not null) ComponentAssets.DisposeComponents(migrated.Objects.SelectMany(item => item.Components));
+                }
+                catch (Exception error) { Log.Error("採用できなかったC#の後片付けに失敗しました。", error); }
+                finally { compiled?.LoadContext?.Unload(); }
+            }
             _userCodeReloading = false;
             RefreshProjectExplorer();
             DrainConsole();

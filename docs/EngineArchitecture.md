@@ -218,7 +218,7 @@ components:
 - Editorの `ProjectFile` がProjectの作成・読み込み・シーンの列挙・起動シーンの変更を扱う。シーン一覧自体は保存せず、Scenesフォルダから取得する。
 - Launcherで新規Projectを作り、空のMainシーンで開始する。作成途中は一時フォルダに書き込み、完成後に新しいProjectフォルダとして配置する。既存の同名フォルダは上書きしない。
 - Projectを開くと起動シーンを編集対象にする。Project Explorerの右ペインでシーンファイルをダブルクリックまたはEnterで切り替える。
-- 底ペインのProject Explorerは左にフォルダTree、右に中身を出す。Assets／Scenesタブは廃止し、Projectルートの下に実フォルダと仮想のComponentsを並べる。Componentsは組み込みサンプルのドラッグ元で、ファイル操作の対象外。自作C#は元のフォルダ内のファイルからアタッチする。
+- 底ペインのProject Explorerは左にフォルダTree、右に中身を出す。Assets／Scenesタブは廃止し、Projectルートの下には実在するフォルダとファイルだけを表示する。組み込みサンプルの仮想Components一覧は表示しない。自作C#は元のフォルダ内のファイルからアタッチする。
 - 右クリック（またはF2・Delete・Enter）でフォルダ作成・シーン作成・改名・削除・起動シーン設定・更新ができる。シーン作成はScenes配下のみ。Scenesフォルダ自体の改名・削除は不可。
 - 改名・削除では編集中シーンと起動シーンの参照を付け替える。起動シーンと編集中シーン（を含むフォルダ）は削除できず、改名時はScenes外への脱出を拒否する。
 - シーンの保存先はProjectのScenesフォルダ内とする。絶対パスによる参照、フォルダ外への参照、リンクによる外部参照を認めない。
@@ -294,10 +294,26 @@ components:
 
 ## ProjectのC#再読み込み
 
-RoslynでProject内のソースを一括コンパイルし、collectible AssemblyLoadContextへ読み込む。型IDは `user.`＋FullNameで、ファイルパスには依存しない。publicの具象・非genericクラスを対象にし、1ファイルの複数対象は未アタッチ分をまとめて追加する。補助クラスはinternal等で区別する。
+RoslynでProject内のソースを一括コンパイルし、collectible AssemblyLoadContextへ読み込む。型IDの初期値は `user.`＋FullNameだが、以後は `.pureengine/types.json` に永続化し、完全名と相対ソースパスの対応を更新する。publicの具象・非genericクラスを対象にし、1ファイルの複数対象は未アタッチ分をまとめて追加する。補助クラスはinternal等で区別する。
 
 監視通知は600msまとめ、UIスレッドで適用する。Play中・ファイル操作中・Inspector入力エラー中は保留する。旧Registryで編集データを保存形式へ取り出し、新Registryで別Sceneへ復元する。ID・名前・Inspector値・Priorityを維持し、未保存状態と選択を戻す。型・メンバーの削除や型変更、Priorityの移行不能では切替自体を拒否し、旧コードとデータを保持する。生成途中の失敗は既存Serializerの逆順解放を使う。
 
 Project開始時も候補Registryで起動シーンの読み込みが成功してから公開する。終了時は監視とインスタンスを解放し、ユーザー型の登録を外してALCのUnloadを要求する。Coreの型キャッシュはConditionalWeakTableを使い、古いユーザー型を静的キャッシュで保持し続けない。ユーザー自身のstaticイベント購読等の解除はDispose側の責任。
 
 外部NuGet・独自csproj設定、実行状態を維持したPlay中の差し替えは対象外。プロジェクト全体のコンパイルは同期処理であり、大規模化時のバックグラウンド化は今後の課題。
+
+
+## 外部エディターのC# Workspace
+
+ProjectSessionのCreate/OpenでProjectCodeWorkspace.Ensureを呼び、net11.0のPureEngine.Game.csprojを生成する。起動中EngineのPureEngine.Core.dllを参照し、再Openで参照パスを更新する。生成コメントがない既存csprojは上書きしない。他名のcsprojがある場合も重複生成しない。
+
+global.jsonはEngineビルド時に埋め込んだSDK設定を不足時のみコピーする。ゲームも.NET 11を使用し、Zed等の言語サーバーから同じSDKを解決する。Zed固有のユーザー設定は変更しない。これは編集用メタデータであり、RuntimeのRoslynコンパイルは引き続き独立している。
+
+既存のsln/slnxがなければPureEngine.Game.slnxを生成し、Roslynの自動読み込みの入口にする。TestProjectでcsproj単体よりもソリューション経由の読み込みが必要だったため、両方を用意する。
+
+
+## クラスの改名と永続ID
+
+候補コンパイルで旧IDとの対応を解決し、Sceneの復元成功後、型登録の公開前にID管理ファイルを一時ファイル経由で保存する。移行・生成失敗時はID管理も旧状態に残す。完全名一致を先に予約し、同じソースファイルの一意な短いクラス名、残った旧新1対1の順で解決する。多対多の場合は推測しない。型が消えた場合もID記録を残して再利用を避ける。
+
+初回導入時は保存シーンのuser.* IDを集め、完全名または一意な短いクラス名が一致すれば引き継ぐ。型IDの管理ファイルもプロジェクトの保存対象とする。ファイルとクラスを同時に改名する場合や多対多の改名は自動推測せず、変更を分ける。フィールド名・型の変更に対する既存の保護は維持する。

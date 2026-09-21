@@ -18,11 +18,11 @@
 | --- | --- | --- |
 | Launcher | Project新規作成、既存Projectを開く、最近開いたProject、Editorからの復帰 | [LauncherWindow](../src/PureEngine.Editor/Windows/LauncherWindow.axaml.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
 | Project | manifest、複数シーン、起動シーン指定、相対パス、Projectフォルダの移動 | [ProjectFile](../src/PureEngine.Editor/Projects/ProjectFile.cs)、[ProjectDocument](../src/PureEngine.Core/Projects/ProjectDocument.cs) |
-| Project Explorer | フォルダツリーとファイル一覧、シーンを開く、作成・改名・削除・更新、Components一覧 | [MainWindow.ProjectExplorer](../src/PureEngine.Editor/Windows/MainWindow.ProjectExplorer.cs) |
+| Project Explorer | フォルダツリーとファイル一覧、シーンを開く、作成・改名・削除・更新、名前指定で空のsealedクラスを作るCreate C#。組み込みComponents一覧は表示しない | [MainWindow.ProjectExplorer](../src/PureEngine.Editor/Windows/MainWindow.ProjectExplorer.cs) |
 | Editorの配置 | 左がScene View／Game、中央がStuffs、右がInspector、下部がProject／Console。ペインのサイズ変更 | [MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除 | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs) |
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
-| ドラッグ＆ドロップ | ComponentsからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
+| ドラッグ＆ドロップ | Projectの自作C#ファイルからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
@@ -33,6 +33,7 @@
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
 | 共通ログとConsole | `Log.Info/Warning/Error` の共有API、呼び出し元・例外詳細の保持、有界キュー。Consoleの一覧・フィルター・検索・詳細・コピー・Clear／Clear on Play、Play開始・停止・失敗とRuntime全件の重複なし取り込み | [Log](../src/PureEngine.Core/Log.cs)、[MainWindow.Console](../src/PureEngine.Editor/Windows/MainWindow.Console.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | ProjectごとのC# | 任意フォルダのC#からアタッチ、保存・移動の監視、Stop後の反映、未保存値・Priority保持、失敗時の旧状態保持とConsole診断 | [UserCodeCompiler](../src/PureEngine.Editor/Compilation/UserCodeCompiler.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) |
+| 外部C#エディター | 新規作成・既存Projectを開く際にnet11.0のcsproj・slnxと不足分のSDK設定を生成。手動設定は保持 | [ProjectCodeWorkspace](../src/PureEngine.Editor/Projects/ProjectCodeWorkspace.cs) |
 | ソース構成 | srcに実装、testsにチェック、docsに文書、toolsに起動スクリプト | [PureEngine.slnx](../PureEngine.slnx) |
 
 ## まだできないこと・制限
@@ -106,6 +107,12 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+クラス改名対応：クラス名＋名前空間変更後のID・Inspector値・Priority維持、保存後の再Open、旧シーンの名前空間変更からの初回移行、多対多改名時の拒否と管理ファイル保持、複数クラスの名前空間変更をEditorチェックで確認。
+
+Create C#追加：Editor Headlessで左右の右クリックメニューのClickから名前入力・作成を確認。指定ひな形、拡張子省略、重複拒否、不正名拒否、キャンセル、自動コンパイルへの接続を検証。
+
+C#編集用Workspace追加：Editorチェックで新規生成、既存Projectへの補完、変更なしの再書き込み抑止、手動csproj・SDK設定の保護を確認。TestProjectの生成csprojを.NET 11 SDKでビルドし、警告・エラー0件。Zedが使用しているRoslynサーバーへLSP接続し、生成slnxからの読み込みとLog.Info／Warning／Errorの補完応答を確認。
 
 自作C#の自動反映追加時：Core・EditorのReleaseチェックがPASS。Editor Headlessで実ファイルを保存・移動し、コンパイル、自動更新、複数クラス／recordの対応付け、Play中の保留、Inspector入力エラーの保持、未保存値・Priority・選択フォルダの保持、コンパイル／スキーマ／コンストラクタ失敗からの復帰、保存・再開、別Projectの読み込み失敗時の既存登録保護を確認。ネイティブ画面でのドラッグ操作は今回の自動チェック対象外。
 

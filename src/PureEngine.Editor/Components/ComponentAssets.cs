@@ -34,7 +34,7 @@ public static class ComponentAssets
 
     /// <summary>
     /// プロジェクトの自作C#の現在の一覧。フォルダ構成のまま表示・D&Dするためのファイル対応付き。
-    /// 自作クラスを使うたびにエンジン側へ手動登録を追加する必要はない。自動IDは "user."＋FullName。
+    /// 自作クラスのIDはProjectの管理ファイルに保持し、改名しても維持する。
     /// </summary>
     public static IReadOnlyList<Type> UserTypes
     {
@@ -65,6 +65,7 @@ public static class ComponentAssets
     {
         if (result is { Success: false }) throw new ArgumentException("Cannot publish failed compilation.", nameof(result));
         _ = CreateRegistry(result); // Validate before removing any current registrations.
+        if (result is not null) UserCodeIdentity.Save(result);
         lock (Sync)
         {
             var previous = _userCode;
@@ -84,7 +85,7 @@ public static class ComponentAssets
             if (result is null || !result.Success) return;
             foreach (var type in result.AttachableTypes)
             {
-                var id = UserCodeCompiler.TypeIdFor(type);
+                var id = result.GetTypeId(type);
                 Registry.RegisterType(type, id);
             }
             foreach (var (path, types) in result.FileTypes)
@@ -102,7 +103,7 @@ public static class ComponentAssets
             registry.RegisterType(Registry.GetType(id), id);
         if (result is { Success: true })
             foreach (var type in result.AttachableTypes)
-                registry.RegisterType(type, UserCodeCompiler.TypeIdFor(type));
+                registry.RegisterType(type, result.GetTypeId(type));
         return registry;
     }
 

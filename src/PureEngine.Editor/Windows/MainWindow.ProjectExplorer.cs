@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using PureEngine.Core;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace PureEngine.Editor;
 
@@ -85,10 +86,7 @@ public partial class MainWindow
         ProjectTree.Items.Clear();
         if (_project is null)
         {
-            var only = new TreeViewItem { Header = "Components", Tag = ComponentsNode };
-            ProjectTree.Items.Add(only);
-            only.IsSelected = true;
-            _explorerComponentsSelected = true;
+            _explorerComponentsSelected = false;
             return;
         }
         var root = new TreeViewItem { Header = _project.Document.Name, Tag = "" };
@@ -105,12 +103,9 @@ public partial class MainWindow
             parentNode.Items.Add(node);
             nodes[directory] = node;
         }
-        var components = new TreeViewItem { Header = "Components", Tag = ComponentsNode };
-        root.Items.Add(components);
-
-        var target = _explorerComponentsSelected ? ComponentsNode
-            : nodes.ContainsKey(_explorerFolder) ? _explorerFolder : "Scenes";
-        if (!nodes.TryGetValue(target, out var selected) && target == ComponentsNode) selected = components;
+        _explorerComponentsSelected = false;
+        var target = nodes.ContainsKey(_explorerFolder) ? _explorerFolder : "Scenes";
+        nodes.TryGetValue(target, out var selected);
         selected ??= root;
         if (!nodes.ContainsKey(_explorerFolder) && !_explorerComponentsSelected)
             _explorerFolder = nodes.ContainsKey("Scenes") ? "Scenes" : "";
@@ -126,13 +121,7 @@ public partial class MainWindow
     private void RefreshProjectFiles()
     {
         var entries = new List<ProjectExplorerEntry>();
-        if (_explorerComponentsSelected || _project is not { } project)
-        {
-            entries.AddRange(ComponentAssets.Types.Where(type => !ComponentAssets.UserTypes.Contains(type)).Select(type => new ProjectExplorerEntry(
-                ProjectExplorerKind.Component, type.Name, type.Namespace ?? "", type.FullName ?? type.Name,
-                null, null, type, false)));
-        }
-        else
+        if (_project is { } project)
         {
             var folder = _explorerFolder;
             var directory = project.ResolveDirectoryPath(folder);
@@ -246,6 +235,7 @@ public partial class MainWindow
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var canWrite = hasProject && !isComponents;
         TreeCreateFolderMenu.IsEnabled = canWrite;
+        TreeCreateCSharpMenu.IsEnabled = canWrite && !IsPlaying;
         TreeCreateSceneMenu.IsEnabled = canWrite && _project!.IsUnderScenes(folder);
         var renamable = canWrite && folder != "" && folder != "Scenes";
         TreeRenameMenu.IsEnabled = renamable;
@@ -260,6 +250,7 @@ public partial class MainWindow
         FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene };
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
+        FilesCreateCSharpMenu.IsEnabled = hasProject && !isComponents && !IsPlaying;
         FilesCreateSceneMenu.IsEnabled = hasProject && !isComponents && _project!.IsUnderScenes(folder);
         FilesRenameMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File };
         FilesDeleteMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File };
@@ -348,6 +339,31 @@ public partial class MainWindow
         _explorerSelectedFile = null;
         RefreshProjectExplorer();
         SetFileStatus($"フォルダを作成しました: {relative}");
+    });
+
+    private async void OnExplorerCreateCSharp(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
+    {
+        if (_project is null) return;
+        var folder = ExplorerTargetFolder("");
+        if (ReferenceEquals(sender, TreeCreateCSharpMenu))
+            ExplorerSelectionIsFolder(out folder, out _);
+        var name = await AskExplorerName("Create C#", "ファイル名（クラス名。.csは省略可）", "NewScript");
+        if (name is null) return;
+        var className = name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ? name[..^3] : name;
+        if (!SyntaxFacts.IsValidIdentifier(className)
+            || SyntaxFacts.GetKeywordKind(className) != SyntaxKind.None
+            || className.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("C#のクラス名として使える名前を入力してください（空白・記号・予約語は使用できません）。");
+        var path = Path.Combine(_project.ResolveDirectoryPath(folder), className + ".cs");
+        if (File.Exists(path) || Directory.Exists(path))
+            throw new IOException("同名のフォルダまたはファイルが既にあります。");
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        using (var writer = new StreamWriter(stream))
+            writer.Write($"public sealed class {className}{Environment.NewLine}{{{Environment.NewLine}{Environment.NewLine}}}{Environment.NewLine}");
+        _explorerFolder = folder;
+        _explorerSelectedFile = path;
+        RefreshProjectExplorer();
+        SetFileStatus($"C#を作成しました: {className}.cs");
     });
 
     private async void OnExplorerRename(object? sender, RoutedEventArgs e) => await RenameSelectedExplorerEntry();
