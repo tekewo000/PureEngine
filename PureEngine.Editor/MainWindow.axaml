@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:core="using:PureEngine.Core"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         x:Class="PureEngine.Editor.MainWindow"
         Title="PureEngine Editor"
         Width="1280" Height="800"
@@ -9,12 +10,15 @@
         FontFamily="Segoe UI" FontSize="12"
         WindowStartupLocation="CenterScreen" WindowState="Maximized">
   <Window.Styles>
-    <Style Selector="ListBox#SceneObjects ListBoxItem">
+    <Style Selector="ListBox#SceneObjects ListBoxItem, ListBox#ClassAssets ListBoxItem">
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="Height" Value="24" />
       <Setter Property="Padding" Value="8,2" />
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="ListBox#ClassAssets ListBoxItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
     <Style Selector="TabControl.editorTabs">
       <Setter Property="Focusable" Value="True" />
@@ -122,61 +126,87 @@
 
     <Grid Grid.Row="1">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="208" MinWidth="140" />
+        <ColumnDefinition Width="*" MinWidth="592" />
         <ColumnDefinition Width="8" />
-        <ColumnDefinition Width="*" MinWidth="240" />
-        <ColumnDefinition Width="8" />
-        <ColumnDefinition Width="256" MinWidth="160" />
+        <ColumnDefinition Width="472" MinWidth="160" />
       </Grid.ColumnDefinitions>
-      <Grid.RowDefinitions>
-        <RowDefinition Height="*" MinHeight="180" />
-        <RowDefinition Height="8" />
-        <RowDefinition Height="164" MinHeight="80" />
-      </Grid.RowDefinitions>
-      <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
-                    ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                    Cursor="SizeWestEast" AutomationProperties.Name="Resize Stuffs pane" />
-      <GridSplitter Grid.Column="3" Grid.RowSpan="3" Classes="paneSplitter" ResizeDirection="Columns"
-                    ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                    Cursor="SizeWestEast" AutomationProperties.Name="Resize Inspector pane" />
-      <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" Classes="paneSplitter" ResizeDirection="Rows"
-                    ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                    Cursor="SizeNorthSouth" AutomationProperties.Name="Resize Assets and Console pane" />
-      <Border Classes="pane">
-        <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-          <TabItem Classes="first" Header="Stuffs" AutomationProperties.Name="Stuffs">
-            <Grid x:Name="SceneSurface" Background="Transparent">
-              <Grid.ContextMenu>
-                <ContextMenu>
-                  <MenuItem Header="Add Empty" Click="OnAddObject" />
-                  <Separator />
-                  <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
-                            InputGesture="Delete" IsEnabled="False" />
-                </ContextMenu>
-              </Grid.ContextMenu>
-              <ListBox x:Name="SceneObjects" Background="Transparent" BorderThickness="0" Margin="8"
-                       SelectionMode="Single" AutomationProperties.Name="Stuffs objects"
-                       KeyDown="OnSceneKeyDown">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MinWidth="240" />
+          <ColumnDefinition Width="8" />
+          <ColumnDefinition Width="344" MinWidth="140" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*" MinHeight="180" />
+          <RowDefinition Height="8" />
+          <RowDefinition Height="164" MinHeight="80" />
+        </Grid.RowDefinitions>
+        <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
+                      ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Cursor="SizeWestEast" AutomationProperties.Name="Resize Stuffs pane" />
+        <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" Classes="paneSplitter" ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Cursor="SizeNorthSouth" AutomationProperties.Name="Resize Assets and Console pane" />
+        <Border Grid.Column="2" Classes="pane">
+          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem Classes="first" Header="Stuffs" AutomationProperties.Name="Stuffs">
+              <Grid x:Name="SceneSurface" Background="Transparent" DragDrop.AllowDrop="True">
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Add Empty" Click="OnAddObject" />
+                    <Separator />
+                    <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
+                              InputGesture="Delete" IsEnabled="False" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
+                <ListBox x:Name="SceneObjects" Background="Transparent" BorderThickness="0" Margin="8"
+                         SelectionMode="Single" AutomationProperties.Name="Stuffs objects"
+                         KeyDown="OnSceneKeyDown">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate DataType="core:SceneObject">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </TabItem>
+          </TabControl>
+        </Border>
+        <Border Classes="pane">
+          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View"><Grid /></TabItem>
+            <TabItem Header="Game" AutomationProperties.Name="Game"><Grid /></TabItem>
+          </TabControl>
+        </Border>
+        <Border Grid.Row="2" Grid.ColumnSpan="3" Classes="pane">
+          <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+            <TabItem Classes="first" Header="Assets" AutomationProperties.Name="Assets">
+              <ListBox x:Name="ClassAssets" Background="Transparent" BorderThickness="0" Margin="8"
+                       SelectionMode="Single"
+                       AutomationProperties.Name="Compiled classes">
                 <ListBox.ItemTemplate>
-                  <DataTemplate DataType="core:SceneObject">
-                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                  <DataTemplate DataType="sys:Type">
+                    <Grid ColumnDefinitions="32,*,*" ToolTip.Tip="{Binding FullName}">
+                      <TextBlock Text="C#" Classes="muted" FontSize="11" />
+                      <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" Margin="0,0,16,0" />
+                      <TextBlock Grid.Column="2" Text="{Binding Namespace}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                    </Grid>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
-            </Grid>
-          </TabItem>
-        </TabControl>
-      </Border>
+            </TabItem>
+            <TabItem Header="Console" AutomationProperties.Name="Console"><Grid /></TabItem>
+          </TabControl>
+        </Border>
+      </Grid>
+      <GridSplitter Grid.Column="1" Classes="paneSplitter" ResizeDirection="Columns"
+                    ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    Cursor="SizeWestEast" AutomationProperties.Name="Resize Inspector pane" />
       <Border Grid.Column="2" Classes="pane">
-        <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-          <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View"><Grid /></TabItem>
-          <TabItem Header="Game" AutomationProperties.Name="Game"><Grid /></TabItem>
-        </TabControl>
-      </Border>
-      <Border Grid.Column="4" Grid.RowSpan="3" Classes="pane">
-        <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
+        <TabControl x:Name="InspectorPane" Classes="editorTabs" SelectedIndex="0"
+                    PointerPressed="OnPanePointerPressed" DragDrop.AllowDrop="True">
           <TabItem Classes="first" Header="Inspector" AutomationProperties.Name="Inspector">
-            <Grid Margin="12">
+            <ScrollViewer Margin="12">
               <StackPanel x:Name="ObjectInspector" IsVisible="False" Spacing="8">
                 <TextBlock Text="Name" />
                 <TextBox x:Name="ObjectName" AutomationProperties.Name="Object name" FontSize="12" />
@@ -184,15 +214,21 @@
                            TextWrapping="Wrap" IsVisible="False" />
                 <TextBlock Text="Object ID" Classes="muted" Margin="0,12,0,0" />
                 <TextBlock x:Name="ObjectId" TextWrapping="Wrap" FontSize="11" Classes="muted" />
+                <StackPanel x:Name="AttachedClasses" IsVisible="False" Spacing="8" Margin="0,12,0,0">
+                  <TextBlock Text="Components" />
+                  <ItemsControl x:Name="ComponentNames">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="sys:Type">
+                        <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding FullName}"
+                                   TextTrimming="CharacterEllipsis" Margin="0,4" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+                <TextBlock x:Name="AttachError" Foreground="#FFB4AB" TextWrapping="Wrap" IsVisible="False" />
               </StackPanel>
-            </Grid>
+            </ScrollViewer>
           </TabItem>
-        </TabControl>
-      </Border>
-      <Border Grid.Row="2" Grid.ColumnSpan="3" Classes="pane">
-        <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-          <TabItem Classes="first" Header="Assets" AutomationProperties.Name="Assets"><Grid /></TabItem>
-          <TabItem Header="Console" AutomationProperties.Name="Console"><Grid /></TabItem>
         </TabControl>
       </Border>
     </Grid>

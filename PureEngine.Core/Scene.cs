@@ -2,14 +2,19 @@ using System.Collections.ObjectModel;
 
 namespace PureEngine.Core;
 
+/// <summary>
+/// A container of <see cref="SceneObject"/>s. Owns creation and removal; identity is reference-based.
+/// </summary>
 public sealed class Scene
 {
     private readonly ObservableCollection<SceneObject> _objects = [];
 
     public Scene() => Objects = new ReadOnlyObservableCollection<SceneObject>(_objects);
 
+    /// <summary>Live read-only view of objects, in insertion order. Bound directly by the Editor.</summary>
     public ReadOnlyObservableCollection<SceneObject> Objects { get; }
 
+    /// <summary>Creates an empty object with a non-colliding default name ("Empty", "Empty (1)", ...).</summary>
     public SceneObject AddEmpty()
     {
         var name = "Empty";
@@ -21,5 +26,6 @@ public sealed class Scene
         return item;
     }
 
+    /// <summary>Removes the exact instance. Returns false when absent; names are not used for matching.</summary>
     public bool Remove(SceneObject item) => _objects.Remove(item);
 }

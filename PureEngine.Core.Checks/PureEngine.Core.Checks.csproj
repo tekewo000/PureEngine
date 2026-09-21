@@ -7,5 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../PureEngine.Core/PureEngine.Core.csproj" />
+    <Compile Include="../PureEngine.Editor/ComponentAssets.cs" Link="ComponentAssets.cs" />
+    <Compile Include="../PureEngine.Editor/Samples/*.cs" Link="Samples/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

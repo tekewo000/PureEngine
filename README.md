@@ -8,6 +8,10 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 ## 現在できること
 
 - 灰色のダークテーマで、タブの切り替えとペインのサイズ変更ができる。
+- Assetsにコンパイル済みのサンプルクラス `PlayerStats` と `RoundSettings` を表示する。クリックや上下キーで選択でき、クラス名と名前空間を確認できる。
+- 一覧は `ComponentAssets.cs` の `Types` に `typeof(...)` で明示登録する。自動探索や外部C#ファイルの取り込みは未実装。
+- Scene View／Gameは左、Stuffsは中央、Inspectorは右に配置する。
+- AssetsのクラスをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
 - 現在のデータはメモリ内のみ。保存・読み込みは未実装で、終了すると失われる。
@@ -45,7 +49,7 @@ dotnet run --project PureEngine.Editor
 - `PureEngine.Core.Checks/`：Coreの動作チェック。
 - [EngineArchitecture.md](EngineArchitecture.md)：設計仕様と未決定事項。
 
-クラスのアタッチ、ゲーム実行、Steam連携、UI配置、シーン保存はまだ実装していません。
+Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチは実装済み。クラスの値の編集、ゲーム実行、Steam連携、UI配置、シーン保存はまだ実装していません。
 
 ## コアの動作確認
 
