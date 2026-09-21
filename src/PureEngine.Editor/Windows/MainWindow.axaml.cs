@@ -213,10 +213,11 @@ public partial class MainWindow : Window
     private Border BuildComponentCard(SceneObject item, object component)
     {
         var type = component.GetType();
-        var body = new StackPanel { Spacing = 4 };
+        var body = new StackPanel { Spacing = 6 };
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
-        var title = new TextBlock { Text = type.Name, FontWeight = FontWeight.SemiBold,
+        var title = new TextBlock { Text = type.Name, FontSize = 13, FontWeight = FontWeight.SemiBold,
             MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
         ToolTip.SetTip(title, type.FullName);
         header.Children.Add(title);
@@ -270,6 +271,12 @@ public partial class MainWindow : Window
             ComponentLifecycle.Update => "U",
             _ => "D",
         };
+        var accent = kind switch
+        {
+            ComponentLifecycle.Start => StartAccent,
+            ComponentLifecycle.Update => UpdateAccent,
+            _ => DestroyAccent,
+        };
         Func<int> getter = kind switch
         {
             ComponentLifecycle.Start => () => item.GetStartPriority(component),
@@ -285,18 +292,20 @@ public partial class MainWindow : Window
         var label = new TextBlock
         {
             Text = shortLabel,
-            Classes = { "muted" },
             FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = accent,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
         ToolTip.SetTip(label, displayName);
         var box = new TextBox
         {
             Text = getter().ToString(CultureInfo.InvariantCulture),
-            Width = 28, MinHeight = 22, Height = 22,
+            Width = 24, MinHeight = 22, Height = 22,
             FontSize = 10, Padding = new Thickness(2, 1),
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            BorderBrush = accent,
         };
         ToolTip.SetTip(box, displayName);
         box.Classes.Add("inspectorField");

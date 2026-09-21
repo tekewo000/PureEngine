@@ -67,7 +67,13 @@ static class PriorityInspectorChecks
         Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Text)
             .SequenceEqual(new[] { "S", "U", "D" }),
             "Priority fields must show S/U/D labels in lifecycle order.");
-        Check(fullBoxes.All(box => box.Width == 28 && box.FontSize == 10
+        Check(fullBoxes.Select(box => ((box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Foreground as Avalonia.Media.SolidColorBrush)?.Color.ToString())
+            .SequenceEqual(new[] { "#8AB4F8", "#81C995", "#F28B82" }.Select(hex => Avalonia.Media.Color.Parse(hex).ToString())),
+            "Priority S/U/D labels must use lifecycle accent colors.");
+        Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault())
+            .All(label => label?.FontWeight == Avalonia.Media.FontWeight.SemiBold),
+            "Priority S/U/D labels must be semibold for scannability.");
+        Check(fullBoxes.All(box => box.Width == 24 && box.FontSize == 10
             && box.TextAlignment == Avalonia.Media.TextAlignment.Center),
             "Priority boxes must stay compact and centered.");
         var fields = fullBoxes.Select(box => box.Parent as StackPanel).ToList();
@@ -82,7 +88,9 @@ static class PriorityInspectorChecks
             && fields.All(field => field!.Parent == priorityPanel)
             && priorityPanel.Parent is Grid header
             && Grid.GetColumn(priorityPanel) == 1
-            && header.Children.OfType<TextBlock>().Single().Text == nameof(InspectorFullProbe),
+            && header.Children.OfType<TextBlock>().Single() is TextBlock title
+            && title.Text == nameof(InspectorFullProbe)
+            && title.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Left,
             "Compact priority fields must share the component title header and dock right.");
 
         // Partial shows only Start.
