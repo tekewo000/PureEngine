@@ -352,27 +352,34 @@
             </TabItem>
             <TabItem Header="Console" AutomationProperties.Name="Console">
               <Grid RowDefinitions="Auto,*,Auto" Margin="8">
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <WrapPanel.Styles>
+                    <Style Selector="WrapPanel > Control">
+                      <Setter Property="Margin" Value="0,0,6,4" />
+                    </Style>
+                  </WrapPanel.Styles>
                   <CheckBox x:Name="ConsoleInfoFilter" Content="Info" IsChecked="True" AutomationProperties.Name="Console info filter" VerticalAlignment="Center" />
                   <TextBlock x:Name="ConsoleInfoCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console info count" />
                   <CheckBox x:Name="ConsoleWarningFilter" Content="Warning" IsChecked="True" AutomationProperties.Name="Console warning filter" VerticalAlignment="Center" />
                   <TextBlock x:Name="ConsoleWarningCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console warning count" />
                   <CheckBox x:Name="ConsoleErrorFilter" Content="Error" IsChecked="True" AutomationProperties.Name="Console error filter" VerticalAlignment="Center" />
                   <TextBlock x:Name="ConsoleErrorCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console error count" />
+                  <CheckBox x:Name="ConsoleEngineFilter" Content="Engine" IsChecked="True" AutomationProperties.Name="Console engine filter" ToolTip.Tip="エンジンのログを表示（Info / Warning / Error）" VerticalAlignment="Center" />
                   <TextBox x:Name="ConsoleSearch" Width="140" PlaceholderText="検索" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
                   <Button x:Name="ConsoleClear" Content="Clear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" />
                   <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" />
                   <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" />
-                </StackPanel>
+                </WrapPanel>
                 <ListBox Grid.Row="1" x:Name="ConsoleList" Margin="0,6,0,6" Background="Transparent" BorderThickness="0"
                          SelectionMode="Single" SelectionChanged="OnConsoleSelectionChanged"
                          AutomationProperties.Name="Console list">
                   <ListBox.ItemTemplate>
                     <DataTemplate DataType="editor:ConsoleRow">
-                      <Grid ColumnDefinitions="90,64,*" VerticalAlignment="Center">
+                      <Grid ColumnDefinitions="90,64,64,*" VerticalAlignment="Center">
                         <TextBlock Text="{Binding TimeText}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="{Binding LevelText}" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="{Binding Head}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Head}" />
+                        <TextBlock Grid.Column="1" Text="{Binding SourceText}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{Binding LevelText}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="{Binding Head}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Head}" />
                       </Grid>
                     </DataTemplate>
                   </ListBox.ItemTemplate>

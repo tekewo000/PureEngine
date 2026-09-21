@@ -31,6 +31,7 @@ static class ConsoleChecks
 
         BasicDisplay();
         FiltersSearchAndSelection();
+        EngineSourceFilter();
         ScrollPositionSurvivesIntake();
         SearchDoesNotSnapToTail();
         ClearAndClearOnPlay();
@@ -220,6 +221,42 @@ static class ConsoleChecks
         }
     }
 
+    private static void EngineSourceFilter()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            Log.Info("shared game");
+            Log.Engine.Info("shared engine");
+            Log.Engine.Error("shared engine error", new Exception("engine detail"));
+            Drain(editor);
+            var rows = View(editor);
+            Check(rows.Count == 3 && rows[0].SourceText == "Game" && rows[1].SourceText == "Engine",
+                "Rows must show the source separately from severity.");
+            Check(rows[1].DetailText.StartsWith("[Engine][Info]")
+                && rows[2].DetailText.StartsWith("[Engine][Error]")
+                && rows[2].DetailText.Contains("engine detail"), "Detail/copy must include source and exception.");
+            var filter = Control<CheckBox>(editor, "ConsoleEngineFilter");
+            Check(filter.IsChecked == true, "Engine logs must be visible by default.");
+            filter.IsChecked = false;
+            Log.Engine.Warning("shared hidden engine");
+            Drain(editor);
+            Check(View(editor).Count == 1 && View(editor)[0].Entry.Source == LogSource.Game,
+                "Engine filter must hide all engine levels, including newly received logs.");
+            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 4
+                && Control<TextBlock>(editor, "ConsoleErrorCount").Text == "1",
+                "Source filtering must retain history and severity totals.");
+            filter.IsChecked = true;
+            Check(View(editor).Count == 4, "Re-enabling Engine must restore retained entries.");
+            Control<CheckBox>(editor, "ConsoleInfoFilter").IsChecked = false;
+            Control<TextBox>(editor, "ConsoleSearch").Text = "hidden";
+            Dispatcher.UIThread.RunJobs();
+            Check(View(editor).Count == 1 && View(editor)[0].Entry.Level == LogLevel.Warning,
+                "Source, severity, and search filters must combine.");
+        }
+        finally { CloseEditor(editor); }
+    }
+
     private static void ScrollPositionSurvivesIntake()
     {
         var editor = CreateEditor();
@@ -369,7 +406,8 @@ static class ConsoleChecks
             playTimer?.Stop();
             Drain(editor);
             var afterStart = Field<List<LogEntry>>(editor, "_consoleHistory");
-            Check(afterStart.Count == 1 && afterStart[0].Message.Contains("Playを開始"), $"Clear on Play must clear before Start and keep the start log, got {afterStart.Count}.");
+            Check(afterStart.Count == 1 && afterStart[0].Source == LogSource.Engine
+                && afterStart[0].Message.Contains("Playの開始処理が完了"), $"Clear on Play must clear before Start and keep the engine start log, got {afterStart.Count}.");
             Call(editor, "StopPlay");
             Drain(editor);
             // OFF keeps old logs across Play.

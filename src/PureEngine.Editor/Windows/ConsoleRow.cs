@@ -13,6 +13,8 @@ public sealed class ConsoleRow
 
     public string LevelText => Entry.Level.ToString();
 
+    public string SourceText => Entry.Source.ToString();
+
     public string Head
     {
         get
@@ -39,8 +41,8 @@ public sealed class ConsoleRow
                 : $"{entry.FilePath}:{entry.LineNumber} ({entry.MemberName})";
             var body = string.IsNullOrEmpty(entry.Message) ? "(本文なし)" : entry.Message;
             if (string.IsNullOrEmpty(entry.ExceptionDetail))
-                return $"[{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}本文:{Environment.NewLine}{body}{Environment.NewLine}記録箇所:{Environment.NewLine}{location}";
-            return $"[{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}本文:{Environment.NewLine}{body}{Environment.NewLine}記録箇所:{Environment.NewLine}{location}{Environment.NewLine}例外詳細:{Environment.NewLine}{entry.ExceptionDetail}";
+                return $"[{entry.Source}][{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}本文:{Environment.NewLine}{body}{Environment.NewLine}記録箇所:{Environment.NewLine}{location}";
+            return $"[{entry.Source}][{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}本文:{Environment.NewLine}{body}{Environment.NewLine}記録箇所:{Environment.NewLine}{location}{Environment.NewLine}例外詳細:{Environment.NewLine}{entry.ExceptionDetail}";
         }
     }
 }

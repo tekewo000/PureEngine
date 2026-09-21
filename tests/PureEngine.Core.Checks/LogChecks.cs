@@ -13,6 +13,7 @@ static class LogChecks
         // Start clean: shared static queue must not leak from other checks.
         _ = Log.Drain();
         LevelsAndCaller();
+        EngineSourceAndCaller();
         OverloadForwardingKeepsCaller();
         ExceptionDetail();
         NoStackForNormalLogs();
@@ -37,6 +38,7 @@ static class LogChecks
         Check(entries[2].Level == LogLevel.Error && entries[2].Message == "error-body", "Error level/body wrong.");
         foreach (var entry in entries)
         {
+            Check(entry.Source == LogSource.Game, "Existing Log calls must remain game logs.");
             Check(entry.Timestamp != default, "Timestamp must be kept.");
             Check(!string.IsNullOrEmpty(entry.FilePath) && entry.FilePath.EndsWith("LogChecks.cs", StringComparison.Ordinal),
                 $"Caller file must be LogChecks.cs, got '{entry.FilePath}'.");
@@ -44,6 +46,37 @@ static class LogChecks
             Check(entry.MemberName == nameof(LevelsAndCaller), $"Caller member must be {nameof(LevelsAndCaller)}, got '{entry.MemberName}'.");
             Check(entry.ExceptionDetail is null, "Normal logs must not capture exception detail.");
         }
+    }
+
+    private static void EngineSourceAndCaller()
+    {
+        Log.Info("game-before");
+        Log.Engine.Info("engine-info");
+        Log.Engine.Warning("engine-warning");
+        Log.Engine.Error("engine-error");
+        var failure = new InvalidOperationException("engine failure", new Exception("inner"));
+        Log.Engine.Error(failure);
+        Log.Engine.Error("engine context", failure);
+        Log.Info("game-after");
+        var entries = Log.Drain();
+        Check(entries.Length == 7 && entries[0].Message == "game-before" && entries[^1].Message == "game-after",
+            "Engine and game logs must share one ordered queue.");
+        Check(entries[0].Source == LogSource.Game && entries[^1].Source == LogSource.Game,
+            "Engine calls must not change the source of later game calls.");
+        var engine = entries.Skip(1).Take(5).ToArray();
+        Check(engine.Select(entry => entry.Level).SequenceEqual(new[]
+            { LogLevel.Info, LogLevel.Warning, LogLevel.Error, LogLevel.Error, LogLevel.Error }),
+            "Engine API must preserve severity for every overload.");
+        foreach (var entry in engine)
+        {
+            Check(entry.Source == LogSource.Engine, "Engine API must mark its source.");
+            Check(entry.FilePath.EndsWith("LogChecks.cs") && entry.LineNumber > 0
+                && entry.MemberName == nameof(EngineSourceAndCaller), "Engine wrappers must preserve the caller.");
+        }
+        Check(engine.Take(3).All(entry => entry.ExceptionDetail is null), "Normal engine logs must not capture stacks.");
+        Check(engine[3].Message == failure.Message && engine[4].Message == "engine context"
+            && engine.Skip(3).All(entry => entry.ExceptionDetail == failure.ToString()),
+            "Engine error overloads must preserve message and exception details.");
     }
 
     private static void ForwardHelper(string message) => Log.Error(message);

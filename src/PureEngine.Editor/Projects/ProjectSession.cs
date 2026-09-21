@@ -17,8 +17,8 @@ public sealed record ProjectSession(ProjectFile Project, Scene Scene)
             foreach (var diagnostic in compiled.Diagnostics)
             {
                 var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
-                if (diagnostic.IsError) Log.Error(message);
-                else Log.Warning(message);
+                if (diagnostic.IsError) Log.Engine.Error(message);
+                else Log.Engine.Warning(message);
             }
             // Validate against a candidate registry; a failed project open must not change the active one.
             var registry = ComponentAssets.CreateRegistry(compiled);

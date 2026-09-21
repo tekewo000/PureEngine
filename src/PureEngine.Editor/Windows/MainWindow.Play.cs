@@ -61,7 +61,7 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
-            Log.Error($"Playを開始できません: {error.GetBaseException().Message}", error);
+            Log.Engine.Error($"Playを開始できません: {error.GetBaseException().Message}", error);
             SetFileStatus($"Playを開始できません: {error.GetBaseException().Message}", true);
             return;
         }
@@ -88,7 +88,7 @@ public partial class MainWindow
         _playLast = TimeSpan.Zero;
         _playTimer?.Start();
         UpdatePlayUI();
-        Log.Info("Playを開始しました。");
+        Log.Engine.Info("Playの開始処理が完了しました。");
         SetFileStatus("Playを開始しました。");
     }
 
@@ -129,17 +129,17 @@ public partial class MainWindow
         var errors = session.Runtime.Errors;
         if (stopError is not null)
         {
-            Log.Error($"Playの停止中にエラー: {stopError.GetBaseException().Message}", stopError);
+            Log.Engine.Error($"Playの停止中にエラー: {stopError.GetBaseException().Message}", stopError);
             SetFileStatus($"Playの停止中にエラー: {stopError.GetBaseException().Message}{FormatPlayErrors(errors)}", true);
         }
         else if (errors.Count > 0)
         {
-            Log.Error($"Playを停止しました（エラー{errors.Count}件）");
+            Log.Engine.Error($"Playを停止しました（エラー{errors.Count}件）");
             SetFileStatus($"Playを停止しました（エラー{errors.Count}件）{FormatPlayErrors(errors)}", true);
         }
         else
         {
-            Log.Info("Playを停止しました。");
+            Log.Engine.Info("Playを停止しました。");
             SetFileStatus("Playを停止しました。");
         }
         // Play中の変更は保留し、Stop後に反映する。
@@ -204,8 +204,8 @@ public partial class MainWindow
 
         UpdatePlayUI();
         if (session is not null) LogPendingRuntimeErrors(session);
-        if (cleanupError is not null) Log.Error($"Play開始の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
-        Log.Error(message);
+        if (cleanupError is not null) Log.Engine.Error($"Play開始の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
+        Log.Engine.Error(message);
         var detail = message + FormatPlayErrors(errors);
         if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
         SetFileStatus(detail, true);
@@ -234,8 +234,8 @@ public partial class MainWindow
         }
 
         LogPendingRuntimeErrors(session);
-        if (cleanupError is not null) Log.Error($"Play更新の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
-        Log.Error(message);
+        if (cleanupError is not null) Log.Engine.Error($"Play更新の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
+        Log.Engine.Error(message);
         var detail = message + FormatPlayErrors(errors);
         if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
         SetFileStatus(detail, true);
@@ -266,17 +266,17 @@ public partial class MainWindow
         LogPendingRuntimeErrors(session);
         if (cleanupError is not null)
         {
-            Log.Error($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）", cleanupError);
+            Log.Engine.Error($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）", cleanupError);
             SetFileStatus($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）{FormatPlayErrors(errors)}", true);
         }
         else if (errors.Count > 0)
         {
-            Log.Error($"Playがエラーで停止しました（{errors.Count}件）");
+            Log.Engine.Error($"Playがエラーで停止しました（{errors.Count}件）");
             SetFileStatus($"Playがエラーで停止しました（{errors.Count}件）{FormatPlayErrors(errors)}", true);
         }
         else
         {
-            Log.Info("Playが停止しました。");
+            Log.Engine.Info("Playが停止しました。");
             SetFileStatus("Playが停止しました。");
         }
         FlushPendingUserCodeReload();

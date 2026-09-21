@@ -20,7 +20,7 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
-            Log.Error("ユーザーコードの監視を開始できません。", error);
+            Log.Engine.Error("ユーザーコードの監視を開始できません。", error);
             SetFileStatus(error.Message, true);
         }
     }
@@ -58,8 +58,8 @@ public partial class MainWindow
             foreach (var diagnostic in compiled.Diagnostics)
             {
                 var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
-                if (diagnostic.IsError) Log.Error(message);
-                else Log.Warning(message);
+                if (diagnostic.IsError) Log.Engine.Error(message);
+                else Log.Engine.Warning(message);
             }
             if (!compiled.Success)
             {
@@ -81,13 +81,13 @@ public partial class MainWindow
             _sceneDirty = wasDirty;
             UpdateSceneTitle();
             ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components));
-            Log.Info($"C#を反映しました：{compiled.AttachableTypes.Count}クラス。");
+            Log.Engine.Info($"C#を反映しました：{compiled.AttachableTypes.Count}クラス。");
             SetFileStatus($"C#を反映しました：{compiled.AttachableTypes.Count}クラス。");
         }
         catch (Exception error)
         {
             var message = adopted ? "旧コードの解放に失敗しました。" : "C#を反映できません。直前の状態を保持します。";
-            Log.Error(message, error);
+            Log.Engine.Error(message, error);
             SetFileStatus($"{message} {error.GetBaseException().Message}", true);
         }
         finally
@@ -98,7 +98,7 @@ public partial class MainWindow
                 {
                     if (migrated is not null) ComponentAssets.DisposeComponents(migrated.Objects.SelectMany(item => item.Components));
                 }
-                catch (Exception error) { Log.Error("採用できなかったC#の後片付けに失敗しました。", error); }
+                catch (Exception error) { Log.Engine.Error("採用できなかったC#の後片付けに失敗しました。", error); }
                 finally { compiled?.LoadContext?.Unload(); }
             }
             _userCodeReloading = false;

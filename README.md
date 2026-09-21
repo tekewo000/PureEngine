@@ -168,9 +168,16 @@ Log.Warning("残り時間が少ないです");
 Log.Error("保存に失敗しました");
 Log.Error(exception);
 Log.Error("読み込みに失敗しました", exception);
+
+// エンジン側の通知・診断。ゲーム側と同じキューへ、出力元を区別して記録します。
+Log.Engine.Info("Playの開始処理が完了しました。");
+Log.Engine.Warning("エンジン側の警告");
+Log.Engine.Error("エンジン側の処理に失敗しました", exception);
 ```
 
 - レベルはInfo／Warning／Errorの3種類。`Log.Error` は記録だけで例外送出やPlay停止をしません。
+- 出力元はGame／Engine。従来の `Log.Info / Warning / Error` はGame、`Log.Engine.Info / Warning / Error` はEngineです。Engineにも例外のみ・本文と例外のErrorオーバーロードがあり、呼び出し元のファイル・行・メソッド情報を保持します。
+- Console一覧は出力元とレベルを別々に表示し、詳細・コピーには `[Engine][Info]` のように含めます。Engineチェック（初期ON）を外すとエンジンの全レベルを非表示にします。履歴と件数は保持され、再チェックで戻ります。検索・レベル別フィルターと併用できます。
 - 本文・レベル・時刻・呼び出し元のファイル／行／メソッドを保持します。呼び出し元は自動取得し、通常ログではスタックトレースを取りません。
 - 例外を渡すと内部例外とスタックトレースを含む詳細を保持します。Runtimeエラーの発生箇所は例外側の情報を使います。
 - 別スレッドからも呼べます。UIを直接操作せず、Editorが約200msごとにキューからまとめて取り込みます。Consoleタブが非表示でも受け取り、後で確認できます。

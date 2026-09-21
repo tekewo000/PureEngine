@@ -19,6 +19,7 @@ public partial class MainWindow
     private bool _showInfo = true;
     private bool _showWarning = true;
     private bool _showError = true;
+    private bool _showEngine = true;
     private string _consoleSearch = "";
     private bool _consoleInitialized;
 
@@ -31,6 +32,11 @@ public partial class MainWindow
         if (_consoleInitialized) return;
         _consoleInitialized = true;
         _consoleQueueDroppedBaseline = Log.DroppedCount;
+        ConsoleEngineFilter.IsCheckedChanged += (_, _) =>
+        {
+            _showEngine = ConsoleEngineFilter.IsChecked == true;
+            RebuildConsoleView();
+        };
         ConsoleInfoFilter.IsCheckedChanged += (_, _) =>
         {
             _showInfo = ConsoleInfoFilter.IsChecked == true;
@@ -92,6 +98,7 @@ public partial class MainWindow
 
     private bool PassesConsoleFilter(LogEntry entry)
     {
+        if (!_showEngine && entry.Source == LogSource.Engine) return false;
         switch (entry.Level)
         {
             case LogLevel.Info when !_showInfo: return false;
@@ -217,7 +224,7 @@ public partial class MainWindow
             var item = errors[_playLoggedErrorCount++];
             var message = $"{item.ObjectName}/{item.ComponentType.Name}.{item.MethodName}: {item.Exception.GetType().Name}: {item.Exception.Message}";
             // Original exception is kept for stack/inner details; the forwarding line is only the record location.
-            Log.Error(message, item.Exception);
+            Log.Engine.Error(message, item.Exception);
         }
     }
 }

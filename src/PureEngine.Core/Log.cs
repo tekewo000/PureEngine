@@ -2,7 +2,14 @@ using System.Runtime.CompilerServices;
 
 namespace PureEngine.Core;
 
-/// <summary>Log severity. Only these three are used.</summary>
+/// <summary>Origin of a log, independent of severity.</summary>
+public enum LogSource
+{
+    Game,
+    Engine,
+}
+
+/// <summary>Log severity, independent of its source.</summary>
 public enum LogLevel
 {
     Info,
@@ -21,7 +28,10 @@ public sealed record LogEntry(
     string FilePath,
     int LineNumber,
     string MemberName,
-    string? ExceptionDetail);
+    string? ExceptionDetail)
+{
+    public LogSource Source { get; init; } = LogSource.Game;
+}
 
 /// <summary>
 /// Shared logging API. Call via <c>using PureEngine.Core; Log.Info(...)</c>.
@@ -78,15 +88,50 @@ public static class Log
         [CallerMemberName] string? memberName = null) =>
         Enqueue(LogLevel.Error, message, exception?.ToString(), filePath, lineNumber, memberName);
 
+    /// <summary>Engine diagnostics share the game log queue and caller metadata.</summary>
+    public static class Engine
+    {
+        public static void Info(string message,
+            [CallerFilePath] string? filePath = null,
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string? memberName = null) =>
+            Enqueue(LogLevel.Info, message, null, filePath, lineNumber, memberName, LogSource.Engine);
+
+        public static void Warning(string message,
+            [CallerFilePath] string? filePath = null,
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string? memberName = null) =>
+            Enqueue(LogLevel.Warning, message, null, filePath, lineNumber, memberName, LogSource.Engine);
+
+        public static void Error(string message,
+            [CallerFilePath] string? filePath = null,
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string? memberName = null) =>
+            Enqueue(LogLevel.Error, message, null, filePath, lineNumber, memberName, LogSource.Engine);
+
+        public static void Error(Exception? exception,
+            [CallerFilePath] string? filePath = null,
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string? memberName = null) =>
+            Enqueue(LogLevel.Error, exception?.Message ?? string.Empty, exception?.ToString(),
+                filePath, lineNumber, memberName, LogSource.Engine);
+
+        public static void Error(string message, Exception? exception,
+            [CallerFilePath] string? filePath = null,
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string? memberName = null) =>
+            Enqueue(LogLevel.Error, message, exception?.ToString(), filePath, lineNumber, memberName, LogSource.Engine);
+    }
+
     private static void Enqueue(LogLevel level, string? message, string? exceptionDetail,
-        string? filePath, int lineNumber, string? memberName)
+        string? filePath, int lineNumber, string? memberName, LogSource source = LogSource.Game)
     {
         // Recording only: never throw for logging state. Nulls are normalized.
         LogEntry entry;
         try
         {
             entry = new LogEntry(level, message ?? string.Empty, DateTimeOffset.Now,
-                filePath ?? string.Empty, lineNumber, memberName ?? string.Empty, exceptionDetail);
+                filePath ?? string.Empty, lineNumber, memberName ?? string.Empty, exceptionDetail) { Source = source };
         }
         catch
         {
