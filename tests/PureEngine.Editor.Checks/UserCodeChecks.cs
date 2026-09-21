@@ -11,16 +11,21 @@ using PureEngine.Editor;
 static class UserCodeChecks
 {
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-    private static object? Call(MainWindow window, string name, params object?[] args) =>
-        typeof(MainWindow).GetMethod(name, Instance)!.Invoke(window, args);
+    private static object? Call(MainWindow window, string name, params object?[] args)
+    {
+        var result = typeof(MainWindow).GetMethod(name, Instance)!.Invoke(window, args);
+        if (result is Task task) Program.Wait(task);
+        return result;
+    }
     private static T Field<T>(MainWindow window, string name) =>
-        (T)typeof(MainWindow).GetField(name, Instance)!.GetValue(window)!;
+        (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
+            ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static Scene EditScene(MainWindow window) =>
         ((EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!).Current;
     private static EditSceneStore EditStore(MainWindow window) =>
         (EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!;
     private static bool HasPendingReload(MainWindow window) =>
-        ((UserCodeReloadCoordinator)typeof(MainWindow).GetField("_reloadCoordinator", Instance)!.GetValue(window)!).HasPending;
+        typeof(MainWindow).GetField("_pendingCompilation", Instance)!.GetValue(window) is not null;
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -70,7 +75,7 @@ static class UserCodeChecks
         Check(XDocument.Load(solutionPath).Descendants("Project").Single().Attribute("Path")!.Value
             == ProjectCodeWorkspace.ProjectName, "Roslyn needs a solution pointing to the game project.");
         var workspace = XDocument.Load(workspacePath);
-        Check(workspace.Descendants("HintPath").Single().Value == typeof(Scene).Assembly.Location
+        Check(workspace.Descendants("HintPath").Any(path => path.Value == typeof(Scene).Assembly.Location)
             && workspace.Descendants("ImplicitUsings").Single().Value == "disable",
             "Editor workspace must reference the current engine and match runtime compiler options.");
         var workspaceTime = File.GetLastWriteTimeUtc(workspacePath);

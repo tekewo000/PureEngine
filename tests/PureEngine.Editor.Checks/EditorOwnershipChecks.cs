@@ -15,7 +15,8 @@ static class EditorOwnershipChecks
     private static object? Call(MainWindow window, string method, params object?[] args) =>
         typeof(MainWindow).GetMethod(method, Private)!.Invoke(window, args);
     private static T Field<T>(MainWindow window, string name) =>
-        (T)typeof(MainWindow).GetField(name, Private)!.GetValue(window)!;
+        (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
+            ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static EditSceneStore EditStore(MainWindow window) =>
         (EditSceneStore)typeof(MainWindow).GetField("_editScene", Private)!.GetValue(window)!;
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;

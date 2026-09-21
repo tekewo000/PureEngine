@@ -6,13 +6,11 @@
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
 実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。
 
-## 次の作業：機能追加前のアーキテクチャ改善
+## 機能追加前のアーキテクチャ改善（完了）
 
-**[アーキテクチャ改善5項目](ArchitectureImprovements.md)をすべて完了してから、ほかの機能追加へ進む。現在は1／5項目完了（A1が完了、A2〜A5は未完了）。**
+**[アーキテクチャ改善5項目](ArchitectureImprovements.md)は5／5項目完了。2026-09-22にA1〜A5を接続した状態で検証した。**
 
-対象は、プロジェクト側のサービス登録、MainWindowの責務分離、コンパイルのバックグラウンド化、プロジェクト単位の型登録、Editorに依存しない実行接続。各項目の現状・対応範囲・完了条件・証跡はリンク先で管理し、完了数も対応時に更新する。
-
-以下の既存機能の完了記録は維持する。「その後の候補」にある新機能は、上記5項目の完了後に扱う。
+プロジェクト側のサービス登録、MainWindowの責務分離、非同期コンパイル、プロジェクト単位の型登録、UI非依存のRuntimeを統合済み。各項目の完了条件・実装・検証結果はリンク先で管理する。新機能は今回追加していない。
 
 ## 現在の到達点
 
@@ -37,7 +35,7 @@
 | Inspector | string・int・float・boolの表示と編集、数値の無効表示・エラー数、Escで復元、非有限floatの拒否、存在するライフサイクルのPriority表示と編集 | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | シーン保存 | YAML version 1、ID・名前・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
-| ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Project側の登録口（`ConfigureGameServices`）と組み込み登録から、編集・Play別のprovider＋Scopeで生成。登録変更を含む再読み込み・Project読み込みは成功後に採用し、失敗時は旧状態を維持。終了順と失敗時解放を維持 | [ProjectGameServices](../src/PureEngine.Editor/Game/ProjectGameServices.cs)、[GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Editor/Game/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
+| ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Project側の登録口（`ConfigureGameServices`）と組み込み登録から、編集・Play別のprovider＋Scopeで生成。登録変更を含む再読み込み・Project読み込みは成功後に採用し、失敗時は旧状態を維持。終了順と失敗時解放を維持 | [ProjectGameServices](../src/PureEngine.Editor/Game/ProjectGameServices.cs)、[GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Runtime/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
 | 共通ログとConsole | `Log.Info/Warning/Error` の共有API、呼び出し元・例外詳細の保持、有界キュー。Consoleの一覧・フィルター・検索・詳細・コピー・Clear／Clear on Play、Play開始・停止・失敗とRuntime全件の重複なし取り込み | [Log](../src/PureEngine.Core/Log.cs)、[MainWindow.Console](../src/PureEngine.Editor/Windows/MainWindow.Console.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | ProjectごとのC# | 任意フォルダのC#からアタッチ、保存・移動の監視、Stop後の反映、未保存値・Priority保持、失敗時の旧状態保持とConsole診断 | [UserCodeCompiler](../src/PureEngine.Editor/Compilation/UserCodeCompiler.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) |
@@ -48,7 +46,7 @@
 
 - Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。ゲーム画面の描画・プレビューは未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
-- Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはUIスレッドで行う。
+- Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
 - ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
@@ -115,6 +113,8 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+2026-09-22、A1〜A5の統合後にCore／EditorのReleaseチェックがPASS。実際のEditor経路で非同期結果の採用順、編集中の値保持、Play・ファイル操作・入力エラー中の保留、終了後の結果解放、起動時のキャンセル、プロジェクト登録と共通Runtimeの接続を確認。UI応答とComponent生成スレッドはAvalonia Headlessで確認した。詳細は[改善計画の証跡](ArchitectureImprovements.md)を参照。
 
 2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）の実装後に以下を実行し、両方PASS。
 

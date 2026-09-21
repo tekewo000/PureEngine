@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using PureEngine.Core;
 
 namespace PureEngine.Runtime;
 
@@ -8,7 +7,7 @@ namespace PureEngine.Runtime;
 /// 登録処理は外部から受け取り、編集と各 Play で別インスタンスを持つ。
 /// 編集と Play、異なる Play の間で Singleton も含めて状態を共有しない。
 /// Root provider から Scoped を直接解決せず、必ずこの Scope を通す。
-/// Editor・Avaloniaに依存しない。A1のプロジェクト側登録はこのconfigureとして受け取る。
+/// Editor・Avaloniaに依存しない。ゲーム側の登録処理はconfigureとして受け取る。
 /// </summary>
 public sealed class GameSession : IDisposable
 {
@@ -32,7 +31,7 @@ public sealed class GameSession : IDisposable
 
     /// <summary>
     /// 外部の登録処理から独立したサービス群を作る。
-    /// 呼び出し側がゲーム用サービス登録（A1接続後はプロジェクト側の登録、現状はEditorのGameServices.Configureやチェック用登録）を渡す。
+    /// 呼び出し側が、そのゲーム／プロジェクトのサービス登録処理を渡す。
     /// </summary>
     public static GameSession Create(Action<IServiceCollection> configure)
     {
@@ -44,8 +43,13 @@ public sealed class GameSession : IDisposable
             ValidateScopes = true,
             ValidateOnBuild = true,
         });
-        var scope = provider.CreateScope();
-        return new GameSession(provider, scope);
+        try { return new GameSession(provider, provider.CreateScope()); }
+        catch (Exception error)
+        {
+            try { provider.Dispose(); }
+            catch (Exception cleanup) { throw new AggregateException(error, cleanup); }
+            throw;
+        }
     }
 
     public void Dispose()

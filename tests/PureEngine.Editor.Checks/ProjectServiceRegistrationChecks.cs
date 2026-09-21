@@ -1,3 +1,4 @@
+using PureEngine.Runtime;
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -7,10 +8,15 @@ using PureEngine.Editor;
 static class ProjectServiceRegistrationChecks
 {
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-    private static object? Call(MainWindow window, string name, params object?[] args) =>
-        typeof(MainWindow).GetMethod(name, Instance)!.Invoke(window, args);
+    private static object? Call(MainWindow window, string name, params object?[] args)
+    {
+        var result = typeof(MainWindow).GetMethod(name, Instance)!.Invoke(window, args);
+        if (result is Task task) Program.Wait(task);
+        return result;
+    }
     private static T Field<T>(MainWindow window, string name) =>
-        (T)typeof(MainWindow).GetField(name, Instance)!.GetValue(window)!;
+        (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
+            ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -114,7 +120,6 @@ static class ProjectServiceRegistrationChecks
         ReloadServiceChange(parent);
         ReloadFailuresKeepOldState(parent);
         TerminationOrder(parent);
-        ComponentAssets.ClearUserCode();
         Console.WriteLine("PASS: project service registration, edit/play sharing and isolation, reload adoption and failure retention, termination order, and compatibility.");
     }
 
@@ -129,18 +134,18 @@ static class ProjectServiceRegistrationChecks
                 [Inspector] public int Value = 7;
             }
             """);
-        var opened = ProjectSession.Open(project.ManifestPath);
+        using var opened = ProjectSession.Open(project.ManifestPath);
         try
         {
-            Check(ComponentAssets.UserTypes.Count == 1, "Plain project must load without a registrar.");
-            using var edit = GameSession.Create();
+            Check(opened.Components.UserTypes.Count == 1, "Plain project must load without a registrar.");
+            using var edit = GameSession.Create(GameServices.ForProject(opened.Components));
             var target = new SceneObject("Target");
-            var type = ComponentAssets.GetTypesForFile(file).Single();
-            Check(ComponentAssets.TryAttach(target, type, edit.Factory), "Plain attach must work without project services.");
+            var type = opened.Components.GetTypesForFile(file).Single();
+            Check(opened.Components.TryAttach(target, type, edit.Factory), "Plain attach must work without project services.");
             var source = new Scene();
             source.AddEmpty().Attach(new PureEngine.Editor.Samples.InjectedPlayer(
                 new PureEngine.Editor.Samples.RandomService(), new PureEngine.Editor.Samples.BattleSession()));
-            using var play = PlaySession.Prepare(source, ComponentAssets.Registry);
+            using var play = PlaySession.Prepare(source, opened.Components.Registry, GameServices.ForProject(opened.Components));
             play.Start();
             Check(play.Runtime.IsRunning, "Built-in services must still run without a project registrar.");
             play.Stop();
@@ -148,8 +153,7 @@ static class ProjectServiceRegistrationChecks
         finally
         {
             opened.EditServices.Dispose();
-            ComponentAssets.ClearUserCode();
-        }
+            }
     }
 
     private static void EditPlaySharingAndIsolation(string parent)
@@ -157,21 +161,21 @@ static class ProjectServiceRegistrationChecks
         var project = ProjectSession.Create(parent, "A1Sharing").Project;
         var file = Path.Combine(project.RootDirectory, "Game.cs");
         File.WriteAllText(file, BasicCode());
-        var opened = ProjectSession.Open(project.ManifestPath);
-        var session = opened.Session;
+        using var opened = ProjectSession.Open(project.ManifestPath);
+        var session = opened;
         var editServices = opened.EditServices;
         try
         {
-            var boardType = ComponentAssets.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
-            var logType = ComponentAssets.GetTypesForFile(file).SingleOrDefault(t => t.Name == "QuestLog")
+            var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
+            var logType = opened.Components.GetTypesForFile(file).SingleOrDefault(t => t.Name == "QuestLog")
                 ?? boardType.Assembly.GetType("QuestLog")!;
             // 編集での注入成功と同一セッション内の共有。
             var first = session.Scene.AddEmpty();
             first.Rename("First");
-            Check(ComponentAssets.TryAttach(first, boardType, editServices.Factory), "Edit attach must inject project services.");
+            Check(opened.Components.TryAttach(first, boardType, editServices.Factory), "Edit attach must inject project services.");
             var second = session.Scene.AddEmpty();
             second.Rename("Second");
-            Check(ComponentAssets.TryAttach(second, boardType, editServices.Factory), "Second edit attach must inject.");
+            Check(opened.Components.TryAttach(second, boardType, editServices.Factory), "Second edit attach must inject.");
             dynamic firstBoard = first.Components.Single();
             dynamic secondBoard = second.Components.Single();
             Check(firstBoard.Log is not null && ReferenceEquals((object)firstBoard.Log, (object)secondBoard.Log),
@@ -179,10 +183,10 @@ static class ProjectServiceRegistrationChecks
             firstBoard.Score = 37;
 
             // Play での注入成功と編集・Play 間の分離。
-            var serializer = new SceneSerializer(ComponentAssets.Registry);
+            var serializer = new SceneSerializer(opened.Components.Registry);
             var yaml = serializer.Serialize(session.Scene);
             SceneFile.Write(project.StartupScenePath, yaml);
-            using (var play = PlaySession.Prepare(session.Scene, ComponentAssets.Registry))
+            using (var play = PlaySession.Prepare(session.Scene, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
                 var copies = play.Runtime.Scene.Objects.Select(o => o.Components.Single()).ToArray();
                 dynamic playFirst = copies[0];
@@ -206,7 +210,7 @@ static class ProjectServiceRegistrationChecks
 
             // 再Play 間の分離。
             object? previousLog;
-            using (var replay = PlaySession.Prepare(session.Scene, ComponentAssets.Registry))
+            using (var replay = PlaySession.Prepare(session.Scene, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
                 dynamic replayFirst = replay.Runtime.Scene.Objects[0].Components.Single();
                 previousLog = replayFirst.Log;
@@ -214,7 +218,7 @@ static class ProjectServiceRegistrationChecks
                 replay.Start();
                 replay.Stop();
             }
-            using (var replay2 = PlaySession.Prepare(session.Scene, ComponentAssets.Registry))
+            using (var replay2 = PlaySession.Prepare(session.Scene, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
                 dynamic replayFirst2 = replay2.Runtime.Scene.Objects[0].Components.Single();
                 Check(!ReferenceEquals((object)replayFirst2.Log, (object)previousLog!),
@@ -229,8 +233,7 @@ static class ProjectServiceRegistrationChecks
         finally
         {
             editServices.Dispose();
-            ComponentAssets.ClearUserCode();
-        }
+            }
     }
 
     private static void ReloadServiceChange(string parent)
@@ -238,18 +241,18 @@ static class ProjectServiceRegistrationChecks
         var project = ProjectSession.Create(parent, "A1Reload").Project;
         var file = Path.Combine(project.RootDirectory, "Game.cs");
         File.WriteAllText(file, BasicCode());
-        var opened = ProjectSession.Open(project.ManifestPath);
-        var editor = new MainWindow(opened.Session, opened.EditServices);
+        using var opened = ProjectSession.Open(project.ManifestPath);
+        var editor = new MainWindow(opened);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = Field<EditSceneStore>(editor, "_editScene").Current;
             var item = scene.AddEmpty();
             item.Rename("Board");
             var services = Field<GameSession>(editor, "_editSession");
-            var boardType = ComponentAssets.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
-            Check(ComponentAssets.TryAttach(item, boardType, services.Factory), "Reload test requires an attached board.");
+            var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
+            Check(opened.Components.TryAttach(item, boardType, services.Factory), "Reload test requires an attached board.");
             dynamic board = item.Components.Single();
             board.Score = 55;
             item.SetStartPriority(board, -4);
@@ -266,7 +269,7 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
 
-            var current = Field<Scene>(editor, "_scene").Objects.Single(o => o.Id == objectId);
+            var current = Field<EditSceneStore>(editor, "_editScene").Current.Objects.Single(o => o.Id == objectId);
             dynamic renewed = current.Components.Single();
             Check(!ReferenceEquals((object)renewed, oldBoard), "Reload must create new instances.");
             Check((int)renewed.Score == 55, "Reload must preserve unsaved Inspector values.");
@@ -291,11 +294,11 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "StopPlay");
             Check(!(bool)Call(editor, "get_IsPlaying")!, "Stop must leave playing state.");
             Dispatcher.UIThread.RunJobs();
-            typeof(MainWindow).GetField("_sceneDirty", Instance)!.SetValue(editor, false);
+            Field<EditSceneStore>(editor, "_editScene").MarkClean();
         }
         finally
         {
-            typeof(MainWindow).GetField("_sceneDirty", Instance)!.SetValue(editor, false);
+            Field<EditSceneStore>(editor, "_editScene").MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
@@ -306,17 +309,17 @@ static class ProjectServiceRegistrationChecks
         var project = ProjectSession.Create(parent, "A1Failures").Project;
         var file = Path.Combine(project.RootDirectory, "Game.cs");
         File.WriteAllText(file, BasicCode());
-        var opened = ProjectSession.Open(project.ManifestPath);
-        var editor = new MainWindow(opened.Session, opened.EditServices);
+        using var opened = ProjectSession.Open(project.ManifestPath);
+        var editor = new MainWindow(opened);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         try
         {
-            var scene = Field<Scene>(editor, "_scene");
+            var scene = Field<EditSceneStore>(editor, "_editScene").Current;
             var item = scene.AddEmpty();
             var services = Field<GameSession>(editor, "_editSession");
-            var boardType = ComponentAssets.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
-            Check(ComponentAssets.TryAttach(item, boardType, services.Factory), "Failure tests require an attached board.");
+            var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
+            Check(opened.Components.TryAttach(item, boardType, services.Factory), "Failure tests require an attached board.");
             dynamic good = item.Components.Single();
             good.Score = 21;
             var goodObject = (object)good;
@@ -329,7 +332,7 @@ static class ProjectServiceRegistrationChecks
                 ("registration-throws",
                     BasicCode().Replace("services.AddScoped<QuestLog>();",
                         "services.AddScoped<QuestLog>(); throw new System.InvalidOperationException(\"reg-boom\");"),
-                    "サービス登録に失敗"),
+                    "reg-boom"),
                 ("ambiguous",
                     BasicCode() + "\npublic static class ExtraSetup { public static void ConfigureGameServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { } }",
                     "複数"),
@@ -337,6 +340,14 @@ static class ProjectServiceRegistrationChecks
                     BasicCode().Replace("public static void ConfigureGameServices(IServiceCollection services)",
                         "public static int ConfigureGameServices(IServiceCollection services)")
                         .Replace("services.AddScoped<QuestLog>();", "return 0;"),
+                    "形式が不正"),
+                ("instance-registrar",
+                    BasicCode().Replace("public static class GameSetup", "public class GameSetup")
+                        .Replace("public static void ConfigureGameServices", "public void ConfigureGameServices"),
+                    "形式が不正"),
+                ("async-registrar",
+                    BasicCode().Replace("public static void ConfigureGameServices", "public static async void ConfigureGameServices")
+                        .Replace("services.AddScoped<QuestLog>();", "await System.Threading.Tasks.Task.Yield(); services.AddScoped<QuestLog>();"),
                     "形式が不正"),
                 ("missing-dependency",
                     BasicCode().Replace("public QuestBoard(QuestLog log)",
@@ -357,7 +368,7 @@ static class ProjectServiceRegistrationChecks
                     $"{label} must preserve the exact old instances.");
                 Check(ReferenceEquals(Field<GameSession>(editor, "_editSession"), goodServices),
                     $"{label} must preserve the old service group.");
-                Check(ComponentAssets.Registry.GetType(ComponentAssets.Registry.GetId(goodType)) == goodType,
+                Check(opened.Components.Registry.GetType(opened.Components.Registry.GetId(goodType)) == goodType,
                     $"{label} must preserve the old registration.");
                 Check((int)goodObject.GetType().GetField("Score")!.GetValue(goodObject)! == 21,
                     $"{label} must preserve unsaved values.");
@@ -369,11 +380,11 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
             Check(status.Text!.Contains("反映しました"), "Recovery after failures must work.");
-            typeof(MainWindow).GetField("_sceneDirty", Instance)!.SetValue(editor, false);
+            Field<EditSceneStore>(editor, "_editScene").MarkClean();
         }
         finally
         {
-            typeof(MainWindow).GetField("_sceneDirty", Instance)!.SetValue(editor, false);
+            Field<EditSceneStore>(editor, "_editScene").MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
@@ -384,15 +395,15 @@ static class ProjectServiceRegistrationChecks
         var project = ProjectSession.Create(parent, "A1Termination").Project;
         var file = Path.Combine(project.RootDirectory, "Game.cs");
         File.WriteAllText(file, BasicCode());
-        var opened = ProjectSession.Open(project.ManifestPath);
+        using var opened = ProjectSession.Open(project.ManifestPath);
         try
         {
-            var boardType = ComponentAssets.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
+            var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
             var source = new Scene();
             var item = source.AddEmpty();
             item.Rename("Board");
             // Play 準備は編集用サービス群とは別の独立したサービス群で行う。
-            using (var play = PlaySession.Prepare(source, ComponentAssets.Registry))
+            using (var play = PlaySession.Prepare(source, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
                 // 空シーンの正常終了でもサービス群は単発で解放される。
                 play.Start();
@@ -403,11 +414,11 @@ static class ProjectServiceRegistrationChecks
             item = source.AddEmpty();
             item.Rename("Board");
             // 直接アタッチした authoring 値は Play 側で復元される。ここでは factory 経由の生成順を検証する。
-            using var edit = GameSession.Create();
-            Check(ComponentAssets.TryAttach(item, boardType, edit.Factory), "Termination test requires an attached board.");
+            using var edit = GameSession.Create(GameServices.ForProject(opened.Components));
+            Check(opened.Components.TryAttach(item, boardType, edit.Factory), "Termination test requires an attached board.");
             dynamic authoring = item.Components.Single();
             authoring.Score = 9;
-            using (var play = PlaySession.Prepare(source, ComponentAssets.Registry))
+            using (var play = PlaySession.Prepare(source, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
                 dynamic copy = play.Runtime.Scene.Objects[0].Components.Single();
                 object? log = copy.Log;
@@ -440,7 +451,7 @@ static class ProjectServiceRegistrationChecks
             secondBad.Rename("Second");
             secondBad.Attach(new NeedMissing(new UnregisteredService()));
             PlaySession? failed = null;
-            try { failed = PlaySession.Prepare(badSource, badRegistry); }
+            try { failed = PlaySession.Prepare(badSource, badRegistry, GameServices.Configure); }
             catch (InvalidOperationException error)
             {
                 Check(error.Message.Contains("a1.need-missing") && error.InnerException is not null,
@@ -459,8 +470,7 @@ static class ProjectServiceRegistrationChecks
         finally
         {
             opened.EditServices.Dispose();
-            ComponentAssets.ClearUserCode();
-        }
+            }
     }
 
     private sealed class UnregisteredService

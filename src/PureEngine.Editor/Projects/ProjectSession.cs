@@ -1,55 +1,61 @@
 using PureEngine.Core;
+using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
 
-/// <summary>
-/// プロジェクトと、そのプロジェクト専用の型所有者（ProjectComponents）、検証済み起動シーンを束ねる。
-/// 型登録と読込コードはComponentsが所有し、別プロジェクトの所有者に触れない。
-/// 開く処理・再読み込みは候補Registryで検証してから採用し、失敗時は既存の登録とSceneを保持する。
-/// MainWindowへ渡した後は所有権（ComponentsとScene）をMainWindowへ移す。移したSessionを破棄しない。
-/// 所有権と終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求（Components.Dispose）。
-/// typeId・types.json・保存済みシーンの互換は維持する。
-/// </summary>
+/// <summary>Owns a validated startup scene, editing services and project code until transferred to an editor.</summary>
 public sealed class ProjectSession : IDisposable
 {
     public ProjectFile Project { get; }
     public ProjectComponents Components { get; }
     public Scene Scene { get; }
-
+    public GameSession EditServices { get; }
     private bool _disposed;
     private bool _ownershipTransferred;
 
-    private ProjectSession(ProjectFile project, ProjectComponents components, Scene scene)
+    private ProjectSession(ProjectFile project, ProjectComponents components, Scene scene, GameSession services)
     {
         Project = project;
         Components = components;
         Scene = scene;
+        EditServices = services;
     }
 
-    /// <summary>MainWindowへ所有権を移す。移した後はSessionを破棄せず、MainWindowが破棄する。</summary>
     internal void TransferOwnership()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_disposed || _ownershipTransferred, this);
         _ownershipTransferred = true;
     }
 
-    public static ProjectSession Open(string manifestPath, Func<Type, object>? factory = null)
+    // Synchronous entry for tools/checks; the Launcher always uses OpenAsync.
+    public static ProjectSession Open(string manifestPath)
     {
         var project = ProjectFile.Open(manifestPath);
         ProjectCodeWorkspace.Ensure(project);
+        return Prepare(project, UserCodeCompiler.CompileProject(project.RootDirectory));
+    }
+
+    public static async Task<ProjectSession> OpenAsync(string manifestPath, CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, Task<UserCodeCompileResult>>? compileAsync = null)
+    {
+        var project = ProjectFile.Open(manifestPath);
+        ProjectCodeWorkspace.Ensure(project);
+        using var tracker = new UserCodeCompileTracker(project.RootDirectory, compileAsync);
+        var attempt = await tracker.CompileAsync(tracker.Request(), cancellationToken);
+        if (cancellationToken.IsCancellationRequested || attempt.Canceled || attempt.Superseded)
+        {
+            UserCodeCompileTracker.Release(attempt.Result);
+            throw new OperationCanceledException(cancellationToken);
+        }
+        // Keep the caller's context: constructors and scene restoration run on the UI thread.
+        return Prepare(project, attempt.Result ?? throw new InvalidOperationException("Compilation returned no result."));
+    }
+
+    private static ProjectSession Prepare(ProjectFile project, UserCodeCompileResult compiled)
+    {
         var components = new ProjectComponents();
-        UserCodeCompileResult compiled;
-        try
-        {
-            compiled = UserCodeCompiler.CompileProject(project.RootDirectory);
-        }
-        catch (Exception)
-        {
-            components.Dispose();
-            throw;
-        }
-        var adopted = false;
         Scene? scene = null;
+        GameSession? services = null;
         try
         {
             foreach (var diagnostic in compiled.Diagnostics)
@@ -58,13 +64,13 @@ public sealed class ProjectSession : IDisposable
                 if (diagnostic.IsError) Log.Engine.Error(message);
                 else Log.Engine.Warning(message);
             }
-            // 候補Registryで検証する。失敗した開処理が他のプロジェクトの登録を変えない。
             var registry = components.CreateCandidateRegistry(compiled);
             _ = project.ListDirectories();
             _ = project.ListFiles("Scenes");
+            services = GameSession.Create(GameServices.ForUserCode(compiled.Success ? compiled : null));
             try
             {
-                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), factory);
+                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), services.Factory);
             }
             catch (Exception error) when (!compiled.Success)
             {
@@ -73,53 +79,58 @@ public sealed class ProjectSession : IDisposable
                         .Select(UserCodeCompiler.FormatDiagnostic)), error);
             }
             components.Adopt(compiled.Success ? compiled : null);
-            adopted = true;
-            return new(project, components, scene);
+            return new(project, components, scene, services);
         }
-        finally
+        catch (Exception error)
         {
-            if (!adopted)
+            var errors = new List<Exception> { error };
+            try
             {
-                try
-                {
-                    if (scene is not null) ComponentAssets.DisposeComponents(scene.Objects.SelectMany(item => item.Components));
-                }
-                finally
-                {
-                    try { compiled.LoadContext?.Unload(); } catch { }
-                    components.Dispose();
-                }
+                if (scene is not null) ComponentAssets.DisposeComponents(scene.Objects.SelectMany(item => item.Components));
             }
+            catch (Exception cleanup) { errors.Add(cleanup); }
+            try { services?.Dispose(); }
+            catch (Exception cleanup) { errors.Add(cleanup); }
+            finally
+            {
+                components.Dispose();
+                ProjectComponents.Release(compiled);
+            }
+            if (errors.Count > 1) throw new AggregateException("Project open and cleanup failed.", errors);
+            throw;
         }
     }
 
     public static ProjectSession Create(string parentDirectory, string name)
     {
         var components = new ProjectComponents();
+        GameSession? services = null;
         try
         {
             var scene = new Scene();
-            var yaml = new SceneSerializer(components.Registry).Serialize(scene);
-            var project = ProjectFile.Create(parentDirectory, name, yaml);
+            var project = ProjectFile.Create(parentDirectory, name, new SceneSerializer(components.Registry).Serialize(scene));
             ProjectCodeWorkspace.Ensure(project);
-            return new(project, components, scene);
+            services = GameSession.Create(GameServices.ForProject(components));
+            return new(project, components, scene, services);
         }
         catch
         {
-            components.Dispose();
+            try { services?.Dispose(); }
+            finally { components.Dispose(); }
             throw;
         }
     }
 
-    /// <summary>
-    /// MainWindowへ渡さなかったSessionの後片付け。編集SceneのComponentを破棄してからコード解放を要求する。
-    /// 所有権を移したSessionでは何もしない。
-    /// </summary>
     public void Dispose()
     {
         if (_disposed || _ownershipTransferred) return;
         _disposed = true;
+        var errors = new List<Exception>();
         try { ComponentAssets.DisposeComponents(Scene.Objects.SelectMany(item => item.Components)); }
+        catch (Exception error) { errors.Add(error); }
+        try { EditServices.Dispose(); }
+        catch (Exception error) { errors.Add(error); }
         finally { Components.Dispose(); }
+        if (errors.Count != 0) throw new AggregateException("Project cleanup failed.", errors);
     }
 }

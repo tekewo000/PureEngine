@@ -97,11 +97,11 @@ public class Player
 - 旧バージョンの保存シーンは、完全名または一意なクラス名で初回のID管理へ移行します。ID管理導入前にクラス名自体も変わっていた場合は、元の名前で一度読み込んでから改名してください。
 - 起動時からコンパイルに失敗し、起動シーンがその自作型を参照している場合は、ソースを修正してから開き直してください。自作型を使わない起動シーンなら、エラーをConsoleに残して開けます。
 
-現在はProject内のソースをまとめてコンパイルします。`bin`・`obj`・隠しフォルダ・リンク先フォルダは対象外です。独自csprojの設定、外部NuGet依存の復元、Playの実行状態を保ったコード差し替えは未対応です。コンパイルはEditorのUIスレッド上で行うため、大きなプロジェクトでは反映中に操作が止まります。バックグラウンド実行の基盤（`UserCodeCompileTracker`）は実装済みですが、Editorへの接続はA2・A4の統合待ちのため、現状の動作は変わりません。詳細は[アーキテクチャ改善A3](docs/ArchitectureImprovements.md)を参照してください。
+現在はProject内のソースをまとめてコンパイルします。`bin`・`obj`・隠しフォルダ・リンク先フォルダは対象外です。独自csprojの設定、外部NuGet依存の復元、Playの実行状態を保ったコード差し替えは未対応です。起動時・再読み込み時のコンパイルはバックグラウンドで行います。Componentの生成・Scene移行・採用はUIスレッドで行い、採用時点の編集内容を引き継ぎます。Play・ファイル操作・入力エラー中は採用を保留し、連続変更や終了で古くなった結果は破棄します。詳細は[アーキテクチャ改善](docs/ArchitectureImprovements.md)を参照してください。
 
 ## ZedなどでC#を編集する
 
-新規Projectの作成時、および既存Projectを開くときに、編集用の `PureEngine.Game.csproj`・`PureEngine.Game.slnx` と不足している `global.json` を自動生成します。ゲームのターゲットは **.NET 11（net11.0）**。PureEngine.Coreへの参照と、エンジンが使用するSDKの指定を含みます。
+新規Projectの作成時、および既存Projectを開くときに、編集用の `PureEngine.Game.csproj`・`PureEngine.Game.slnx` と不足している `global.json` を自動生成します。ゲームのターゲットは **.NET 11（net11.0）**。PureEngine.Core・DIライブラリへの参照と、エンジンが使用するSDKの指定を含みます。
 
 ZedではC#拡張を導入し、Projectのルートフォルダ（csprojがあるフォルダ）を開いてください。Roslynが補完・診断・using追加に必要な型情報を読み込めます。必要な.NET 11 SDKがインストールされ、Zedからdotnetを実行できることが前提です。既にフォルダを開いていた場合は言語サーバーを再起動するか、フォルダを開き直してください。
 
@@ -130,6 +130,7 @@ dotnet run --project src/PureEngine.Editor
 ## 構成
 
 - `src/PureEngine.Core/`：シーン・オブジェクト・属性の定義。
+- `src/PureEngine.Runtime/`：UI非依存のサービス生成とPlay実行接続。
 - `src/PureEngine.Editor/`：Avaloniaによる編集画面。
 - `tests/PureEngine.Core.Checks/`：Coreの動作チェック。
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
@@ -214,11 +215,13 @@ public sealed class QuestBoard(QuestLog log)
 }
 ```
 
-形式は `public static void ConfigureGameServices(IServiceCollection services)` の1つのみです。同名が複数ある場合や形式が違う場合は、理由を表示して新しい登録を採用しません。Component 自体の DI 登録や専用基底クラスは不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。単体実行は次の形です。EditorのPlayボタンも同じ `PlaySession` を使います。
+形式は同期の `public static void ConfigureGameServices(IServiceCollection services)` の1つのみです（async voidは不可）。同名が複数ある場合や形式が違う場合は、理由を表示して新しい登録を採用しません。Component 自体の DI 登録や専用基底クラスは不要です。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しません。編集と各 Play は同じ登録から独立したサービス群（provider＋Scope）で動き、Singleton も共有しません。UIなしの実行側はPureEngine.Runtimeを参照し、次の形で呼び出します。EditorのPlayボタンも同じ `PlaySession` を使います。
 
 ```csharp
-using var components = new ProjectComponents();
-using var play = PlaySession.Prepare(scene, components.Registry);
+using PureEngine.Runtime;
+
+// sceneの型を登録済みのComponentRegistryと、ゲーム側の登録処理を渡す。
+using var play = PlaySession.Prepare(scene, registry, GameSetup.ConfigureGameServices);
 play.Start();
 if (play.Runtime.IsRunning) play.Step(1f / 60f);
 ```

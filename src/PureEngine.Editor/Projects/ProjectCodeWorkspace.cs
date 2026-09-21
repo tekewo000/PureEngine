@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Xml.Linq;
+using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -35,6 +36,10 @@ public static class ProjectCodeWorkspace
                     new XElement("Reference", new XAttribute("Include", "PureEngine.Core"),
                         new XElement("HintPath", core.Location),
                         new XElement("Private", "false")))));
+        foreach (var assembly in new[] { typeof(IServiceCollection).Assembly, typeof(ServiceProvider).Assembly })
+            document.Root!.Element("ItemGroup")!.Add(
+                new XElement("Reference", new XAttribute("Include", assembly.GetName().Name!),
+                    new XElement("HintPath", assembly.Location), new XElement("Private", "false")));
         var content = document.ToString() + Environment.NewLine;
         if (!exists || File.ReadAllText(path) != content) SceneFile.Write(path, content);
 

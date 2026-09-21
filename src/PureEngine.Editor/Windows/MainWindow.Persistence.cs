@@ -146,32 +146,19 @@ public partial class MainWindow
         // 終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求。別プロジェクトには触れない。
         StopUserCodeWatching();
         _playTimer?.Stop();
-        try
-        {
-            ForceStopPlayForShutdown();
-        }
-        catch (Exception error)
-        {
-            // 実行中の後片付け失敗でも編集側の解放は続ける。例外は集約して報告する。
-            var previous = _editScene.Reset();
-            var errors = new List<Exception> { error };
-            try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
-            catch (Exception disposeError) { errors.Add(disposeError); }
-            try { _editSession.Dispose(); }
-            catch (Exception disposeError) { errors.Add(disposeError); }
-            try { _components.Dispose(); }
-            catch (Exception disposeError) { errors.Add(disposeError); }
-            throw new AggregateException("Editor cleanup failed.", errors);
-        }
-        var previousScene = _editScene.Reset();
-        var editErrors = new List<Exception>();
-        try { ComponentAssets.DisposeComponents(previousScene.Objects.SelectMany(item => item.Components)); }
-        catch (Exception error) { editErrors.Add(error); }
+        var errors = new List<Exception>();
+        try { ForceStopPlayForShutdown(); }
+        catch (Exception error) { errors.Add(error); }
+        var previous = _editScene.Reset();
+        try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
+        catch (Exception error) { errors.Add(error); }
         try { _editSession.Dispose(); }
-        catch (Exception error) { editErrors.Add(error); }
+        catch (Exception error) { errors.Add(error); }
         try { _components.Dispose(); }
-        catch (Exception error) { editErrors.Add(error); }
-        if (editErrors.Count != 0) throw new AggregateException("Editor cleanup failed.", editErrors);
+        catch (Exception error) { errors.Add(error); }
+        _dragTypes = null;
+        _assetPress = null;
+        if (errors.Count != 0) throw new AggregateException("Editor cleanup failed.", errors);
     }
 
     /// <summary>開いたシーンのフォルダをExplorerで選び直し、右ペインでそのファイルを選択する。</summary>

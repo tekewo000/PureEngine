@@ -1,15 +1,25 @@
 using PureEngine.Core;
+using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
 
 /// <summary>
-/// 編集Scene・パス・Dirtyの所有者。MainWindowのpartial間に分散していた編集状態の
+/// 編集Scene・パス・Dirty・編集用サービスの所有者。MainWindowのpartial間に分散していた編集状態の
 /// 変更経路をここに集約し、画面更新（ItemsSource・Inspector・タイトル）はMainWindowが行う。
 /// Avaloniaに依存しない。旧Sceneの破棄は呼び出し側へ返して行い、
-/// Componentからサービスへの終了順と単発解放はMainWindowが保証する。
+/// Componentからサービスへの終了順はCoordinator（採用）またはMainWindow（終了）が保証する。
 /// </summary>
 public sealed class EditSceneStore
 {
+    public GameSession Services { get; private set; } = GameSession.Create(GameServices.Configure);
+
+    public GameSession ReplaceServices(GameSession services)
+    {
+        var previous = Services;
+        Services = services;
+        return previous;
+    }
+
     public EditSceneStore(Scene initial, string? path = null, bool dirty = false)
     {
         Current = initial ?? throw new ArgumentNullException(nameof(initial));

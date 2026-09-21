@@ -14,6 +14,7 @@ public partial class LauncherWindow : Window
         { Patterns = ["*.pure.project.yaml"] };
     private bool _busy;
     private bool _closed;
+    private readonly CancellationTokenSource _lifetime = new();
 
     public LauncherWindow() : this(new RecentProjects(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PureEngine", "recent-projects.json"))) { }
@@ -29,8 +30,7 @@ public partial class LauncherWindow : Window
         ProjectName.TextChanged += (_, _) => UpdateDestination();
         ProjectLocation.TextChanged += (_, _) => UpdateDestination();
         UpdateDestination();
-        Closing += (_, e) => { if (_busy) e.Cancel = true; };
-        Closed += (_, _) => _closed = true;
+        Closed += (_, _) => { _closed = true; _lifetime.Cancel(); };
     }
 
     private void UpdateDestination()
@@ -61,8 +61,9 @@ public partial class LauncherWindow : Window
         LauncherSurface.IsEnabled = false;
         SetError(null);
         try { await operation(); }
-        catch (Exception error) { SetError($"Projectを開けませんでした: {error.GetBaseException().Message}"); }
-        finally { _busy = false; LauncherSurface.IsEnabled = true; }
+        catch (OperationCanceledException) when (_closed) { }
+        catch (Exception error) { if (!_closed) SetError($"Projectを開けませんでした: {error.GetBaseException().Message}"); }
+        finally { _busy = false; if (!_closed) LauncherSurface.IsEnabled = true; }
     }
 
     private async void OnBrowseLocation(object? sender, RoutedEventArgs e) => await RunOperation(async () =>
@@ -79,8 +80,8 @@ public partial class LauncherWindow : Window
 
     private async void OnCreateProject(object? sender, RoutedEventArgs e) => await RunOperation(() =>
     {
-        var created = ProjectSession.Create(ProjectLocation.Text?.Trim() ?? "", ProjectName.Text?.Trim() ?? "");
-        OpenEditor(created, GameSession.Create());
+        using var created = ProjectSession.Create(ProjectLocation.Text?.Trim() ?? "", ProjectName.Text?.Trim() ?? "");
+        OpenEditor(created);
         return Task.CompletedTask;
     });
 
@@ -90,18 +91,8 @@ public partial class LauncherWindow : Window
             { Title = "Open Project", AllowMultiple = false, FileTypeFilter = [ProjectType] });
         if (files.Count == 0) return;
         var path = files[0].TryGetLocalPath() ?? throw new IOException("ローカルのProjectを選択してください。");
-        // 候補コードの登録・サービス生成・Scene移行が成功してから採用する。
-        // 失敗時は Open 側で候補資源を解放し、既存の登録を維持する。ここで作る資源はない。
-        var (session, editServices) = ProjectSession.Open(path);
-        try
-        {
-            OpenEditor(session, editServices);
-        }
-        catch
-        {
-            try { editServices.Dispose(); } catch { }
-            throw;
-        }
+        using var session = await ProjectSession.OpenAsync(path, _lifetime.Token);
+        OpenEditor(session);
     });
 
     private async void OnRecentDoubleTapped(object? sender, TappedEventArgs e)
@@ -117,24 +108,16 @@ public partial class LauncherWindow : Window
         await OpenRecent(project);
     }
 
-    private Task OpenRecent(RecentProject project) => RunOperation(() =>
+    private Task OpenRecent(RecentProject project) => RunOperation(async () =>
     {
-        var (session, editServices) = ProjectSession.Open(project.ManifestPath);
-        try
-        {
-            OpenEditor(session, editServices);
-        }
-        catch
-        {
-            try { editServices.Dispose(); } catch { }
-            throw;
-        }
-        return Task.CompletedTask;
+        using var session = await ProjectSession.OpenAsync(project.ManifestPath, _lifetime.Token);
+        OpenEditor(session);
     });
 
-    private void OpenEditor(ProjectSession session, GameSession editServices)
+    private void OpenEditor(ProjectSession session)
     {
-        var editor = new MainWindow(session, editServices);
+        if (_closed) return;
+        var editor = new MainWindow(session);
         editor.Closed += (_, _) =>
         {
             if (_closed) return;

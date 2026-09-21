@@ -67,15 +67,8 @@ public static class ProjectGameServices
         var named = new List<MethodInfo>();
         foreach (var type in types)
         {
-            MethodInfo[] methods;
-            try
-            {
-                methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly);
-            }
-            catch
-            {
-                continue;
-            }
+            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static
+                | BindingFlags.Instance | BindingFlags.DeclaredOnly);
             foreach (var method in methods)
             {
                 if (method.Name == RegistrarName)
@@ -91,6 +84,7 @@ public static class ProjectGameServices
             && method.GetParameters() is { Length: 1 } parameters
             && parameters[0].ParameterType == typeof(IServiceCollection)
             && !method.ContainsGenericParameters
+            && !method.IsDefined(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute), false)
             && method.DeclaringType is { ContainsGenericParameters: false };
 
         var valid = named.Where(IsValid).ToArray();

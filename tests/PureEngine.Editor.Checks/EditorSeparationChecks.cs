@@ -1,3 +1,4 @@
+using PureEngine.Runtime;
 using PureEngine.Core;
 using PureEngine.Editor;
 
@@ -63,6 +64,7 @@ static class EditorSeparationChecks
         store.SetPath("d.pure.scene.yaml");
         Check(store.Path == "d.pure.scene.yaml" && ReferenceEquals(store.Current, next), "SetPath must keep scene.");
 
+        store.Services.Dispose();
         var reset = store.Reset();
         Check(ReferenceEquals(reset, next) && store.Current.Objects.Count == 0
             && store.Path is null && !store.IsDirty, "Reset must return previous and clear.");
@@ -91,107 +93,52 @@ static class EditorSeparationChecks
         File.WriteAllText(file, Source(1));
 
         var coordinator = new UserCodeReloadCoordinator();
-        Check(!coordinator.HasPending && !coordinator.IsReloading, "Initial reload state must be idle.");
-
-        coordinator.RequestPending();
-        Check(coordinator.HasPending, "RequestPending must set pending.");
-        Check(coordinator.ShouldReloadNow(false, false, false), "Pending reload should run when idle.");
-        Check(!coordinator.ShouldReloadNow(true, false, false), "Play must defer pending reload.");
-        Check(!coordinator.ShouldReloadNow(false, false, true), "Input errors must defer pending reload.");
-        coordinator.ClearPending();
-
-        using var services = GameSession.Create();
-        var currentRegistry = new ComponentRegistry();
-        var compiled1 = UserCodeCompiler.CompileProject(root);
-        Check(compiled1.Success, "Setup compilation failed.");
+        using var owner = new ProjectComponents();
+        owner.Adopt(UserCodeCompiler.CompileProject(root));
+        var state = new EditSceneStore(new Scene());
         try
         {
-            foreach (var type in compiled1.AttachableTypes)
-                currentRegistry.RegisterType(type, UserCodeCompiler.TypeIdFor(type));
-            var playerType1 = compiled1.AttachableTypes.Single(t => t.Name == "Player");
-            var scene = new Scene();
-            var item = scene.AddEmpty();
+            var playerType = owner.GetTypesForFile(file).Single();
+            var item = state.Current.AddEmpty();
             item.Rename("Hero");
-            var id = item.Id;
-            var component1 = services.Factory(playerType1);
-            playerType1.GetField("Health")!.SetValue(component1, 73);
-            item.Attach(component1);
-            item.SetStartPriority(component1, -9);
-            item.SetUpdatePriority(component1, 5);
-
-            // Deferred: gate blocks before any compilation.
-            var compileCalled = false;
-            var deferred = coordinator.Reload(scene, currentRegistry, services.Factory, root,
-                isPlaying: true, fileBusy: false, hasInputErrors: false,
-                compile: _ => { compileCalled = true; return compiled1; });
-            Check(deferred.IsDeferred && !compileCalled && coordinator.HasPending, "Play must defer without compiling.");
-
-            // Success: v2 adds a field, preserves identity/values/priority.
+            var component = state.Services.Factory(playerType);
+            item.Attach(component);
+            playerType.GetField("Health")!.SetValue(component, 73);
+            item.SetStartPriority(component, -9);
+            item.SetUpdatePriority(component, 5);
+            state.MarkChanged();
+            var oldServices = state.Services;
             File.WriteAllText(file, Source(2));
-            var published = new List<UserCodeCompileResult>();
-            var outcome = coordinator.Reload(scene, currentRegistry, services.Factory, root,
-                isPlaying: false, fileBusy: false, hasInputErrors: false,
-                createCandidate: result => UserCodeReloadCoordinator.BuildCandidateRegistry(currentRegistry, result),
-                publish: result => published.Add(result),
-                disposeComponents: components =>
-                {
-                    foreach (var component in components.Distinct(ReferenceEqualityComparer.Instance).Reverse())
-                        if (component is IDisposable disposable) disposable.Dispose();
-                });
-            Check(!coordinator.HasPending && !coordinator.IsReloading, "Reload must clear pending state.");
-            foreach (var diagnostic in outcome.Diagnostics)
+            var result = coordinator.Apply(state, owner, UserCodeCompiler.CompileProject(root));
+            Check(result.Adopted && result.Error is null && !coordinator.IsReloading,
+                "Successful preparation must adopt the code, scene and services together.");
+            var restored = state.Current.Objects.Single();
+            var renewed = restored.Components.Single();
+            Check(restored.Id == item.Id && restored.Name == "Hero" && state.IsDirty,
+                "Identity and unsaved state must survive adoption.");
+            Check((int)renewed.GetType().GetField("Health")!.GetValue(renewed)! == 73
+                && (int)renewed.GetType().GetField("Added")!.GetValue(renewed)! == 42,
+                "Current values must survive and new fields use their initializers.");
+            Check(restored.GetStartPriority(renewed) == -9 && restored.GetUpdatePriority(renewed) == 5,
+                "Priorities must survive adoption.");
+            try { _ = oldServices.Services; throw new Exception("Old services must be disposed."); }
+            catch (ObjectDisposedException) { }
+            var goodScene = state.Current;
+            var goodServices = state.Services;
+            foreach (var broken in new[] { Source(2) + " this is broken;", Source(2).Replace("int Health = 10", "float Health = 10") })
             {
-                if (diagnostic.IsError) throw new Exception("Unexpected error: " + UserCodeCompiler.FormatDiagnostic(diagnostic));
+                File.WriteAllText(file, broken);
+                var failed = coordinator.Apply(state, owner, UserCodeCompiler.CompileProject(root));
+                Check(!failed.Adopted && ReferenceEquals(state.Current, goodScene)
+                    && ReferenceEquals(state.Services, goodServices)
+                    && owner.Registry.Types.Contains(renewed.GetType()),
+                    "Compilation and schema failures must preserve the scene, services and registry.");
             }
-            Check(outcome.Success && outcome.MigratedScene is not null && published.Count == 1,
-                "Success must migrate and publish once after preparation.");
-            var migrated = outcome.MigratedScene!;
-            var restored = migrated.Objects.Single();
-            var component2 = restored.Components.Single();
-            Check(restored.Id == id && restored.Name == "Hero", "Reload must preserve identity.");
-            Check((int)component2.GetType().GetField("Health")!.GetValue(component2)! == 73, "Reload must preserve unsaved values.");
-            Check(restored.GetStartPriority(component2) == -9 && restored.GetUpdatePriority(component2) == 5,
-                "Reload must preserve Priority.");
-            Check((int)component2.GetType().GetField("Added")!.GetValue(component2)! == 42,
-                "New fields must keep initializers.");
-            Check(ReferenceEquals(scene.Objects.Single().Components.Single(), component1),
-                "Old scene must stay untouched until the caller adopts the migrated scene.");
-            // Old scene is still owned by the caller; release it here in Component->service order.
-            foreach (var component in scene.Objects.SelectMany(o => o.Components).Distinct(ReferenceEqualityComparer.Instance).Reverse())
-                if (component is IDisposable disposable) disposable.Dispose();
-            foreach (var component in migrated.Objects.SelectMany(o => o.Components).Distinct(ReferenceEqualityComparer.Instance).Reverse())
-                if (component is IDisposable disposable) disposable.Dispose();
-
-            // Compile failure: publish must not run, old state untouched.
-            File.WriteAllText(file, Source(2) + "\nthis is broken;");
-            published.Clear();
-            var failed = coordinator.Reload(scene, currentRegistry, services.Factory, root,
-                isPlaying: false, fileBusy: false, hasInputErrors: false,
-                createCandidate: result => UserCodeReloadCoordinator.BuildCandidateRegistry(currentRegistry, result),
-                publish: result => published.Add(result));
-            Check(!failed.Success && !failed.IsDeferred && failed.Compiled is not null && !failed.Compiled.Success,
-                "Compile failure must be reported.");
-            Check(published.Count == 0, "Compile success alone must not publish; failure must not publish.");
-            Check(ReferenceEquals(scene.Objects.Single().Components.Single(), component1), "Compile failure must keep old instances.");
-
-            // Schema failure: type change must not publish.
-            File.WriteAllText(file, Source(2).Replace("int Health = 10", "float Health = 10"));
-            published.Clear();
-            var schemaFailed = coordinator.Reload(scene, currentRegistry, services.Factory, root,
-                isPlaying: false, fileBusy: false, hasInputErrors: false,
-                createCandidate: result => UserCodeReloadCoordinator.BuildCandidateRegistry(currentRegistry, result),
-                publish: result => published.Add(result));
-            Check(!schemaFailed.Success && published.Count == 0, "Schema failure must not publish.");
-            Check(ReferenceEquals(scene.Objects.Single().Components.Single(), component1), "Schema failure must keep old scene.");
-
-            // Input-error deferral passes values, not controls.
-            coordinator.RequestPending();
-            Check(!coordinator.ShouldReloadNow(false, false, true), "Input errors must defer even with pending.");
-            coordinator.ClearPending();
         }
         finally
         {
-            UserCodeReloadCoordinator.Unload(compiled1);
+            foreach (var component in state.Current.Objects.SelectMany(o => o.Components).OfType<IDisposable>()) component.Dispose();
+            state.Services.Dispose();
         }
     }
 }

@@ -1,117 +1,100 @@
 # 機能追加前のアーキテクチャ改善
 
+最終確認：2026-09-22
+
 ## 方針と対応状況
 
-以下の5項目をすべて完了してから、描画・入力・Parent・Undo／Redo・通信・Steamなどの新機能追加へ進む。改善に必要な実装と検証は先に行う。
+5項目をすべて完了してから新機能追加へ進む。**現在は5／5項目完了。** mainのA1と、b1〜b4のA2〜A5を接続し、統合後の動作を確認した。描画・入力・Parent・Undo／Redo・通信・Steamなどの新機能は今回追加していない。
 
-**現在は1／5項目完了。A1が完了し、A2〜A5は未完了。** A2〜A5は課題・対応範囲・完了条件を文書化した段階で、改善実装はまだ行っていない。
+完了は実装だけでなく、以下の完了条件と統合チェックを満たした状態を指す。
 
-「完了」はコードの変更だけでなく、各項目の完了条件を満たし、対応する動作チェックが通った状態を指す。着手後も完了条件が残っている項目は「未完了（対応中）」とする。
-
-| ID | 改善項目 | 状態 | 完了の証跡 |
+| ID | 改善項目 | 状態 | 主な実装・検証 |
 | --- | --- | --- | --- |
-| A1 | プロジェクト側からゲーム用サービスを登録できるようにする | 完了 | プロジェクト登録口（`src/PureEngine.Editor/Game/ProjectGameServices.cs`）、編集・Play接続（`GameSession.cs`、`PlaySession.cs`）、再読み込み・Project読み込み（`MainWindow.UserCode.cs`、`Projects/ProjectSession.cs`、`Windows/LauncherWindow.axaml.cs`）。2026-09-22に `dotnet run --project tests/PureEngine.Core.Checks -c Release` と `dotnet run --project tests/PureEngine.Editor.Checks -c Release` がPASS（Editor側に `ProjectServiceRegistrationChecks` を追加）。 |
-| A2 | MainWindowに集中した責務を分離する | 未完了（未着手） | — |
-| A3 | C#コンパイルをUIスレッドから分離する | 未完了（未着手） | — |
-| A4 | 型登録と読込コードをプロジェクト単位で所有する | 未完了（統合待ち） | A4節に実装箇所・検証結果・確認日を記録。Core/Editor Checks PASS。A1/A2/A3/A5統合は未検証。全体件数の更新は統合担当が行う。 |
-| A5 | ゲーム実行の接続部分をEditorから独立させる | 未完了（未着手） | — |
+| A1 | プロジェクト側のゲーム用サービス登録 | 完了 | ProjectGameServices、GameServices、ProjectServiceRegistrationChecks |
+| A2 | MainWindowの責務分離 | 完了 | EditSceneStore、EditorOperationGate、UserCodeReloadCoordinator、EditorSeparationChecks |
+| A3 | コンパイルのバックグラウンド化 | 完了 | UserCodeCompileTracker、ProjectSession.OpenAsync、MainWindow.UserCode、UserCodeBackgroundChecks |
+| A4 | プロジェクト単位の型登録と読込コードの所有 | 完了 | ProjectComponents、ProjectSession、ProjectIsolationChecks |
+| A5 | Editorに依存しない実行接続 | 完了 | PureEngine.Runtime、GameDependencyChecks、PlayConnectionChecks |
+| 統合 | 上記5項目の接続 | 完了 | IntegratedArchitectureChecks、既存Core／Editorチェック |
 
 ## A1：プロジェクト側のサービス登録
 
-**現状：完了（2026-09-22確認）。** プロジェクトの自作C#に `public static void ConfigureGameServices(IServiceCollection services)` を1つだけ定義し、エンジンのソースを変更せずにサービスを登録できる。編集・Play・再Playで同じ登録を使い、各セッションのサービス群は Singleton も含めて分離する。Coreは引き続き `Func<Type, object>` だけを受け、DIライブラリに依存しない。
+自作C#の `public static void ConfigureGameServices(IServiceCollection services)` を1つ検出し、組み込み登録に加えて適用する。登録がない既存プロジェクトは従来どおり動く。登録口の重複・不正な形式・async void・登録中の例外は報告し、採用しない。
 
-完了条件：
+- [x] エンジンを変更せず、プロジェクト側で登録したサービスをComponentのコンストラクタで受け取れる。
+- [x] 編集・Play・再Playに同じ登録を適用し、Singletonを含むサービス群を分離する。
+- [x] 登録・依存解決・移行失敗時は旧状態を維持し、候補資源を解放する。
+- [x] 登録変更の再読み込みと、Componentからサービスへの終了順・単発解放を維持する。
 
-- [x] エンジンのソースを変更せず、プロジェクト側でサービスを登録し、Componentのコンストラクタで受け取れる。
-- [x] 編集時・Play時・再Play時に登録が適用され、サービスのインスタンスは既存仕様どおり分離される。
-- [x] 登録や依存解決の失敗を報告し、生成済み資源を解放する。コード再読み込みでは、準備に失敗した新しい登録を採用しない。
-- [x] サービス登録を含むコード変更の再読み込みを確認し、Componentとサービスの終了順・単発解放を維持する。
+実装：[ProjectGameServices](../src/PureEngine.Editor/Game/ProjectGameServices.cs)、[GameServices](../src/PureEngine.Editor/Game/GameServices.cs)。
+検証：[ProjectServiceRegistrationChecks](../tests/PureEngine.Editor.Checks/ProjectServiceRegistrationChecks.cs)。生成する外部エディター用csprojにもDIの参照を追加した。
 
 ## A2：MainWindowの責務分離
 
-**現状：未完了（統合待ち）。** MainWindowのpartial間に分散した保存・Play・再読み込み・終了の制御を整理し、画面操作と非UI中核を分離した単体では既存チェックが通る。A1・A3・A4・A5との接続（サービス登録・非同期化・プロジェクト単位所有・実行接続の移動先）は別worktreeで並列実装中のため、統合後の検証まで完了扱いにしない。
+編集Scene・保存先・Dirty・編集用サービス群を `EditSceneStore` が保持する。保存・Play・再読み込みの可否はUI非依存の `EditorOperationGate` で判定する。`UserCodeReloadCoordinator.Apply` は候補サービスの生成、Scene移行、型登録と編集状態の採用、旧資源の解放を担当する。MainWindowは操作受付、非同期処理の接続、ダイアログ、選択・表示更新を担当する。
 
-コード再読み込みの準備・採用・失敗処理を最初の切り出し対象とする。保存やPlayの調整も、画面に依存しない処理は既存のSessionや適切な所有者へ移し、MainWindowは操作の受付、ダイアログ、表示更新を担当する。全面的なMVVM化や、行数を減らすだけの分割は完了条件にしない。
+- [x] 再読み込みの中核処理をWindow／Controlなしで実行・検証できる。
+- [x] 編集Scene・サービス・実行Session・コンパイル結果の所有者と変更経路が明確になった。
+- [x] 保存・Play・再読み込みの競合を、画面から渡す状態の値で判定する。
+- [x] 未保存確認、入力エラー中の保留、Play中の編集禁止、失敗表示、終了時解放を維持する。
 
-主な対象：[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)。
-
-完了条件：
-
-- [x] コード再読み込みの中核処理をMainWindow外で実行・検証できる。
-- [x] 編集Scene・実行Session・再読み込み状態の所有者と変更経路が明確になり、複数のpartialファイルで同じ制御を重複実装しない。
-- [x] 保存・Play・再読み込みの競合条件をUIコントロールの直接参照に依存せず判定できる。入力エラーの有無などは画面から必要な情報として渡す。
-- [x] 未保存確認、入力エラー中の保留、Play中の編集禁止、失敗表示、終了時の解放が従来どおり動く。
-
-実装箇所（A2・単体検証済み、統合待ち）：
-- 新規・非UI：`src/PureEngine.Editor/Editing/EditorOperationGate.cs`（保存・Play・再読み込み・ファイル操作の競合判定。`HasInputErrors`などbool値で受け、Avalonia参照なし）、`src/PureEngine.Editor/Editing/EditSceneStore.cs`（編集Scene・パス・Dirtyの所有者。旧Scene返却でComponent→サービス終了順はMainWindowが保証）、`src/PureEngine.Editor/Compilation/UserCodeReloadCoordinator.cs`（準備・採用・後片付けの中核。`Prepare`/`Adopt`/`Discard`/`Reload`と`BuildCandidateRegistry`/`Unload`を公開。コンパイル成功だけでは採用せず移行成功後にpublish。Window/Control/Dispatcher参照なし）。
-- MainWindowは操作受付・ダイアログ・選択維持・表示更新に専念：`Windows/MainWindow.axaml.cs`（`_editScene`/`_reloadCoordinator`所有、`HasInputErrors`集約）、`Windows/MainWindow.UserCode.cs`（Coordinatorへ委譲し選択ID・Dirty維持・Console/ステータス・Explorer更新のみ行う）、`Windows/MainWindow.Persistence.cs`（Gate/Store経由の保存・開く・新規・終了。`CloseEditSession`の終了順を維持）、`Windows/MainWindow.Play.cs`（Gate経由の開始可否、`_editScene.Current`と`ComponentAssets.Registry`を`PlaySession.Prepare`へ渡して再利用）、`Windows/MainWindow.Project.cs`・`Windows/MainWindow.ProjectExplorer.cs`（`_editScene.Path`経由の参照付け替え）。
-- 境界遵守：Registry所有構造は作り直さず`ComponentRegistry`を引数で受ける（A4接続点）。`GameSession`/`PlaySession`の移動は行わずfactory・`Prepare`を再利用（A5接続点）。同期分離のみで非同期化なし（A3接続点）。
-- 画面なし検証：`tests/PureEngine.Editor.Checks/EditorSeparationChecks.cs`（Gate・Store・CoordinatorをWindowなしで確認。ID・未保存値・Priority維持、失敗時旧保持・未publish、競合時保留を検証）。既存チェックは新所有者に合わせて更新（`UserCodeChecks`・`PlayConnectionChecks`・`EditorOwnershipChecks`・`ConsoleChecks`・`PriorityInspectorChecks`・`Program.cs`）。
-
-検証結果（2026-09-21確認）：
-- `dotnet run --project tests/PureEngine.Core.Checks -c Release`：PASS（7行すべて）。
-- `dotnet run --project tests/PureEngine.Editor.Checks -c Release`：PASS（Play/Stop配線、所有権、Console、分離、ユーザーコード、Priority、Launcherの7行すべて。分離の1行は新規）。
-- 未検証・統合待ち：A1のプロジェクト側サービス登録との再Play・再読み込み確認、A3のバックグラウンド化後の採用時点判定、A4のプロジェクト単位Registry所有者への差し替え、A5の実行接続共有化後のPlay/終了確認。統合後に両チェック＋接続確認を再実行するまで完了にしない。
+実装：[EditSceneStore](../src/PureEngine.Editor/Editing/EditSceneStore.cs)、[EditorOperationGate](../src/PureEngine.Editor/Editing/EditorOperationGate.cs)、[UserCodeReloadCoordinator](../src/PureEngine.Editor/Compilation/UserCodeReloadCoordinator.cs)。
+検証：[EditorSeparationChecks](../tests/PureEngine.Editor.Checks/EditorSeparationChecks.cs)、EditorOwnershipChecks、既存画面チェック。
 
 ## A3：コンパイルのバックグラウンド実行
 
-**現状：未完了。** [UserCodeWatcher](../src/PureEngine.Editor/Compilation/UserCodeWatcher.cs) がUIスレッドに変更通知を渡し、[ReloadUserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) が同期的にコンパイルする。プロジェクトが大きくなるほど、コンパイル中に画面操作が止まりやすい。
+Launcherは `ProjectSession.OpenAsync`、Editorの再読み込みは `UserCodeCompileTracker` を使う。ソースの読み取り・コンパイルをワーカースレッドで行い、サービス生成・Scene復元／移行・採用はUIスレッドへ戻って行う。
 
-ソースの読み取り・コンパイルをバックグラウンドで行い、編集Sceneの移行・結果の採用・表示更新はUI側で行う。単に非同期化するだけでなく、採用時点の状態を確認する。
+- [x] プロジェクトを開く際と再読み込みの際に、コンパイルがUIスレッドを占有しない。
+- [x] 世代と所有者の有効性を確認し、連続変更・切替・終了で古くなった結果を採用せず解放する。
+- [x] 採用時点のSceneから移行し、コンパイル中の編集を保持する。Play・ファイル操作・入力エラー中は採用を保留する。
+- [x] 失敗時は旧状態を維持し、修正後に再試行できる。
+- [x] 完了順逆転、保留、終了後の完了、起動キャンセルとUI応答を検証する。
 
-完了条件：
+保留中に新しい要求が来た場合は古い候補を破棄し、最新の結果を待つ。実行中のRoslynコンパイル自体は強制中断せず、不要になった結果を終了後に解放する。
 
-- [ ] プロジェクトを開く際とコード再読み込みの際に、コンパイルがUIスレッドを占有しない。
-- [ ] 連続保存、プロジェクト切替、終了により不要になった古い結果を採用せず、その読込資源を解放する。
-- [ ] コンパイル中に編集した値を古いSceneで上書きしない。採用時もPlay・ファイル操作・入力エラーの制約を守る。
-- [ ] コンパイル失敗時は直前の正常な状態を維持し、修正後に再試行できる。
-- [ ] 処理の重なりや完了順の逆転を含むチェックと、コンパイル中のUI応答確認を記録する。
+実装：[UserCodeBackgroundCompile](../src/PureEngine.Editor/Compilation/UserCodeBackgroundCompile.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs)。
+検証：[UserCodeBackgroundChecks](../tests/PureEngine.Editor.Checks/UserCodeBackgroundChecks.cs)、[IntegratedArchitectureChecks](../tests/PureEngine.Editor.Checks/IntegratedArchitectureChecks.cs)。コンパイルの完了を制御し、その間にAvaloniaのUI処理が実行されること、Component生成がUIスレッドへ戻ることをHeadlessで確認した。
 
 ## A4：プロジェクト単位の型登録と読込コードの所有
 
-**現状：完了（A1/A2/A3/A5との統合は未検証のため統合待ち）。** 可変なstatic登録を解消し、`ProjectComponents` がプロジェクト単位にRegistry・自作型一覧とソース対応・採用中のコンパイル結果と読込コード（ALC）を所有する。`ComponentAssets` は状態を持たない共通処理（破棄・組み込み登録・候補生成・明示登録のアタッチ）のみを提供する。`ProjectSession` は `Project`・`Components`・`Scene` を束ね、開処理は候補Registryで検証してから `Adopt` する。`MainWindow` はSessionから所有権を移して `Serializer`・Inspectorのアタッチ・コード移行・Playにそのプロジェクトの登録を明示的に渡す。
+`ProjectComponents` がRegistry・自作型一覧・ファイル対応・採用中コードを所有する。`ComponentAssets` は状態を持たない共通処理だけを提供する。`ProjectSession` は起動Scene・編集用サービス・ProjectComponentsを所有し、Editorへ引き渡す。
 
-型登録と読込コードをProjectSessionなどのプロジェクト単位の所有者へ移す。Serializer、Inspector、コンパイル結果の採用、Playには、そのプロジェクトの登録を明示的に渡す。複数ウィンドウを開く新しいUIの追加は必要としない。
+- [x] 可変なstatic登録に依存せず、プロジェクト単位で型とコードを管理する。
+- [x] 同名クラスを持つ2つのプロジェクトを同時保持し、一方の再読み込み・終了後も他方の型解決・保存・Playが独立する。
+- [x] 開く処理や再読み込みの失敗時に既存状態を維持する。
+- [x] 旧Component、旧サービス、旧コードの順に解放し、所有者の旧コード参照を外す。
+- [x] typeIdと `.pureengine/types.json` の保存互換を維持する。
 
-完了条件：
-
-- [x] プロジェクトごとにRegistry、ファイルと型の対応、読込コードの寿命を管理し、可変なstatic登録に依存しない。
-- [x] 2つのプロジェクトを同時に保持し、一方の再読み込み・終了が他方の型解決、保存、Playへ影響しないことをチェックする。
-- [x] プロジェクトを開く処理や再読み込みに失敗しても、既存の登録とSceneを保持する。
-- [x] Component・サービスの終了とコードの解放要求の順序が明確で、不要な旧コードへの参照を所有者に残さない。
-- [x] 既存のtypeIdと `.pureengine/types.json` の保存互換を維持する。
-
-実装箇所：`src/PureEngine.Editor/Projects/ProjectComponents.cs`（所有者：Registry・UserTypes・UserFileTypes・Adopt/Clear/Dispose・CreateCandidateRegistry）、`src/PureEngine.Editor/Components/ComponentAssets.cs`（stateless化：RegisterBuiltins・CreateCandidateRegistry・CanAttach/TryAttach(registry, ...)・DisposeComponents）、`src/PureEngine.Editor/Projects/ProjectSession.cs`（Components所有・候補検証・失敗時旧状態保持・TransferOwnership/Dispose）、`src/PureEngine.Editor/Windows/MainWindow.*`（所有権移譲・明示登録のSerializer/アタッチ/Play/再読み込み・終了順序）、`tests/PureEngine.Editor.Checks/ProjectIsolationChecks.cs`（2プロジェクト同時保持・同名クラス・型解決/保存/Play独立・再読み込み/失敗/終了後の独立）、既存チェックの所有者対応（Core/Editor Checks全経路）。
-検証：`dotnet run --project tests/PureEngine.Core.Checks -c Release` PASS、`dotnet run --project tests/PureEngine.Editor.Checks -c Release` PASS（EditorはPlay/所有権/Console/ユーザコード/分離/Priority/Launcherの全PASSを含む）。確認日：2026-09-22。
-所有構造の変更は `docs/EngineArchitecture.md`（生成箇所・所有者・終了順序・C#再読み込み節）へ反映済み。組み込み型は所有者生成時に各Registryへ登録（sample.*維持、user.*のみ差し替え）する方針を明示した。
-他項目との接続：A2・A3は `ProjectComponents.CreateCandidateRegistry`／`Adopt`／`Dispose`（状態確認は `ActiveUserCode`）を入口に使うこと。A1のサービス登録契約・A5の実行Session配置は作り直していない。A1/A2/A3/A5との統合動作は未検証（統合待ち）。
+実装：[ProjectComponents](../src/PureEngine.Editor/Projects/ProjectComponents.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs)。
+検証：[ProjectIsolationChecks](../tests/PureEngine.Editor.Checks/ProjectIsolationChecks.cs)、UserCodeChecks、統合チェック。コードのUnloadは解放要求であり、利用者が保持する型やインスタンスまで強制回収するものではない。
 
 ## A5：Editorに依存しない実行接続
 
-**現状：未完了。** CoreのSceneRuntimeは画面なしで動くが、[GameSession](../src/PureEngine.Editor/Game/GameSession.cs) と [PlaySession](../src/PureEngine.Editor/Game/PlaySession.cs) はEditorアセンブリに置かれている。CoreチェックもこれらのEditorソースをリンクして使っており、共有する実行部分の境界がまだない。
+`GameSession` と `PlaySession` を `PureEngine.Runtime` へ移した。依存方向はEditor → Runtime → Core。Runtimeは登録処理を `Action<IServiceCollection>` として外部から受け取り、Editor・Avalonia・Editorサンプルを参照しない。
 
+- [x] RuntimeはEditor・Avaloniaに非依存、CoreはUI・DIライブラリに非依存。
+- [x] EditorのPlayとUIなしのチェックが同じRuntimeを利用する。
+- [x] A1の登録を使った準備・Start・Step・Stop・再実行を確認する。
+- [x] 正常・準備失敗・ライフサイクル失敗時の解放順と単発解放を維持する。
+- [x] GameSession／PlaySessionのソースリンクを廃止し、チェック側もRuntimeをプロジェクト参照する。
 
-サービス生成、Component生成、SceneRuntimeの開始・更新・停止を接続する部分を、Editor・Avaloniaに依存しない場所へ切り出す。配置するプロジェクト名や分割数は実装時に最小構成で決める。描画・入力・配布用ゲームアプリの実装は、この項目の完了条件には含めない。
+実装：[GameSession](../src/PureEngine.Runtime/GameSession.cs)、[PlaySession](../src/PureEngine.Runtime/PlaySession.cs)。
+検証：[GameDependencyChecks](../tests/PureEngine.Core.Checks/GameDependencyChecks.cs)、PlayConnectionChecks、ProjectServiceRegistrationChecks。描画・配布用アプリは今回の範囲に含めない。
 
-完了条件：
+## 統合時の修正と検証の証跡
 
-- [ ] 実行接続部分からEditor・Avaloniaへの依存がなく、CoreもUI・DIライブラリへの非依存を維持する。
-- [ ] EditorのPlayと、UIなしの実行チェックが同じ実行接続コードを利用する。
-- [ ] A1のプロジェクト側サービス登録を使い、Sceneの準備・Start・Step・Stop・再実行を確認する。
-- [ ] 正常終了と準備・開始・更新・終了の失敗時に、Componentからサービスへの解放順と単発解放を維持する。
-- [ ] 共有する実行接続コードについて、テスト側でEditorソースをリンクする方式を解消する。
+取り込み元：A1 `150e860`、A2／b1 `e882aa0`、A3／b2 `31e5d67`、A4／b3 `b0e586a`、A5／b4 `1da2b18`。
 
-## 進め方と完了判定
+単体ブランチに残っていたstatic登録、旧Session API、同期的なEditor呼び出しを接続し直した。再読み込みは新コード用のサービス群で準備してから採用し、旧資源を解放する。A2の準備・採用処理はA4の所有者へ集約し、重複する候補Registry生成やpublish用の既定static経路を削除した。
 
-項目のIDは評価時の5項目に対応する。実装順は依存関係に合わせ、A4・A5で所有と依存の境界を固め、A1を接続し、A2・A3でEditorの調整と非同期化を進める想定とする。関連項目を同じ変更で扱う場合も、完了判定は項目ごとに行う。
-
-既存機能の回帰確認には以下を使い、新しい完了条件には必要な動作チェックを追加する。
+2026-09-22、統合したコードで以下を実行しPASS。
 
 ```powershell
 dotnet run --project tests/PureEngine.Core.Checks -c Release
 dotnet run --project tests/PureEngine.Editor.Checks -c Release
 ```
 
-直前のアーキテクチャ評価では、既存の両チェックはPASSした。この結果は現在の機能の確認であり、上記5項目の完了を意味しない。
+追加の統合チェックでは、実際のMainWindow経路で完了順逆転、現在値・選択・Priorityの保持、旧Componentの単発解放、Play／ファイル操作／入力エラーによる保留、終了後の結果解放を確認した。ProjectSession.OpenAsyncではUI応答、UIスレッドでのComponent生成、キャンセル後の解放と別Sessionの保持を確認した。
 
-対応時は各チェックボックスと一覧の状態を更新し、「完了の証跡」に実装箇所・実行したチェック・結果・確認日を残す。5項目すべての完了を確認するまで、新機能追加へ進まない。
+UI応答の確認はAvalonia Headlessで行った。ネイティブ画面の目視検証や、実ゲームの描画性能測定を行った結果ではない。

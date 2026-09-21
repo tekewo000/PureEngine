@@ -78,7 +78,10 @@ public sealed class ProjectComponents : IDisposable
     /// 同じRegistryインスタンスを維持するため、既存のSceneSerializerはそのまま使える。
     /// 失敗時は旧登録とSceneを保持し、候補のALCは呼び出し側で解放する。
     /// </summary>
-    public void Adopt(UserCodeCompileResult? result)
+    public void Adopt(UserCodeCompileResult? result) => Release(Exchange(result));
+
+    // The caller releases old code after its components and services have terminated.
+    internal UserCodeCompileResult? Exchange(UserCodeCompileResult? result)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (result is { Success: false }) throw new ArgumentException("Cannot publish failed compilation.", nameof(result));
@@ -96,22 +99,23 @@ public sealed class ProjectComponents : IDisposable
             }
             _userFileTypes.Clear();
             _userCode = null;
-            // 古いALCは参照が残る間は生存し、GCで回収される。明示Unloadは参照切れ後に行われる。
-            // 呼び出し側は旧SceneのComponentをAdopt後に破棄する（再読み込み）か、事前に破棄する（終了）。
-            if (previous?.LoadContext is not null)
+            // Exchangeは旧コードを返す。Coordinatorが旧Component・サービスを解放してからUnloadする。
+            foreach (var type in result?.AttachableTypes ?? [])
             {
-                try { previous.LoadContext.Unload(); } catch { }
-            }
-            if (result is null || !result.Success) return;
-            foreach (var type in result.AttachableTypes)
-            {
-                var id = result.GetTypeId(type);
+                var id = result!.GetTypeId(type);
                 Registry.RegisterType(type, id);
             }
-            foreach (var (path, types) in result.FileTypes)
-                _userFileTypes[Path.GetFullPath(path)] = types;
+            if (result is not null)
+                foreach (var (path, types) in result.FileTypes)
+                    _userFileTypes[Path.GetFullPath(path)] = types;
             _userCode = result;
+            return previous;
         }
+    }
+
+    internal static void Release(UserCodeCompileResult? result)
+    {
+        try { result?.LoadContext?.Unload(); } catch { }
     }
 
     public void Clear() => Adopt(null);

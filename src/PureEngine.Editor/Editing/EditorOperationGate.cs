@@ -5,7 +5,7 @@ namespace PureEngine.Editor;
 /// 画面由来の情報（Play中・ファイル操作中・入力エラー・未保存）はbool値として渡す。
 /// MainWindowは <c>_invalidFields.Count &gt; 0 || NameError.IsVisible</c> などを
 /// <c>hasInputErrors</c> に集約して渡し、判定結果の理由表示だけを担当する。
-/// A3の非同期化までは同期前提の判定のみ行う。
+/// 非同期コンパイルの結果採用時にも同じ制約を確認する。
 /// </summary>
 public static class EditorOperationGate
 {

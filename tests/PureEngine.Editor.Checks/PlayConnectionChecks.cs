@@ -13,7 +13,8 @@ static class PlayConnectionChecks
     private static object? Call(MainWindow window, string method, params object?[] args) =>
         typeof(MainWindow).GetMethod(method, AnyInstance)!.Invoke(window, args);
     private static T Field<T>(MainWindow window, string name) =>
-        (T)typeof(MainWindow).GetField(name, AnyInstance)!.GetValue(window)!;
+        (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
+            ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static EditSceneStore EditStore(MainWindow window) =>
         (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;

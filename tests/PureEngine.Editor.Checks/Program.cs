@@ -22,6 +22,23 @@ internal static class Program
         Dispatcher.UIThread.RunJobs();
     }
 
+    internal static void Until(Func<bool> condition, string message = "Timed out waiting for UI work.")
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            using var slice = new CancellationTokenSource(10);
+            Dispatcher.UIThread.MainLoop(slice.Token);
+        }
+        Check(condition(), message);
+    }
+
+    internal static void Wait(Task task)
+    {
+        Until(() => task.IsCompleted);
+        task.GetAwaiter().GetResult();
+    }
+
     [STAThread]
     private static void Main()
     {
@@ -44,6 +61,9 @@ internal static class Program
             EditorSeparationChecks.Run(root);
             UserCodeChecks.Run(root);
             ProjectIsolationChecks.Run(root);
+            ProjectServiceRegistrationChecks.Run(root);
+            UserCodeBackgroundChecks.Run(root);
+            IntegratedArchitectureChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";
             Click(Control<Button>(launcher, "CreateProjectButton"));
@@ -62,6 +82,7 @@ internal static class Program
             recent.SelectedIndex = 0;
             recent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             Dispatcher.UIThread.RunJobs();
+            Until(() => desktop.Windows.OfType<MainWindow>().Any());
             editor = desktop.Windows.OfType<MainWindow>().Single();
             Check(editor.IsVisible && !launcher.IsVisible, "Enter must open the selected recent project.");
 
@@ -76,6 +97,7 @@ internal static class Program
             recent.SelectedIndex = 0;
             recent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             Dispatcher.UIThread.RunJobs();
+            Until(() => desktop.Windows.OfType<MainWindow>().Any());
             editor = desktop.Windows.OfType<MainWindow>().Single();
 
             // Exercise the real unsaved confirmation through add-object, close, Cancel, and Discard.
@@ -112,6 +134,7 @@ internal static class Program
             recent.SelectedIndex = 0;
             recent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             Dispatcher.UIThread.RunJobs();
+            Until(() => Control<TextBlock>(launcher, "LauncherError").IsVisible);
             Check(launcher.IsVisible && Control<TextBlock>(launcher, "LauncherError").IsVisible
                 && !desktop.Windows.OfType<MainWindow>().Any(), "Invalid startup scene must not open Editor.");
             File.Delete(manifest);

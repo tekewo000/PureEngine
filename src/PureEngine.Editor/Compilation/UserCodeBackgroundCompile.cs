@@ -16,28 +16,10 @@ public sealed record UserCodeCompileAttempt(
     bool Canceled);
 
 /// <summary>
-/// A3のコンパイル側基盤。ソース読み取り・コンパイルだけをバックグラウンドで行い、
-/// Sceneへの接触・Component生成を伴う移行・結果の採用・表示更新は呼び出し側（UI）に残す。
-/// 再読み込み全体をTask.Runへ入れない。A2の再読み込み分離・A4の所有モデルと接続するための
-/// 妥当性判定だけを持ち、独自のSessionや再読み込み管理は実装しない。
-///
-/// 使い方（最終的なEditor接続はA2・A4の統合後に行う）：
-/// <code>
-/// _tracker = new UserCodeCompileTracker(project.RootDirectory); // 寿命はA4の所有者へ移す
-/// var ticket = _tracker.Request(); // UIスレッド、変更検知時
-/// UserCodeCompileAttempt attempt;
-/// try { attempt = await _tracker.CompileAsync(ticket, cancellationToken); } // UIは占有しない
-/// catch (Exception error) { Log.Engine.Error("C#を反映できません。直前の状態を保持します。", error); return; }
-/// // UIスレッドへ戻ってから採用可否を再確認する（キャンセルだけに正しさを依存させない）。
-/// if (attempt.Superseded || attempt.Canceled || !_tracker.IsCurrent(attempt.Ticket)) { UserCodeCompileTracker.Release(attempt.Result); return; }
-/// if (attempt.Result is not { Success: true }) { /* 診断を報告し旧状態を維持、修正後に再試行 */ UserCodeCompileTracker.Release(attempt.Result); return; }
-/// if (IsPlaying || _fileBusy || _invalidFields.Count > 0 || NameError.IsVisible) { /* 保留: 新規Requestは出さず採用を再試行 */ return; }
-/// // 採用時は必ず現在のSceneから移行し、要求時のSceneスナップショットで上書きしない。
-/// </code>
-///
-/// 再コンパイル方針：制約で採用できなかった最新の結果は保持し、制約が解けたら同じ札で採用を再試行する。
-/// その前に新しい変更が来たら新しい札を発行し、古い結果は解放して最新のコンパイルだけを採用する。
-/// 失敗時は旧状態を維持し、次の変更検知で新しい札から再試行する。
+/// ソース読み取り・コンパイルだけをバックグラウンドで行う。
+/// Scene移行・結果採用は呼び出し側のUIスレッドで行い、その直前にも世代の有効性を確認する。
+/// MainWindowは保留中の最新結果を所有し、新しい要求や終了で不要になれば解放する。
+/// ProjectSession.OpenAsyncは起動完了またはキャンセルまでのTrackerを所有する。
 /// </summary>
 public sealed class UserCodeCompileTracker : IDisposable
 {
@@ -49,7 +31,7 @@ public sealed class UserCodeCompileTracker : IDisposable
     /// <summary>この束縛が対象にするプロジェクトのルート。切替時はTrackerごと作り直す。</summary>
     public string ProjectRoot { get; }
 
-    /// <param name="projectRoot">対象プロジェクトのルートフォルダ。A4の所有者が寿命を管理する。</param>
+    /// <param name="projectRoot">このTrackerが束縛されるプロジェクトのルートフォルダ。</param>
     /// <param name="compileAsync">
     /// バックグラウンドで実行するコンパイル処理。呼び出し自体もプールスレッドで行う。
     /// 未指定時は <see cref="UserCodeCompiler.CompileProject"/> を実行する。Scene・ComponentAssets・UIには触れないこと。
@@ -137,11 +119,7 @@ public sealed class UserCodeCompileTracker : IDisposable
     /// <see cref="IsCurrent"/> で保証するため、取り消しの伝達遅れが正しさを壊さない。
     /// </summary>
     private static Task<UserCodeCompileResult> DefaultCompileAsync(string root, CancellationToken cancellationToken) =>
-        Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return UserCodeCompiler.CompileProject(root);
-        }, cancellationToken);
+        Task.FromResult(UserCodeCompiler.CompileProject(root));
 
     /// <summary>
     /// 不採用のコンパイル結果が持つ読込コードを解放する。どのスレッドからでも呼べる。失敗時は無視する。

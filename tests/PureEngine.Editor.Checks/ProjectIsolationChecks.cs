@@ -1,3 +1,4 @@
+using PureEngine.Runtime;
 using PureEngine.Core;
 using PureEngine.Core.Attributes;
 using PureEngine.Editor;
@@ -69,13 +70,13 @@ static class ProjectIsolationChecks
             .GetValue(restoredB.Objects.Single().Components.Single())! == 22,
             "Project B save/load must preserve its own values.");
 
-        using (var playA = PlaySession.Prepare(sessionA.Scene, sessionA.Components.Registry))
+        using (var playA = PlaySession.Prepare(sessionA.Scene, sessionA.Components.Registry, GameServices.ForProject(sessionA.Components)))
         {
             playA.Start();
             playA.Step(0.016f);
             Check(playA.Runtime.IsRunning, "Project A Play must run.");
         }
-        using (var playB = PlaySession.Prepare(sessionB.Scene, sessionB.Components.Registry))
+        using (var playB = PlaySession.Prepare(sessionB.Scene, sessionB.Components.Registry, GameServices.ForProject(sessionB.Components)))
         {
             playB.Start();
             playB.Step(0.016f);
@@ -122,7 +123,7 @@ static class ProjectIsolationChecks
         var restoredAfter = new SceneSerializer(sessionB.Components.Registry).Deserialize(yamlAfter);
         Check(restoredAfter.Objects.Single().Components.Single().GetType() == typeB,
             "Project B save/load must work after Project A exit.");
-        using (var playAfter = PlaySession.Prepare(sessionB.Scene, sessionB.Components.Registry))
+        using (var playAfter = PlaySession.Prepare(sessionB.Scene, sessionB.Components.Registry, GameServices.ForProject(sessionB.Components)))
         {
             playAfter.Start();
             playAfter.Step(0.016f);

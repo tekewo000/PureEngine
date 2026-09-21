@@ -1,3 +1,4 @@
+using PureEngine.Runtime;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -345,7 +346,8 @@ static class UserCodeBackgroundChecks
 
     private static WeakReference FailKeepRetryAndRelease(string directory, out int before, out int after)
     {
-        before = ComponentAssets.Registry.Types.Count;
+        using var owner = new ProjectComponents();
+        before = owner.Registry.Types.Count;
         using var tracker = new UserCodeCompileTracker(directory);
         var ticket = tracker.Request();
         var failed = tracker.CompileAsync(ticket).GetAwaiter().GetResult();
@@ -353,7 +355,7 @@ static class UserCodeBackgroundChecks
             && failed.Result.Diagnostics.Any(d => d.IsError),
             "Broken sources must surface as failed results with error diagnostics.");
         UserCodeCompileTracker.Release(failed.Result);
-        after = ComponentAssets.Registry.Types.Count;
+        after = owner.Registry.Types.Count;
         WriteSource(directory, "Broken.cs", string.Format(TinyTemplate, "Fixed"));
         var retry = tracker.Request();
         var recovered = tracker.CompileAsync(retry).GetAwaiter().GetResult();
@@ -378,12 +380,13 @@ static class UserCodeBackgroundChecks
 
     private static void AdoptLiveScene(string directory)
     {
+        using var owner = new ProjectComponents();
         using var tracker = new UserCodeCompileTracker(directory);
-        using var services = GameSession.Create();
+        using var services = GameSession.Create(GameServices.Configure);
         var first = tracker.CompileAsync(tracker.Request()).GetAwaiter().GetResult();
         Check(first.Result?.Success == true, "Live-edit fixture must compile.");
         // 全体登録は変えず、採用時と同じ候補Registryの組立てで移行する。
-        var oldRegistry = ComponentAssets.CreateRegistry(first.Result);
+        var oldRegistry = owner.CreateCandidateRegistry(first.Result);
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Player");
@@ -401,7 +404,7 @@ static class UserCodeBackgroundChecks
         var attempt = compile.GetAwaiter().GetResult();
         Check(attempt.Result?.Success == true && tracker.IsCurrent(attempt.Ticket),
             "Recompile with a new member must succeed for the latest ticket.");
-        var newRegistry = ComponentAssets.CreateRegistry(attempt.Result);
+        var newRegistry = owner.CreateCandidateRegistry(attempt.Result);
         var migrated = SceneCodeMigrator.Migrate(scene, oldRegistry, newRegistry, services.Factory);
         var migratedComponent = migrated.Objects.Single().Components.Single();
         Check((int)migratedComponent.GetType().GetField("Health")!.GetValue(migratedComponent)! == 81
@@ -466,7 +469,8 @@ static class UserCodeBackgroundChecks
         var directory = NewDirectory(parent, "BgFault");
         try
         {
-            var before = ComponentAssets.Registry.Types.Count;
+            using var owner = new ProjectComponents();
+            var before = owner.Registry.Types.Count;
             using var tracker = new UserCodeCompileTracker(directory,
                 (_, _) => Task.FromException<UserCodeCompileResult>(
                     new InvalidOperationException("boom-fault")));
@@ -479,7 +483,7 @@ static class UserCodeBackgroundChecks
             {
                 Check(error.Message == "boom-fault", "Unexpected background fault payload.");
             }
-            Check(ComponentAssets.Registry.Types.Count == before,
+            Check(owner.Registry.Types.Count == before,
                 "An observed background fault must leave the active registrations unchanged.");
         }
         finally { Directory.Delete(directory, recursive: true); }

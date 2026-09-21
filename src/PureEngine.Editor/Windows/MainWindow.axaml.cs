@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     private readonly EditSceneStore _editScene = new(new Scene());
     /// <summary>コード再読み込みの準備・採用・後片付けと保留状態の所有者。画面なしで検証できる。</summary>
     private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
-    private GameSession _editSession;
+    private GameSession _editSession => _editScene.Services;
     /// <summary>このウィンドウ（プロジェクト）の型所有者。Serializer・アタッチ・Play・再読み込みはここを明示的に使う。</summary>
     internal ProjectComponents _components;
     private static readonly DataFormat<Type> ComponentFormat =
@@ -40,25 +40,29 @@ public partial class MainWindow : Window
 
     internal GameSession EditSession => _editSession;
 
-    public MainWindow(ProjectSession session, GameSession? editServices = null) : this()
+    public MainWindow(ProjectSession session) : this()
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (editServices is not null)
-        {
-            var created = _editSession;
-            _editSession = editServices;
-            created.Dispose();
-        }
+        _editScene.ReplaceServices(session.EditServices).Dispose();
         // Sessionの所有権（ComponentsとScene）をこのウィンドウへ移す。移したSessionは破棄しない。
         var placeholder = _components;
         _components = session.Components;
         session.TransferOwnership();
         try { placeholder.Dispose(); } catch { }
-        _sceneSerializer = new SceneSerializer(_components.Registry);
-        _project = session.Project;
-        SetCurrentScene(session.Scene, session.Project.StartupScenePath);
-        ProjectTab.IsSelected = true;
-        StartUserCodeWatching();
+        try
+        {
+            _sceneSerializer = new SceneSerializer(_components.Registry);
+            _project = session.Project;
+            SetCurrentScene(session.Scene, session.Project.StartupScenePath);
+            ProjectTab.IsSelected = true;
+            StartUserCodeWatching();
+        }
+        catch (Exception error)
+        {
+            try { CloseEditSession(); }
+            catch (Exception cleanup) { throw new AggregateException(error, cleanup); }
+            throw;
+        }
     }
 
     public MainWindow()
@@ -70,7 +74,6 @@ public partial class MainWindow : Window
         _components = new ProjectComponents();
         _sceneSerializer = new SceneSerializer(_components.Registry);
         // 編集期間の専用サービス群。同じ登録から作り、Play 用とは独立させる。
-        _editSession = GameSession.Create(GameServices.Configure);
         Closed += (_, _) => CloseEditSession();
         Closing += OnEditorClosing;
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);

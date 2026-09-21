@@ -9,6 +9,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 「Pure C#」は専用基底クラスに縛られないことを指し、描画やSteam連携のライブラリまですべてC#で自作するという意味ではない。
 
 - **Core**：シーン、オブジェクト、アタッチしたクラスとその実行を扱う。AvaloniaやSteamには依存させない。
+- **Runtime**：GameSession・PlaySessionによるサービス生成と実行接続。CoreとMicrosoft.Extensions.DependencyInjectionに依存し、Editor・Avaloniaには依存しない。
 - **Editor**：Coreのデータを編集する。制作画面には.NET 11とAvaloniaを使う。
 - **ゲーム実行部分**：描画・入力・ゲームコードの実行を接続する。具体的な構成は保留。
 - **ゲーム側のコード**：配札・投票・勝敗判定などのルールを、描画やSteamから独立したC#で記述する。
@@ -121,7 +122,7 @@ private void Tick(float dt) { }
 - Componentの生成箇所は `SceneSerializer.Restore`（`Clone`／`Deserialize` の `CreateComponent`）、編集時の `ComponentAssets.TryAttach`、実行中の呼び出し側 `new`＋`Attach` に限る。各生成箇所は省略可能な `Func<Type, object>? factory` を受け、未指定時は従来のパラメータレス生成を使う。指定時はその結果を使い、失敗したら報告する。パラメータレス生成で再試行して隠さない。factory の戻り値は null でなく要求どおりの exact type であることを確認する。呼び出しごとに新しいインスタンスを返す契約とし、共有は注入するサービス側に置く。資源解放箇所は `SceneRuntime` の削除時（`DestroyRemoved`）と停止・失敗時（`DestroyRemaining`）のDestroy後Dispose、および復元・準備失敗時の生成逆順Disposeに限る。解放箇所は維持する。
 - ゲームの Component は普通のC#コンストラクタでサービスを受け取る。`ctor = 依存`、`[Inspector] = 保存データ` とする。保存値はコンストラクタ実行後に復元するため、保存値を使う初期化は `Start` に置く。編集時にも生成するため、Component とサービスのコンストラクタで通信やゲーム進行を開始しない。`[Inject]`、独自コンテナ、サービスロケーター、階層Scope、コード生成は追加しない。プリミティブ引数の一律禁止や、型からサービスかどうかを推測する独自検証も追加しない。
 - サービス登録・解決には Microsoft.Extensions.DependencyInjection を Game 側の登録処理と接続部分でのみ利用する。Core は `Func<Type, object>` の生成関数だけを受け、MS DI を参照しない。Component 自体の DI 登録は不要で、既存の ComponentRegistry への型登録は別の役割として残す。`ComponentRegistry.Register<T>` に `new()` 制約はない。型登録時にインスタンスは生成せず、解決の成否は実際の生成時に判定する。
-- プロジェクト側の登録口は自作C#内の `public static void ConfigureGameServices(IServiceCollection services)` 1つのみとする（`ProjectGameServices` が検出・適用）。組み込みの `GameServices.Configure` に加えて適用し、登録がない既存プロジェクトは組み込みのみで従来どおり動く。同名が複数ある場合や形式が違う場合（非public・非static・戻り値・引数の不一致など）は理由を報告し、新しい登録を採用しない。登録処理自体の例外も報告する。
+- プロジェクト側の登録口は自作C#内の `public static void ConfigureGameServices(IServiceCollection services)` 1つのみとする（`ProjectGameServices` が検出・適用）。組み込みの `GameServices.Configure` に加えて適用し、登録がない既存プロジェクトは組み込みのみで従来どおり動く。同名が複数ある場合や形式が違う場合（非public・非static・async void・戻り値・引数の不一致など）は理由を報告し、新しい登録を採用しない。登録処理自体の例外も報告する。
 - 編集時・Play時・再Play時は同じ登録処理（組み込み＋採用中のプロジェクト登録）から、編集用と各 Play 用の独立したサービス群（provider＋明示 Scope）を作る。編集と Play、異なる Play の間では Singleton も含めて共有しない。Root provider から Scoped を直接解決せず、必ず各 Scope を通す。provider 作成時は `ValidateScopes` と `ValidateOnBuild` を有効にする。
 - サービス登録を含む自作C#の再読み込み・Project読み込みでは、新コードの登録・サービス生成・Scene移行がすべて成功してから採用する。準備失敗時は直前の正常なコード・編集Scene・サービス群を維持し、生成済みの移行先 Component・候補 Scope・provider を解放してから報告する。未保存の Inspector 値・オブジェクトID・Priority・選択状態・未保存状態を維持し、Play中・ファイル操作中・入力エラー中の反映保留を守る。
 - Play の順序は、Play 用 provider・Scope → factory → `SceneRuntime`（生成・復元・検証）→ `Start` とする。Stop では Runtime の終了処理（Destroy＋Dispose）を完了してから Scope、provider の順に終了する。準備失敗時も生成済みの所有資源を逆順で解放し、Scope・provider も終了する。どの `Start` も呼ばない。元の例外と後始末中の例外を保持する。登録処理やコンストラクタの外部副作用まで巻き戻せるとは扱わない。
@@ -302,7 +303,7 @@ RoslynでProject内のソースを一括コンパイルし、collectible Assembl
 
 Project開始時も候補Registryで起動シーンの読み込みが成功してから公開する。候補登録からの編集用サービス群で復元し、成功したサービス群を Editor へ渡す。失敗時は候補の Component・Scope・provider を解放し、既存の登録を維持する。終了時は監視とインスタンスを解放し、ユーザー型の登録を外してALCのUnloadを要求する。Coreの型キャッシュはConditionalWeakTableを使い、古いユーザー型を静的キャッシュで保持し続けない。ユーザー自身のstaticイベント購読等の解除はDispose側の責任。
 
-外部NuGet・独自csproj設定、実行状態を維持したPlay中の差し替えは対象外。プロジェクト全体のコンパイルは同期処理であり、大規模化時のバックグラウンド化は今後の課題。
+外部NuGet・独自csproj設定、実行状態を維持したPlay中の差し替えは対象外。起動時とコード再読み込みのコンパイルはバックグラウンドで行う。採用時はUIスレッドで世代と所有者を確認し、その時点のSceneを新コード用のサービス群へ移行する。Play・ファイル操作・入力エラー中は採用を保留し、古い結果・終了後の結果は解放する。
 
 
 ## 外部エディターのC# Workspace
@@ -319,3 +320,11 @@ global.jsonはEngineビルド時に埋め込んだSDK設定を不足時のみコ
 候補コンパイルで旧IDとの対応を解決し、Sceneの復元成功後、型登録の公開前にID管理ファイルを一時ファイル経由で保存する。移行・生成失敗時はID管理も旧状態に残す。完全名一致を先に予約し、同じソースファイルの一意な短いクラス名、残った旧新1対1の順で解決する。多対多の場合は推測しない。型が消えた場合もID記録を残して再利用を避ける。
 
 初回導入時は保存シーンのuser.* IDを集め、完全名または一意な短いクラス名が一致すれば引き継ぐ。型IDの管理ファイルもプロジェクトの保存対象とする。ファイルとクラスを同時に改名する場合や多対多の改名は自動推測せず、変更を分ける。フィールド名・型の変更に対する既存の保護は維持する。
+
+## Editorの所有と実行接続（A1〜A5統合済み）
+
+依存方向はEditor → Runtime → Core。ProjectComponentsがプロジェクト単位の型登録・ソース対応・採用中コードを持つ。ComponentAssetsは状態を持たない共通処理のみを提供する。ProjectSessionは起動Scene・編集用サービス・ProjectComponentsを所有し、MainWindowへ引き渡す。
+
+編集状態と編集用サービスはEditSceneStore、保存・Play・再読み込みの可否判定はEditorOperationGate、コード採用と旧資源の解放はUserCodeReloadCoordinatorが担当する。再読み込みは候補Registry・サービス・移行先Sceneを準備してから採用し、旧Component → 旧サービス → 旧コードの順に解放する。終了時もこの所有順に従う。
+
+RuntimeのGameSession.CreateとPlaySession.PrepareはAction<IServiceCollection>を受け取る。EditorはGameServices.ForProjectから組み込み＋当該プロジェクトの登録を渡し、UIなしの実行側はゲーム側の登録処理を直接渡せる。完了条件と検証は[ArchitectureImprovements.md](ArchitectureImprovements.md)を参照。
