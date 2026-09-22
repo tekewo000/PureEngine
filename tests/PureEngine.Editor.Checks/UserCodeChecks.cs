@@ -42,7 +42,7 @@ static class UserCodeChecks
     }
     private static string Source(int version) => $$"""
         using PureEngine.Core;
-        using PureEngine.Core.Attributes;
+        using PureEngine.Core;
         namespace Game;
         public class Player
         {
@@ -242,7 +242,7 @@ static class UserCodeChecks
         var project = created.Project;
         created.Dispose();
         var source = Path.Combine(project.RootDirectory, "Legacy.cs");
-        var code = "using PureEngine.Core.Attributes; public class Legacy { [Inspector] public int Value = 5; }";
+        var code = "using PureEngine.Core; public class Legacy { [Inspector] public int Value = 5; }";
         File.WriteAllText(source, code);
         // Emulate a scene made by the old version, without any identity catalog.
         // A4: 専用の所有者へ採用し、保存互換（typeId・types.json）を維持する。

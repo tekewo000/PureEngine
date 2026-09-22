@@ -19,7 +19,7 @@ static class IntegratedArchitectureChecks
     private static string Source(int version) => $$"""
         using System;
         using Microsoft.Extensions.DependencyInjection;
-        using PureEngine.Core.Attributes;
+        using PureEngine.Core;
         public sealed class Rules
         {
             public int Version => {{version}};

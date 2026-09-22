@@ -25,7 +25,7 @@ static class ProjectServiceRegistrationChecks
     private static string BasicCode() => """
         using System;
         using Microsoft.Extensions.DependencyInjection;
-        using PureEngine.Core.Attributes;
+        using PureEngine.Core;
 
         public sealed class QuestLog : IDisposable
         {
@@ -65,7 +65,7 @@ static class ProjectServiceRegistrationChecks
     private static string ExpandedCode() => """
         using System;
         using Microsoft.Extensions.DependencyInjection;
-        using PureEngine.Core.Attributes;
+        using PureEngine.Core;
 
         public sealed class QuestLog : IDisposable
         {
@@ -128,7 +128,7 @@ static class ProjectServiceRegistrationChecks
         var project = ProjectSession.Create(parent, "A1Compat").Project;
         var file = Path.Combine(project.RootDirectory, "Plain.cs");
         File.WriteAllText(file, """
-            using PureEngine.Core.Attributes;
+            using PureEngine.Core;
             public class Plain
             {
                 [Inspector] public int Value = 7;
@@ -480,7 +480,7 @@ static class ProjectServiceRegistrationChecks
     private sealed class NeedMissing
     {
         public NeedMissing(UnregisteredService service) => _ = service;
-        [PureEngine.Core.Attributes.Start] private void Begin() { }
+        [PureEngine.Core.Start] private void Begin() { }
     }
 
     private sealed class GoodProbe : IDisposable
@@ -488,11 +488,11 @@ static class ProjectServiceRegistrationChecks
         public static readonly List<GoodProbe> Disposed = [];
         public static PureEngine.Editor.Samples.BattleSession? LastSession;
         public readonly PureEngine.Editor.Samples.BattleSession Session;
-        [PureEngine.Core.Attributes.Inspector] public string Tag = "";
+        [PureEngine.Core.Inspector] public string Tag = "";
         public int Starts;
         private bool _disposed;
         public GoodProbe(PureEngine.Editor.Samples.BattleSession session) => Session = session;
-        [PureEngine.Core.Attributes.Start] private void Begin() => Starts++;
+        [PureEngine.Core.Start] private void Begin() => Starts++;
         public void Dispose()
         {
             if (_disposed) throw new InvalidOperationException("Dispose must run once.");

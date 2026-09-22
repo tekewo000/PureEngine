@@ -6,7 +6,6 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
-using PureEngine.Core.Attributes;
 using PureEngine.Editor;
 
 static class PriorityInspectorChecks

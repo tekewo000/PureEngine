@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using PureEngine.Core;
-using PureEngine.Core.Attributes;
 
 static class RuntimeBenchmarks
 {

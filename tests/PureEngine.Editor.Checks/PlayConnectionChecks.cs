@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
-using PureEngine.Core.Attributes;
 using PureEngine.Editor;
 using PureEngine.Runtime;
 

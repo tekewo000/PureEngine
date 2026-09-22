@@ -1,5 +1,4 @@
 using PureEngine.Core;
-using PureEngine.Core.Attributes;
 using PureEngine.Editor;
 
 /// <summary>

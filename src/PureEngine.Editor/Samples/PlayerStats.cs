@@ -1,4 +1,4 @@
-using PureEngine.Core.Attributes;
+using PureEngine.Core;
 
 namespace PureEngine.Editor.Samples;
 

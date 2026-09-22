@@ -372,7 +372,7 @@ static class UserCodeBackgroundChecks
         try
         {
             WriteSource(directory, "Player.cs",
-                "using PureEngine.Core.Attributes;\nnamespace Game;\npublic class Player\n{\n    [Inspector] public int Health = 10;\n}\n");
+                "using PureEngine.Core;\nnamespace Game;\npublic class Player\n{\n    [Inspector] public int Health = 10;\n}\n");
             AdoptLiveScene(directory);
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -396,7 +396,7 @@ static class UserCodeBackgroundChecks
         oldType.GetField("Health")!.SetValue(item.Components.Single(), 73);
 
         WriteSource(directory, "Player.cs",
-            "using PureEngine.Core.Attributes;\nnamespace Game;\npublic class Player\n{\n    [Inspector] public int Health = 10;\n    [Inspector] public int Added = 42;\n}\n");
+            "using PureEngine.Core;\nnamespace Game;\npublic class Player\n{\n    [Inspector] public int Health = 10;\n    [Inspector] public int Added = 42;\n}\n");
         var ticket = tracker.Request();
         var compile = tracker.CompileAsync(ticket);
         // コンパイル中にInspector値を変更する。採用は現在のSceneから行う。

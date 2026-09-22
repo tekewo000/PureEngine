@@ -1,4 +1,4 @@
-namespace PureEngine.Core.Attributes;
+namespace PureEngine.Core;
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
 public sealed class DestroyAttribute : Attribute

@@ -1,6 +1,5 @@
 using PureEngine.Runtime;
 using PureEngine.Core;
-using PureEngine.Core.Attributes;
 using PureEngine.Editor;
 
 static class ProjectIsolationChecks
@@ -11,7 +10,7 @@ static class ProjectIsolationChecks
     }
 
     private static string Source(int marker) => $$"""
-        using PureEngine.Core.Attributes;
+        using PureEngine.Core;
         namespace Game;
         public class Shared
         {
