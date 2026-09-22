@@ -4,6 +4,8 @@ using YamlDotNet.Core;
 
 static class ProjectPersistenceChecks
 {
+    private static readonly string[] InitialScenes = ["Scenes/Main.pure.scene.yaml"];
+
     public static void Run()
     {
         static void Check(bool condition, string message)
@@ -34,7 +36,7 @@ static class ProjectPersistenceChecks
             var restored = serializer.Deserialize(File.ReadAllText(opened.StartupScenePath));
             Check(restored.Objects[0].Id == item.Id && restored.Objects[0].GetComponent<PureEngine.Editor.Samples.PlayerStats>()!.Hp == 25,
                 "Creating a project must preserve the current scene.");
-            Check(project.ListScenes().SequenceEqual(new[] { "Scenes/Main.pure.scene.yaml" }), "Initial scene listing is wrong.");
+            Check(project.ListScenes().SequenceEqual(InitialScenes), "Initial scene listing is wrong.");
 
             var secondPath = Path.Combine(project.ScenesDirectory, project.NextSceneName());
             SceneFile.Write(secondPath, serializer.Serialize(new Scene()));
@@ -81,8 +83,10 @@ static class ProjectPersistenceChecks
         finally
         {
             var expectedParent = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar);
+#pragma warning disable CA2219 // Fail closed: an unsafe cleanup path must never reach Directory.Delete.
             if (Path.GetDirectoryName(testRoot) != expectedParent || !Path.GetFileName(testRoot).StartsWith("PureEngine-ProjectChecks-"))
                 throw new InvalidOperationException("Unsafe test cleanup path.");
+#pragma warning restore CA2219
             Directory.Delete(testRoot, recursive: true);
         }
     }

@@ -298,7 +298,7 @@ static class SceneRuntimeChecks
         var badSource = new Scene();
         badSource.AddEmpty().Attach(new RuntimeProbe());
         badSource.AddEmpty().Attach(new BadStatic());
-        Reject<InvalidOperationException>(() => new SceneRuntime(badSource, new ComponentRegistry()));
+        Reject<InvalidOperationException>(() => { using var runtime = new SceneRuntime(badSource, new ComponentRegistry()); });
         Check(badSource.Objects[0].GetComponent<RuntimeProbe>()!.Starts == 0,
             "Invalid scene must be rejected before any Start.");
 
@@ -318,16 +318,18 @@ static class SceneRuntimeChecks
         [Update] private void Tick() => Updates++;
     }
     private sealed class BadStatic { [Update] public static void Tick() { } }
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
     private sealed class BadReturn { [Update] public int Tick() => 0; }
     private sealed class BadAsync { [Update] public async void Tick() => await Task.Yield(); }
     private sealed class BadGeneric { [Update] public void Tick<T>() { } }
-    private sealed class BadParameter { [Update] public void Tick(int dt) { } }
-    private sealed class BadRefParameter { [Update] public void Tick(ref float dt) { } }
-    private sealed class BadStartParameter { [Start] public void Begin(float dt) { } }
+    private sealed class BadParameter { [Update] public void Tick(int _) { } }
+    private sealed class BadRefParameter { [Update] public void Tick(ref float _) { } }
+    private sealed class BadStartParameter { [Start] public void Begin(float _) { } }
     private sealed class BadDestroyReturn { [Destroy] public Task End() => Task.CompletedTask; }
     private sealed class DuplicateMethods { [Update] public void A() { } [Update] public void B() { } }
     private class HiddenBase { [Update] private void Tick() { } }
     private sealed class HiddenDuplicate : HiddenBase { [Update] private void Tick() { } }
+#pragma warning restore CA1822
     private abstract class AbstractLifecycle { [Update] public abstract void Tick(); }
     private class BaseLifecycle
     {

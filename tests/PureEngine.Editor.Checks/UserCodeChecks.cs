@@ -65,6 +65,7 @@ static class UserCodeChecks
 
     public static void Run(string parent)
     {
+        CheckLifecycleDiagnostics(parent);
         using var created = ProjectSession.Create(parent, "UserCode");
         var project = created.Project;
         created.Dispose();
@@ -78,6 +79,8 @@ static class UserCodeChecks
         Check(workspace.Descendants("HintPath").Any(path => path.Value == typeof(Scene).Assembly.Location)
             && workspace.Descendants("ImplicitUsings").Single().Value == "disable",
             "Editor workspace must reference the current engine and match runtime compiler options.");
+        Check(File.Exists(workspace.Descendants("Analyzer").Single().Attribute("Include")!.Value),
+            "Game workspaces must load the shipped lifecycle diagnostic suppressor.");
         var workspaceTime = File.GetLastWriteTimeUtc(workspacePath);
         ProjectCodeWorkspace.Ensure(project);
         Check(File.GetLastWriteTimeUtc(workspacePath) == workspaceTime, "Unchanged metadata must not be rewritten.");
@@ -234,6 +237,76 @@ static class UserCodeChecks
         Check(!File.Exists(nextWorkspace), "Do not introduce another project beside a user's existing csproj.");
         CheckIdentitySafety(parent);
         Console.WriteLine("PASS: user compilation, source mapping, real file/folder watching, Play deferral, schema/error recovery, unsaved data, persistence, and project isolation.");
+    }
+
+    private static void CheckLifecycleDiagnostics(string parent)
+    {
+        using var session = ProjectSession.Create(parent, "LifecycleDiagnostics");
+        var root = session.Project.RootDirectory;
+        var projectPath = Path.Combine(root, ProjectCodeWorkspace.ProjectName);
+        File.WriteAllText(Path.Combine(root, ".editorconfig"),
+            "root = true\n[*.cs]\ndotnet_diagnostic.IDE0051.severity = warning\n");
+        var source = """
+            using PureEngine.Core;
+            using OnFrame = PureEngine.Core.UpdateAttribute;
+            public sealed class Callbacks
+            {
+                [Start] private void Begin() { }
+                [OnFrame] private void Tick() { }
+                [global::PureEngine.Core.DestroyAttribute] private void End() { }
+                private void Ordinary() { }
+                [Other.Update] private void UnrelatedAttribute() { }
+            }
+            namespace Other
+            {
+                public sealed class UpdateAttribute : System.Attribute { }
+            }
+            """;
+        var sourcePath = Path.Combine(root, "Callbacks.cs");
+        File.WriteAllText(sourcePath, source);
+
+        string Build()
+        {
+            using var process = Process.Start(new ProcessStartInfo("dotnet")
+            {
+                WorkingDirectory = root,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                ArgumentList = { "build", projectPath, "--nologo", "--verbosity", "minimal", "-t:Rebuild", "-p:EnforceCodeStyleInBuild=true" }
+            })!;
+            var output = process.StandardOutput.ReadToEndAsync();
+            var errors = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(60_000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new Exception("Lifecycle diagnostic build timed out.");
+            }
+            var log = output.GetAwaiter().GetResult() + errors.GetAwaiter().GetResult();
+            Check(process.ExitCode == 0, log);
+            return log;
+        }
+        static bool IsUnused(string log, string method) => log.Split('\n')
+            .Any(line => line.Contains("IDE0051") && line.Contains("Callbacks." + method));
+
+        // Prove that the real SDK analyzer reports every fixture before enabling suppression.
+        var workspace = XDocument.Load(projectPath);
+        workspace.Descendants("Analyzer").Remove();
+        workspace.Save(projectPath);
+        var baseline = Build();
+        Check(IsUnused(baseline, "Begin") && IsUnused(baseline, "Tick") && IsUnused(baseline, "End")
+            && IsUnused(baseline, "Ordinary") && IsUnused(baseline, "UnrelatedAttribute"), baseline);
+
+        ProjectCodeWorkspace.Ensure(session.Project);
+        var suppressed = Build();
+        Check(!IsUnused(suppressed, "Begin") && !IsUnused(suppressed, "Tick") && !IsUnused(suppressed, "End")
+            && IsUnused(suppressed, "Ordinary") && IsUnused(suppressed, "UnrelatedAttribute"), suppressed);
+        Check(File.ReadAllText(sourcePath) == source, "Diagnostic suppression must not rewrite game code.");
+
+        File.WriteAllText(sourcePath, source.Replace("[OnFrame] ", ""));
+        Check(IsUnused(Build(), "Tick"), "Removing the lifecycle attribute must restore IDE0051.");
+        Console.WriteLine("PASS: lifecycle IDE0051 suppression, aliases, unrelated attributes, ordinary methods, and attribute removal.");
     }
 
     private static void CheckIdentitySafety(string parent)

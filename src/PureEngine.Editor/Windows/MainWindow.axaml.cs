@@ -18,7 +18,6 @@ public partial class MainWindow : Window
     private readonly EditSceneStore _editScene = new(new Scene());
     /// <summary>コード再読み込みの準備・採用・後片付けと保留状態の所有者。画面なしで検証できる。</summary>
     private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
-    private GameSession _editSession => _editScene.Services;
     /// <summary>このウィンドウ（プロジェクト）の型所有者。Serializer・アタッチ・Play・再読み込みはここを明示的に使う。</summary>
     internal ProjectComponents _components;
     private static readonly DataFormat<Type> ComponentFormat =
@@ -38,7 +37,7 @@ public partial class MainWindow : Window
 
     internal UserCodeReloadCoordinator ReloadCoordinator => _reloadCoordinator;
 
-    internal GameSession EditSession => _editSession;
+    internal GameSession EditSession => _editScene.Services;
 
     public MainWindow(ProjectSession session) : this()
     {
@@ -192,7 +191,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                if (!_components.TryAttach(target, type, _editSession.Factory)) continue;
+                if (!_components.TryAttach(target, type, EditSession.Factory)) continue;
                 attached++;
             }
             catch (Exception error)
@@ -246,7 +245,7 @@ public partial class MainWindow : Window
     {
         var type = component.GetType();
         var body = new StackPanel { Spacing = 8 };
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
+        var header = new Grid { ColumnDefinitions = [with("*,Auto")], ColumnSpacing = 8 };
         var title = new TextBlock { Text = type.Name, FontSize = 13, FontWeight = FontWeight.SemiBold,
             Foreground = CardTitleBrush,
             MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis,
@@ -307,7 +306,7 @@ public partial class MainWindow : Window
         return rows;
     }
 
-    private Control BuildPriorityField(SceneObject item, object component, ComponentLifecycle kind, string displayName)
+    private StackPanel BuildPriorityField(SceneObject item, object component, ComponentLifecycle kind, string displayName)
     {
         var type = component.GetType();
         var shortLabel = kind switch
@@ -393,10 +392,10 @@ public partial class MainWindow : Window
         return field;
     }
 
-    private Control BuildMemberRow(object component, MemberInfo member)
+    private Grid BuildMemberRow(object component, MemberInfo member)
     {
         var memberType = GetMemberType(member);
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("104,*"), ColumnSpacing = 8 };
+        var row = new Grid { ColumnDefinitions = [with("104,*")], ColumnSpacing = 8 };
         row.Classes.Add("inspectorRow");
         // Two-line label: name (primary) + type (secondary). Type is visible without hover
         // so int/float/string/bool scan at a glance; full "name : type" stays in the tooltip.
@@ -559,8 +558,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Escで編集中の数値欄を最後の正常値へ戻す。TextChanged経由で無効表示も解除される。</summary>
-    private void AttachEscapeRevert(TextBox box, object component, MemberInfo member)
-    {
+    private static void AttachEscapeRevert(TextBox box, object component, MemberInfo member) =>
         box.KeyDown += (_, e) =>
         {
             if (e.Key != Key.Escape) return;
@@ -569,14 +567,13 @@ public partial class MainWindow : Window
                 : FormatMemberValue(component, member);
             e.Handled = true;
         };
-    }
 
-    private string FormatMemberValue(object component, MemberInfo member) =>
+    private static string FormatMemberValue(object component, MemberInfo member) =>
         GetMemberType(member) == typeof(float)
             ? Convert.ToString(GetMemberValue(component, member), CultureInfo.InvariantCulture) ?? "0"
             : GetMemberValue(component, member)?.ToString() ?? "0";
 
-    private Type GetMemberType(MemberInfo member) =>
+    private static Type GetMemberType(MemberInfo member) =>
         member switch
         {
             FieldInfo field => field.FieldType,
@@ -584,7 +581,7 @@ public partial class MainWindow : Window
             _ => throw new NotSupportedException($"Unsupported member: {member.Name}"),
         };
 
-    private object? GetMemberValue(object component, MemberInfo member) =>
+    private static object? GetMemberValue(object component, MemberInfo member) =>
         member switch
         {
             FieldInfo field => field.GetValue(component),

@@ -6,7 +6,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    private ProjectFile? _project;
+    private readonly ProjectFile? _project;
 
     private Task<IStorageFolder?> ScenePickerDirectory() => _project is null
         ? Task.FromResult<IStorageFolder?>(null)

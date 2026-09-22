@@ -15,19 +15,16 @@ namespace PureEngine.Editor;
 /// </summary>
 public sealed class ProjectComponents : IDisposable
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private UserCodeCompileResult? _userCode;
     private readonly Dictionary<string, IReadOnlyList<Type>> _userFileTypes
-        = new(StringComparer.OrdinalIgnoreCase);
+        = [with(StringComparer.OrdinalIgnoreCase)];
     private bool _disposed;
 
     /// <summary>このプロジェクト専用の登録表。組み込み＋自作（user.*）を含む。インスタンスは維持し、中身だけ差し替える。</summary>
     public ComponentRegistry Registry { get; } = new();
 
-    public ProjectComponents()
-    {
-        ComponentAssets.RegisterBuiltins(Registry);
-    }
+    public ProjectComponents() => ComponentAssets.RegisterBuiltins(Registry);
 
     /// <summary>このプロジェクトの全登録型（組み込み＋自作）。アタッチ可否の判定に使う。</summary>
     public IReadOnlyList<Type> Types => Registry.Types;

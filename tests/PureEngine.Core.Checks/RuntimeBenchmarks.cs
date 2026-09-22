@@ -15,7 +15,7 @@ static class RuntimeBenchmarks
         foreach (var count in new[] { 0, 100, 1_000, 10_000 }) Measure(count, true);
         Measure(10_000, false);
 
-        void Measure(int count, bool withUpdates)
+        static void Measure(int count, bool withUpdates)
         {
             var registry = new ComponentRegistry();
             registry.Register<BenchmarkBehaviour>("bench.behaviour");
@@ -73,9 +73,11 @@ static class RuntimeBenchmarks
 public sealed class BenchmarkBehaviour
 {
     [Inspector] public int Value;
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
     [Start] private void Begin() { }
-    [Update, MethodImpl(MethodImplOptions.NoInlining)] private void Tick(float dt) { }
+    [Update, MethodImpl(MethodImplOptions.NoInlining)] private void Tick(float _) { }
     [Destroy] private void End() { }
+#pragma warning restore CA1822
 }
 
 public sealed class BenchmarkData

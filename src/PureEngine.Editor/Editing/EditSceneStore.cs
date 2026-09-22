@@ -9,7 +9,7 @@ namespace PureEngine.Editor;
 /// Avaloniaに依存しない。旧Sceneの破棄は呼び出し側へ返して行い、
 /// Componentからサービスへの終了順はCoordinator（採用）またはMainWindow（終了）が保証する。
 /// </summary>
-public sealed class EditSceneStore
+public sealed class EditSceneStore(Scene initial, string? path = null, bool dirty = false)
 {
     public GameSession Services { get; private set; } = GameSession.Create(GameServices.Configure);
 
@@ -20,21 +20,14 @@ public sealed class EditSceneStore
         return previous;
     }
 
-    public EditSceneStore(Scene initial, string? path = null, bool dirty = false)
-    {
-        Current = initial ?? throw new ArgumentNullException(nameof(initial));
-        Path = path;
-        IsDirty = dirty;
-    }
-
     /// <summary>編集中のScene。実行Sessionが持つ複製とは別の実体。</summary>
-    public Scene Current { get; private set; }
+    public Scene Current { get; private set; } = initial ?? throw new ArgumentNullException(nameof(initial));
 
     /// <summary>編集中Sceneの保存先。未保存の新規シーンはnull。</summary>
-    public string? Path { get; private set; }
+    public string? Path { get; private set; } = path;
 
     /// <summary>未保存の変更があるかどうか。</summary>
-    public bool IsDirty { get; private set; }
+    public bool IsDirty { get; private set; } = dirty;
 
     public void MarkChanged() => IsDirty = true;
 

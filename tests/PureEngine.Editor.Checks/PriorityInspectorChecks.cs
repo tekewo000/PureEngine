@@ -17,19 +17,16 @@ static class PriorityInspectorChecks
 
     private static T Control<T>(Window window, string name) where T : Control => window.FindControl<T>(name)!;
 
-    private static List<TextBox> PriorityBoxes(MainWindow editor, string typeName)
-    {
-        return editor.GetVisualDescendants().OfType<TextBox>()
+    private static List<TextBox> PriorityBoxes(MainWindow editor, string typeName) => [.. editor.GetVisualDescendants().OfType<TextBox>()
             .Where(box => (box.GetValue(AutomationProperties.NameProperty) as string)?.StartsWith(typeName + ".", StringComparison.Ordinal) == true
-                && (box.GetValue(AutomationProperties.NameProperty) as string)?.EndsWith("Priority", StringComparison.Ordinal) == true)
-            .ToList();
-    }
+                && (box.GetValue(AutomationProperties.NameProperty) as string)?.EndsWith("Priority", StringComparison.Ordinal) == true)];
 
-    private static TextBox FindPriorityBox(MainWindow editor, string automationName)
-    {
-        return editor.GetVisualDescendants().OfType<TextBox>()
+    private static TextBox FindPriorityBox(MainWindow editor, string automationName) => editor.GetVisualDescendants().OfType<TextBox>()
             .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
-    }
+
+    private static readonly string[] PriorityTooltips = ["Start Priority", "Update Priority", "Destroy Priority"];
+    private static readonly string[] PriorityLabels = ["S", "U", "D"];
+    private static readonly string[] PriorityColors = ["#8AB4F8", "#81C995", "#F28B82"];
 
     public static void Run(MainWindow editor)
     {
@@ -61,13 +58,13 @@ static class PriorityInspectorChecks
         var fullBoxes = PriorityBoxes(editor, nameof(InspectorFullProbe));
         Check(fullBoxes.Count == 3, $"Full must show 3 priorities, got {fullBoxes.Count}.");
         Check(fullBoxes.Select(box => ToolTip.GetTip(box) as string)
-            .SequenceEqual(new[] { "Start Priority", "Update Priority", "Destroy Priority" }),
+            .SequenceEqual(PriorityTooltips),
             "Priority tooltips must identify each lifecycle in order.");
         Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Text)
-            .SequenceEqual(new[] { "S", "U", "D" }),
+            .SequenceEqual(PriorityLabels),
             "Priority fields must show S/U/D labels in lifecycle order.");
         Check(fullBoxes.Select(box => ((box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Foreground as Avalonia.Media.SolidColorBrush)?.Color.ToString())
-            .SequenceEqual(new[] { "#8AB4F8", "#81C995", "#F28B82" }.Select(hex => Avalonia.Media.Color.Parse(hex).ToString())),
+            .SequenceEqual(PriorityColors.Select(hex => Avalonia.Media.Color.Parse(hex).ToString())),
             "Priority S/U/D labels must use lifecycle accent colors.");
         Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault())
             .All(label => label?.FontWeight == Avalonia.Media.FontWeight.SemiBold),
@@ -159,6 +156,7 @@ static class PriorityInspectorChecks
 
     public sealed class InspectorFullProbe
     {
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [Start] private void Begin() { }
         [Update] private void Tick() { }
         [Destroy] private void End() { }
@@ -167,6 +165,7 @@ static class PriorityInspectorChecks
     public sealed class InspectorStartOnlyProbe
     {
         [Start] private void Begin() { }
+#pragma warning restore CA1822
     }
 
     public sealed class InspectorDataOnly

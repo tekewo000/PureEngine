@@ -7,6 +7,7 @@ public sealed record RecentProject(string Name, string ManifestPath);
 /// <summary>Launcher history is local editor state, separate from project contents.</summary>
 public sealed class RecentProjects(string path)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     public IReadOnlyList<RecentProject> Entries { get; private set; } = [];
     public string? Warning { get; private set; }
 
@@ -36,7 +37,7 @@ public sealed class RecentProjects(string path)
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            SceneFile.Write(path, JsonSerializer.Serialize(Entries, new JsonSerializerOptions { WriteIndented = true }));
+            SceneFile.Write(path, JsonSerializer.Serialize(Entries, JsonOptions));
             Warning = null;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)

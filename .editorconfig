@@ -6,20 +6,21 @@ charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
 
-# Namespace宣言には一切触れない（IDE0130/IDE0160/IDE0161を無効化）。
+# Namespaceの名前・有無・宣言形式は変更しない。
 [*.cs]
+dotnet_diagnostic.CA1050.severity = none
 dotnet_diagnostic.IDE0130.severity = none
 dotnet_diagnostic.IDE0160.severity = none
 dotnet_diagnostic.IDE0161.severity = none
 
-# House style: var多用・単文の波かっこ省略を正規化し、青波を設定で消す。
+# House style: var多用・単文の波かっこ省略。
 # パフォーマンス差はない（varはコンパイル時解決でIL同一）。好み・可読性の問題。
 csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = true:suggestion
 csharp_prefer_braces = false:suggestion
 
-# House style: 式本体（=>）を正規化。ブロック化を求める青波を設定で消す。
+# House style: 式本体（=>）を優先。
 csharp_style_expression_bodied_methods = true:suggestion
 csharp_style_expression_bodied_constructors = true:suggestion
 csharp_style_expression_bodied_operators = true:suggestion
@@ -28,3 +29,32 @@ csharp_style_expression_bodied_indexers = true:suggestion
 csharp_style_expression_bodied_accessors = true:suggestion
 csharp_style_expression_bodied_lambdas = true:suggestion
 csharp_style_expression_bodied_local_functions = true:suggestion
+
+# コレクション式への変換で実体の型を変えない。
+dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
+
+# Zedだけでなくビルドでも、採用した提案を検査する。
+dotnet_diagnostic.IDE0007.severity = warning
+dotnet_diagnostic.IDE0017.severity = warning
+dotnet_diagnostic.IDE0021.severity = warning
+dotnet_diagnostic.IDE0022.severity = warning
+dotnet_diagnostic.IDE0028.severity = warning
+dotnet_diagnostic.IDE0031.severity = warning
+dotnet_diagnostic.IDE0039.severity = warning
+dotnet_diagnostic.IDE0044.severity = warning
+dotnet_diagnostic.IDE0053.severity = warning
+dotnet_diagnostic.IDE0060.severity = warning
+dotnet_diagnostic.IDE0062.severity = warning
+dotnet_diagnostic.IDE0290.severity = warning
+dotnet_diagnostic.IDE0300.severity = warning
+dotnet_diagnostic.IDE0305.severity = warning
+dotnet_diagnostic.IDE0330.severity = warning
+dotnet_diagnostic.IDE1006.severity = warning
+dotnet_diagnostic.CA1068.severity = warning
+dotnet_diagnostic.CA1806.severity = warning
+dotnet_diagnostic.CA1822.severity = warning
+dotnet_diagnostic.CA1859.severity = warning
+dotnet_diagnostic.CA1861.severity = warning
+dotnet_diagnostic.CA1869.severity = warning
+dotnet_diagnostic.CA2211.severity = warning
+dotnet_diagnostic.CA2219.severity = warning

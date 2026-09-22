@@ -91,7 +91,7 @@ public partial class LauncherWindow : Window
             { Title = "Open Project", AllowMultiple = false, FileTypeFilter = [ProjectType] });
         if (files.Count == 0) return;
         var path = files[0].TryGetLocalPath() ?? throw new IOException("Select a local project.");
-        using var session = await ProjectSession.OpenAsync(path, _lifetime.Token);
+        using var session = await ProjectSession.OpenAsync(path, cancellationToken: _lifetime.Token);
         OpenEditor(session);
     });
 
@@ -110,7 +110,7 @@ public partial class LauncherWindow : Window
 
     private Task OpenRecent(RecentProject project) => RunOperation(async () =>
     {
-        using var session = await ProjectSession.OpenAsync(project.ManifestPath, _lifetime.Token);
+        using var session = await ProjectSession.OpenAsync(project.ManifestPath, cancellationToken: _lifetime.Token);
         OpenEditor(session);
     });
 

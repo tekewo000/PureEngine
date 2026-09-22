@@ -86,7 +86,7 @@ static class PlayConnectionChecks
         try
         {
             var scene = EditScene(editor);
-            var services = Field<GameSession>(editor, "_editSession");
+            var services = Field<GameSession>(editor, "EditSession");
             var owner = Field<ProjectComponents>(editor, "_components");
             var item = scene.AddEmpty();
             item.Rename("Player");
@@ -151,7 +151,7 @@ static class PlayConnectionChecks
         try
         {
             var scene = EditScene(editor);
-            var services = Field<GameSession>(editor, "_editSession");
+            var services = Field<GameSession>(editor, "EditSession");
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
             var edit = item.GetComponent<PlayCounter>()!;
@@ -192,7 +192,7 @@ static class PlayConnectionChecks
         try
         {
             var scene = EditScene(editor);
-            var services = Field<GameSession>(editor, "_editSession");
+            var services = Field<GameSession>(editor, "EditSession");
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
             Dispatcher.UIThread.RunJobs();
@@ -262,7 +262,7 @@ static class PlayConnectionChecks
         try
         {
             var scene = EditScene(editor);
-            var services = Field<GameSession>(editor, "_editSession");
+            var services = Field<GameSession>(editor, "EditSession");
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayFailUpdate), services.Factory);
             Dispatcher.UIThread.RunJobs();
@@ -292,7 +292,7 @@ static class PlayConnectionChecks
         PlayCounter.Reset();
         var editor = CreateEditor();
         var scene = EditScene(editor);
-        var services = Field<GameSession>(editor, "_editSession");
+        var services = Field<GameSession>(editor, "EditSession");
         var item = scene.AddEmpty();
         Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
         Dispatcher.UIThread.RunJobs();
@@ -348,6 +348,7 @@ static class PlayConnectionChecks
         public static int Disposals;
         private bool _started;
         [Start] public void Begin() => _started = true;
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [Destroy] public void End() => throw new ApplicationException("destroy failure");
         public void Dispose()
         {
@@ -363,7 +364,7 @@ static class PlayConnectionChecks
         public static void Reset() => Starts = Updates = Destroys = 0;
         [Inspector] public int Value { get; set; } = 10;
         [Start] private void Begin() => Starts++;
-        [Update] private void Tick(float dt) { Updates++; Value++; }
+        [Update] private void Tick(float _) { Updates++; Value++; }
         [Destroy] private void End() => Destroys++;
     }
 
@@ -378,5 +379,6 @@ static class PlayConnectionChecks
         public static void Reset() => Destroys = 0;
         [Update] private void Tick() => throw new ApplicationException("update boom");
         [Destroy] private void End() => Destroys++;
+#pragma warning restore CA1822
     }
 }

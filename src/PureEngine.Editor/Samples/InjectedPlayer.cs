@@ -7,10 +7,10 @@ namespace PureEngine.Editor.Samples;
 /// 保存値を使う初期化は Start で行い、ctor では通信やゲーム進行を開始しない。
 /// 所有資源の解放は自身の Dispose が担当し、注入されたサービスは Dispose しない。
 /// </summary>
-public sealed class InjectedPlayer : IDisposable
+public sealed class InjectedPlayer(IRandomService random, BattleSession session) : IDisposable
 {
-    private readonly IRandomService _random;
-    private readonly BattleSession _session;
+    private readonly IRandomService _random = random ?? throw new ArgumentNullException(nameof(random));
+    private readonly BattleSession _session = session ?? throw new ArgumentNullException(nameof(session));
     private bool _disposed;
 
     public int Starts;
@@ -22,12 +22,6 @@ public sealed class InjectedPlayer : IDisposable
     public IRandomService Random => _random;
     public BattleSession Session => _session;
 
-    public InjectedPlayer(IRandomService random, BattleSession session)
-    {
-        _random = random ?? throw new ArgumentNullException(nameof(random));
-        _session = session ?? throw new ArgumentNullException(nameof(session));
-    }
-
     [Inspector] public int Hp { get; set; } = 100;
 
     [Start] private void OnStart()
@@ -38,7 +32,7 @@ public sealed class InjectedPlayer : IDisposable
         _ = _random.Next(100);
     }
 
-    [Update] private void Tick(float dt) => Updates++;
+    [Update] private void Tick(float _) => Updates++;
 
     [Destroy] private void OnEnd() => Destroys++;
 

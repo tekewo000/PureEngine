@@ -78,7 +78,7 @@ public static class ProjectGameServices
 
         if (named.Count == 0) return null;
 
-        bool IsValid(MethodInfo method) =>
+        static bool IsValid(MethodInfo method) =>
             method.IsStatic && method.IsPublic
             && method.ReturnType == typeof(void)
             && method.GetParameters() is { Length: 1 } parameters

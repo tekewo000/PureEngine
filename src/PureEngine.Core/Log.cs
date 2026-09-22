@@ -44,7 +44,7 @@ public static class Log
     /// <summary>Pending queue cap. Oldest entries are dropped and counted when full.</summary>
     public const int MaxQueuedEntries = 1000;
 
-    private static readonly object Sync = new();
+    private static readonly Lock Sync = new();
     private static readonly Queue<LogEntry> Pending = new();
     private static int _droppedCount;
 

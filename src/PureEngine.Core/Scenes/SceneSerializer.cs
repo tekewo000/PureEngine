@@ -65,11 +65,8 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         return saved;
     }
 
-    public Scene Deserialize(string yaml, Func<Type, object>? factory = null)
-    {
-        return Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
+    public Scene Deserialize(string yaml, Func<Type, object>? factory = null) => Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
             ?? throw new InvalidDataException("The scene document is empty."), factory);
-    }
 
     private Scene Restore(SceneDocument document, Func<Type, object>? factory = null)
     {

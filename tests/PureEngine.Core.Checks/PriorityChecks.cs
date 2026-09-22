@@ -410,7 +410,9 @@ static class PriorityChecks
 
     private sealed class PriorityStartOnly
     {
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [Start] private void Begin() { }
+#pragma warning restore CA1822
     }
 
     private sealed class PriorityDataOnly

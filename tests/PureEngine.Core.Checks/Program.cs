@@ -147,17 +147,19 @@ sealed class SampleBehaviour
     public int Hidden;
 #pragma warning restore CS0649
 #pragma warning disable CS0169 // Never used: intentional negative case for detection.
-    [Inspector] private int Secret;
+    [Inspector] private readonly int Secret;
 #pragma warning restore CS0169
     [Inspector] public int ReadOnlyProp { get; }
 
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
     [Start] private void OnStart() { }
 
-    [Update] private void Tick(float dt) { }
+    [Update] private void Tick(float _) { }
 }
 
 sealed class DuplicatedUpdate
 {
     [Update] public void A() { }
     [Update] public void B() { }
+#pragma warning restore CA1822
 }

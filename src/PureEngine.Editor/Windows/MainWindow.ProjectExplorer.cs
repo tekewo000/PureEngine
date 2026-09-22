@@ -107,8 +107,12 @@ public partial class MainWindow
             _explorerComponentsSelected = false;
             return;
         }
-        var root = new TreeViewItem { Header = _project.Document.Name, Tag = "" };
-        root.IsExpanded = true;
+        var root = new TreeViewItem
+        {
+            Header = _project.Document.Name,
+            Tag = "",
+            IsExpanded = true
+        };
         ProjectTree.Items.Add(root);
         var nodes = new Dictionary<string, TreeViewItem>(StringComparer.Ordinal) { [""] = root };
         foreach (var directory in _project.ListDirectories())
@@ -128,7 +132,7 @@ public partial class MainWindow
         if (!nodes.ContainsKey(_explorerFolder) && !_explorerComponentsSelected)
             _explorerFolder = nodes.ContainsKey("Scenes") ? "Scenes" : "";
         // 祖先を展開して選択行を見える位置にする。
-        for (TreeViewItem? current = selected; current is not null;
+        for (var current = selected; current is not null;
              current = current.Parent as TreeViewItem)
             current.IsExpanded = true;
         selected.IsSelected = true;
@@ -236,7 +240,7 @@ public partial class MainWindow
         if (!e.GetCurrentPoint(ProjectTree).Properties.IsRightButtonPressed) return;
         var row = (e.Source as Visual)?.GetSelfAndVisualAncestors()
             .OfType<TreeViewItem>().FirstOrDefault();
-        if (row is not null) row.IsSelected = true;
+        row?.IsSelected = true;
         ProjectTree.Focus();
     }
 
@@ -403,8 +407,7 @@ public partial class MainWindow
             throw new ArgumentException("Specify a valid folder name.");
     }
 
-    private async Task RenameSelectedExplorerEntry()
-    {
+    private async Task RenameSelectedExplorerEntry() =>
         await RunFileOperation(async () =>
         {
             if (_project is null) return;
@@ -458,10 +461,8 @@ public partial class MainWindow
             RefreshProjectExplorer();
             SetFileStatus($"Renamed to: {name}");
         });
-    }
 
-    private async Task DeleteSelectedExplorerEntry()
-    {
+    private async Task DeleteSelectedExplorerEntry() =>
         await RunFileOperation(async () =>
         {
             if (_project is null) return;
@@ -518,7 +519,6 @@ public partial class MainWindow
             RefreshProjectExplorer();
             SetFileStatus($"Deleted: {display}");
         });
-    }
 
     /// <summary>移動・改名後に編集中シーンと起動シーンの参照を付け替える。起動シーンのScenes外脱出は拒否される。</summary>
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)

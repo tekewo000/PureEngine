@@ -37,11 +37,9 @@ public sealed class UserCodeCompileResult
 /// <summary>Collectible load context for project user code. Unloaded on every reload.</summary>
 internal sealed class UserCodeLoadContext() : AssemblyLoadContext("PureEngine.UserCode", isCollectible: true)
 {
-    protected override Assembly? Load(AssemblyName assemblyName)
-    {
+    protected override Assembly? Load(AssemblyName assemblyName) =>
         // User assembly only; dependencies resolve from the default context.
-        return null;
-    }
+        null;
 }
 
 /// <summary>
@@ -93,7 +91,7 @@ public static class UserCodeCompiler
             }
             foreach (var entry in entries)
             {
-                string name = Path.GetFileName(entry);
+                var name = Path.GetFileName(entry);
                 if (name.StartsWith('.') && !name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 {
                     // .pure-project-* 等の一時フォルダや隠しファイルを避ける。ただし .cs は拾う。
@@ -305,7 +303,7 @@ public static class UserCodeCompiler
     /// 1ファイルに複数クラスがある場合の扱い：そのファイルに含まれるアタッチ対象の全型をそのファイルにひも付ける。
     /// ドラッグ＆ドロップ時はそのファイルの未アタッチ分をすべて付ける。1ファイル1クラスを推奨するが、複数でも動作する。
     /// </summary>
-    private static IReadOnlyDictionary<string, IReadOnlyList<Type>> BuildFileMap(
+    private static Dictionary<string, IReadOnlyList<Type>> BuildFileMap(
         CSharpCompilation compilation, Type[] attachable)
     {
         var byFullName = attachable.ToDictionary(t => t.FullName ?? t.Name, StringComparer.Ordinal);
@@ -334,7 +332,7 @@ public static class UserCodeCompiler
     private static string? SymbolFullName(INamedTypeSymbol symbol)
     {
         var stack = new Stack<string>();
-        INamedTypeSymbol? current = symbol;
+        var current = symbol;
         while (current is not null)
         {
             stack.Push(current.Name);

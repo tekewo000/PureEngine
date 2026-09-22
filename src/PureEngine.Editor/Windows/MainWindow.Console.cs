@@ -150,8 +150,7 @@ public partial class MainWindow
             // Search/filter changes preserve the offset, including zero, within the new extent.
             list.UpdateLayout();
             var newScroll = list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
-            if (newScroll is not null)
-                newScroll.Offset = offset.Value;
+            newScroll?.Offset = offset.Value;
         }
     }
 
@@ -179,10 +178,7 @@ public partial class MainWindow
             $"Dropped because the queue limit ({Log.MaxQueuedEntries}) or history limit ({ConsoleMaxHistory}) was exceeded. Clear removes the history and the view.");
     }
 
-    private void ShowConsoleDetail(ConsoleRow? row)
-    {
-        ConsoleDetail.Text = row?.DetailText ?? "";
-    }
+    private void ShowConsoleDetail(ConsoleRow? row) => ConsoleDetail.Text = row?.DetailText ?? "";
 
     private void OnConsoleSelectionChanged(object? sender, SelectionChangedEventArgs e) =>
         ShowConsoleDetail(ConsoleList.SelectedItem as ConsoleRow);

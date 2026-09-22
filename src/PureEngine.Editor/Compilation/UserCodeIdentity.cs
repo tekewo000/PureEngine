@@ -8,6 +8,7 @@ namespace PureEngine.Editor;
 /// <summary>Persistent component identity, independent of its current C# name.</summary>
 internal static class UserCodeIdentity
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private sealed record Entry(string Id, string Name, string[] Files);
     private sealed record Catalog(int Version, List<Entry> Types);
 
@@ -92,7 +93,7 @@ internal static class UserCodeIdentity
             result.TypeIds[type] = updated.Id;
         }
         result.IdentityPath = path;
-        result.IdentityContent = JsonSerializer.Serialize(catalog, new JsonSerializerOptions { WriteIndented = true });
+        result.IdentityContent = JsonSerializer.Serialize(catalog, JsonOptions);
     }
 
     public static void Save(UserCodeCompileResult result)

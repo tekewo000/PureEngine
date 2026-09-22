@@ -152,9 +152,11 @@ internal static class Program
         }
         finally
         {
+#pragma warning disable CA2219 // Fail closed: an unsafe cleanup path must never reach Directory.Delete.
             if (Path.GetDirectoryName(root) != Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)
                 || !Path.GetFileName(root).StartsWith("PureEngine-LauncherChecks-"))
                 throw new InvalidOperationException("Unsafe test cleanup path.");
+#pragma warning restore CA2219
             Directory.Delete(root, recursive: true);
         }
     }

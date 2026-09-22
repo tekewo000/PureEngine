@@ -4,11 +4,9 @@ using PureEngine.Core;
 namespace PureEngine.Editor;
 
 /// <summary>Console list row. Formats a <see cref="LogEntry"/> for time/kind/head display.</summary>
-public sealed class ConsoleRow
+public sealed class ConsoleRow(LogEntry entry)
 {
-    public LogEntry Entry { get; }
-
-    public ConsoleRow(LogEntry entry) => Entry = entry;
+    public LogEntry Entry { get; } = entry;
 
     public string TimeText => Entry.Timestamp.ToString("HH:mm:ss.fff");
 
@@ -27,7 +25,7 @@ public sealed class ConsoleRow
     };
 
     /// <summary>Level badge fill. Unified with Project kindBadge (#454545) so Console rows scan like Project rows.</summary>
-    public SolidColorBrush LevelBadgeBackground => new(Color.Parse("#454545"));
+    public SolidColorBrush LevelBadgeBackground { get; } = new(Color.Parse("#454545"));
 
     public SolidColorBrush LevelBadgeForeground => Entry.Level switch
     {
@@ -45,7 +43,7 @@ public sealed class ConsoleRow
     };
 
     /// <summary>Source tint: Engine reuses the editor structural accent (lavender, same as Startup pill/focus ring), Game stays neutral.</summary>
-    public SolidColorBrush SourceBadgeBackground => new(Color.Parse("#454545"));
+    public SolidColorBrush SourceBadgeBackground { get; } = new(Color.Parse("#454545"));
 
     public SolidColorBrush SourceBadgeForeground => Entry.Source == LogSource.Engine
         ? new SolidColorBrush(Color.Parse("#D6C9F5"))

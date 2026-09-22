@@ -37,7 +37,7 @@ static class EditorOwnershipChecks
         owner.Registry.Register<OwnershipProbe>("checks.ownership");
         editor.Show();
         var scene = EditScene(editor);
-        var services = Field<GameSession>(editor, "_editSession");
+        var services = Field<GameSession>(editor, "EditSession");
         var item = scene.AddEmpty();
         owner.TryAttach(item, typeof(OwnershipProbe), services.Factory);
         var original = item.GetComponent<OwnershipProbe>()!;
@@ -83,7 +83,7 @@ static class EditorOwnershipChecks
         var failingOwner = Field<ProjectComponents>(failingEditor, "_components");
         failingOwner.Registry.Register<OwnershipProbe>("checks.ownership");
         failingEditor.Show();
-        var failingServices = Field<GameSession>(failingEditor, "_editSession");
+        var failingServices = Field<GameSession>(failingEditor, "EditSession");
         var failingScene = EditScene(failingEditor);
         var probes = Enumerable.Range(0, 2).Select(_ =>
         {

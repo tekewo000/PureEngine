@@ -212,7 +212,7 @@ static class IntegratedArchitectureChecks
         using var cancellation = new CancellationTokenSource();
         var cancelGate = new TaskCompletionSource<UserCodeCompileResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = 0;
-        var canceled = ProjectSession.OpenAsync(project.ManifestPath, cancellation.Token, (_, _) =>
+        var canceled = ProjectSession.OpenAsync(project.ManifestPath, cancellationToken: cancellation.Token, compileAsync: (_, _) =>
         {
             Interlocked.Exchange(ref started, 1);
             return cancelGate.Task;

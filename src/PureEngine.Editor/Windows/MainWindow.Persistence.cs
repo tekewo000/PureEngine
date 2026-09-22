@@ -11,7 +11,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    private SceneSerializer _sceneSerializer;
+    private readonly SceneSerializer _sceneSerializer;
     private static readonly FilePickerFileType SceneFileType = new("PureEngine scene")
         { Patterns = ["*.pure.scene.yaml", "*.yaml", "*.yml"] };
     private bool _fileBusy;
@@ -35,8 +35,8 @@ public partial class MainWindow
     }
 
     private async void OnOpenScene(object? sender, RoutedEventArgs e) => await RunFileOperation(OpenSceneAsync);
-    private async void OnSaveScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () => { await SaveSceneAsync(false); });
-    private async void OnSaveSceneAs(object? sender, RoutedEventArgs e) => await RunFileOperation(async () => { await SaveSceneAsync(true); });
+    private async void OnSaveScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () => await SaveSceneAsync(false));
+    private async void OnSaveSceneAs(object? sender, RoutedEventArgs e) => await RunFileOperation(async () => await SaveSceneAsync(true));
 
     private async Task RunFileOperation(Func<Task> operation)
     {
@@ -110,12 +110,12 @@ public partial class MainWindow
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
         // 編集用 factory でコンストラクタ注入し、Play 用とは別のサービス群を使う。
-        var restored = _sceneSerializer.Deserialize(File.ReadAllText(path), _editSession.Factory);
+        var restored = _sceneSerializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
         // This first scene only validates the file; it is never adopted by the editor.
         ComponentAssets.DisposeComponents(restored.Objects.SelectMany(item => item.Components));
         if (!await ConfirmUnsavedChanges()) return;
         // Saving the old scene during confirmation may overwrite the file just selected.
-        restored = _sceneSerializer.Deserialize(File.ReadAllText(path), _editSession.Factory);
+        restored = _sceneSerializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
         SetCurrentScene(restored, path);
         SetFileStatus($"Loaded: {path}");
     }
@@ -152,7 +152,7 @@ public partial class MainWindow
         var previous = _editScene.Reset();
         try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
         catch (Exception error) { errors.Add(error); }
-        try { _editSession.Dispose(); }
+        try { EditSession.Dispose(); }
         catch (Exception error) { errors.Add(error); }
         try { _components.Dispose(); }
         catch (Exception error) { errors.Add(error); }
@@ -236,7 +236,7 @@ public partial class MainWindow
         if (e.Key == Key.S)
         {
             e.Handled = true;
-            await RunFileOperation(async () => { await SaveSceneAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)); });
+            await RunFileOperation(async () => await SaveSceneAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)));
         }
         else if (e.Key == Key.O)
         {

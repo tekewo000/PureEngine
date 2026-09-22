@@ -67,7 +67,7 @@ static class DependencyInjectionChecks
         var registry = RegistryFor((typeof(CtorProbe), "di.probe"));
         var serializer = new SceneSerializer(registry);
         var shared = new FakeDep("shared");
-        Func<Type, object> factory = type => new CtorProbe(shared);
+        object factory(Type type) => new CtorProbe(shared);
 
         var source = new Scene();
         var item = source.AddEmpty();
@@ -201,11 +201,14 @@ static class DependencyInjectionChecks
         second.Attach(missing);
 
         var original = new InvalidOperationException("Unable to resolve service.");
-        var error = Reject<InvalidOperationException>(() => new SceneRuntime(source, registry, type =>
+        var error = Reject<InvalidOperationException>(() =>
         {
-            if (type == typeof(NeedMissing)) throw original;
-            return new TrackedProbe();
-        }));
+            using var runtime = new SceneRuntime(source, registry, type =>
+            {
+                if (type == typeof(NeedMissing)) throw original;
+                return new TrackedProbe();
+            });
+        });
         Check(error.Message.Contains(nameof(NeedMissing)) && ReferenceEquals(error.InnerException, original),
             "Runtime preparation must report the failing component with its original error.");
         Check(DiTracking.Released.SequenceEqual(["first"]), "Runtime preparation must dispose clones without Destroy.");
@@ -235,7 +238,7 @@ static class DependencyInjectionChecks
         using var owner = new PureEngine.Editor.ProjectComponents();
         var target = new SceneObject("Target");
         var calls = 0;
-        Func<Type, object> counting = type => { calls++; return Activator.CreateInstance(type)!; };
+        object counting(Type type) { calls++; return Activator.CreateInstance(type)!; }
         Check(!owner.TryAttach(null, typeof(CtorProbe), counting) && calls == 0,
             "Attach without a target must not call the factory.");
         Check(!owner.TryAttach(target, typeof(CtorProbe), counting) && calls == 0,
@@ -263,10 +266,9 @@ static class DependencyInjectionChecks
         Check(wrong.Components.Count == 0, "Wrong-type factory results must leave no component.");
     }
 
-    private sealed class FakeDep
+    private sealed class FakeDep(string name = "")
     {
-        public string Name;
-        public FakeDep(string name = "") => Name = name;
+        public string Name = name;
     }
 
     private class CtorProbe
@@ -284,12 +286,11 @@ static class DependencyInjectionChecks
         }
 
         [Start] private void Begin() { Starts++; StartedValue = Value; }
-        [Update] private void Tick(float dt) => Updates++;
+        [Update] private void Tick(float _) => Updates++;
     }
 
-    private sealed class DerivedProbe : CtorProbe
+    private sealed class DerivedProbe(DependencyInjectionChecks.FakeDep service) : CtorProbe(service)
     {
-        public DerivedProbe(FakeDep service) : base(service) { }
     }
 
     private sealed class DualProbe

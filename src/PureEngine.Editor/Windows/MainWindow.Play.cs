@@ -188,7 +188,7 @@ public partial class MainWindow
         _playTimer?.Stop();
         _playClock?.Stop();
         _playClock = null;
-        IReadOnlyList<SceneRuntimeError> errors = session?.Runtime.Errors ?? [];
+        var errors = session?.Runtime.Errors ?? [];
         Exception? cleanupError = null;
         if (session is not null)
         {
@@ -324,10 +324,10 @@ public partial class MainWindow
         ObjectInspector.IsEnabled = enabled;
         ProjectTree.IsEnabled = enabled;
         ProjectFiles.IsEnabled = enabled;
-        if (NewSceneMenu is not null) NewSceneMenu.IsEnabled = enabled;
-        if (OpenSceneMenu is not null) OpenSceneMenu.IsEnabled = enabled;
-        if (SaveSceneMenu is not null) SaveSceneMenu.IsEnabled = enabled;
-        if (SaveSceneAsMenu is not null) SaveSceneAsMenu.IsEnabled = enabled;
+        NewSceneMenu?.IsEnabled = enabled;
+        OpenSceneMenu?.IsEnabled = enabled;
+        SaveSceneMenu?.IsEnabled = enabled;
+        SaveSceneAsMenu?.IsEnabled = enabled;
         StartupSceneMenu.IsEnabled = enabled && _project is not null;
         AddObjectMenuItem.IsEnabled = enabled;
         DeleteObjectMenuItem.IsEnabled = enabled && SceneObjects.SelectedItem is not null;

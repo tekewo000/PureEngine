@@ -286,10 +286,10 @@ static class GameDependencyChecks
         }
     }
 
-    private sealed class CheckInjectedPlayer : IDisposable
+    private sealed class CheckInjectedPlayer(GameDependencyChecks.ICheckRandomService random, GameDependencyChecks.CheckBattleSession session) : IDisposable
     {
-        private readonly ICheckRandomService _random;
-        private readonly CheckBattleSession _session;
+        private readonly ICheckRandomService _random = random ?? throw new ArgumentNullException(nameof(random));
+        private readonly CheckBattleSession _session = session ?? throw new ArgumentNullException(nameof(session));
         private bool _disposed;
 
         public int Starts;
@@ -301,12 +301,6 @@ static class GameDependencyChecks
         public ICheckRandomService Random => _random;
         public CheckBattleSession Session => _session;
 
-        public CheckInjectedPlayer(ICheckRandomService random, CheckBattleSession session)
-        {
-            _random = random ?? throw new ArgumentNullException(nameof(random));
-            _session = session ?? throw new ArgumentNullException(nameof(session));
-        }
-
         [Inspector] public int Hp { get; set; } = 100;
 
         [Start] private void OnStart()
@@ -317,7 +311,7 @@ static class GameDependencyChecks
             _ = _random.Next(100);
         }
 
-        [Update] private void Tick(float dt) => Updates++;
+        [Update] private void Tick(float _) => Updates++;
 
         [Destroy] private void OnEnd() => Destroys++;
 
@@ -348,20 +342,20 @@ static class GameDependencyChecks
     private sealed class NeedMissing
     {
         public NeedMissing(UnregisteredService service) => _ = service;
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [Start] private void Begin() { }
+#pragma warning restore CA1822
     }
 
-    private sealed class GoodProbe : IDisposable
+    private sealed class GoodProbe(GameDependencyChecks.CheckBattleSession session) : IDisposable
     {
         public static readonly List<GoodProbe> Disposed = [];
         public static CheckBattleSession? LastSession;
 
-        public readonly CheckBattleSession Session;
+        public readonly CheckBattleSession Session = session;
         [Inspector] public string Tag = "";
         public int Starts;
         private bool _disposed;
-
-        public GoodProbe(CheckBattleSession session) => Session = session;
 
         [Start] private void Begin() => Starts++;
 

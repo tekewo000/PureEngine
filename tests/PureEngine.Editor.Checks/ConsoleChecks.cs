@@ -87,7 +87,7 @@ static class ConsoleChecks
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static IReadOnlyList<ConsoleRow> View(MainWindow editor)
+    private static ConsoleRow[] View(MainWindow editor)
     {
         var list = Control<ListBox>(editor, "ConsoleList");
         return (list.ItemsSource as IEnumerable<ConsoleRow>)?.ToArray() ?? [];
@@ -120,7 +120,7 @@ static class ConsoleChecks
                 && errorDetail.Contains(nameof(BasicDisplay)), "Exception must keep inner/stack detail.");
 
             var rows = View(editor);
-            Check(rows.Count == 3, $"List must show time/kind/head for 3, got {rows.Count}.");
+            Check(rows.Length == 3, $"List must show time/kind/head for 3, got {rows.Length}.");
             Check(rows[0].LevelText == "Info" && rows[2].LevelText == "Error", "Kind column wrong.");
             Check(rows[0].Head.Contains("hello-info"), "Head must show body start.");
             Check(!string.IsNullOrEmpty(rows[0].TimeText), "Time column must show.");
@@ -166,22 +166,22 @@ static class ConsoleChecks
             Log.Error("gamma three");
             Log.Error("alpha error");
             Drain(editor);
-            Check(View(editor).Count == 4, "All must show before filtering.");
+            Check(View(editor).Length == 4, "All must show before filtering.");
 
             // Info off hides Info only, counts stay, re-enabling restores retained logs.
             Control<CheckBox>(editor, "ConsoleInfoFilter").IsChecked = false;
             Dispatcher.UIThread.RunJobs();
             var noInfo = View(editor);
-            Check(noInfo.Count == 3 && noInfo.All(row => row.Entry.Level != LogLevel.Info), "Info filter must hide only Info.");
+            Check(noInfo.Length == 3 && noInfo.All(row => row.Entry.Level != LogLevel.Info), "Info filter must hide only Info.");
             Check(Control<TextBlock>(editor, "ConsoleInfoCount").Text == "1", "Counts must stay for hidden levels.");
             Control<CheckBox>(editor, "ConsoleInfoFilter").IsChecked = true;
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 4, "Filter toggle must re-show retained logs.");
+            Check(View(editor).Length == 4, "Filter toggle must re-show retained logs.");
 
             // Error off.
             Control<CheckBox>(editor, "ConsoleErrorFilter").IsChecked = false;
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 2, "Error filter must hide errors.");
+            Check(View(editor).Length == 2, "Error filter must hide errors.");
             Control<CheckBox>(editor, "ConsoleErrorFilter").IsChecked = true;
             Dispatcher.UIThread.RunJobs();
 
@@ -189,11 +189,11 @@ static class ConsoleChecks
             Control<TextBox>(editor, "ConsoleSearch").Text = "alpha";
             Dispatcher.UIThread.RunJobs();
             var searched = View(editor);
-            Check(searched.Count == 2 && searched.All(row => (row.Entry.Message + row.Entry.ExceptionDetail).Contains("alpha", StringComparison.OrdinalIgnoreCase)),
+            Check(searched.Length == 2 && searched.All(row => (row.Entry.Message + row.Entry.ExceptionDetail).Contains("alpha", StringComparison.OrdinalIgnoreCase)),
                 "Search must filter the body.");
             Control<TextBox>(editor, "ConsoleSearch").Text = "";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 4, "Clearing search must re-show retained logs.");
+            Check(View(editor).Length == 4, "Clearing search must re-show retained logs.");
 
             // Auto-scroll must not steal the position while reading past logs.
             var list = Control<ListBox>(editor, "ConsoleList");
@@ -241,7 +241,7 @@ static class ConsoleChecks
             Log.Engine.Error("shared engine error", new Exception("engine detail"));
             Drain(editor);
             var rows = View(editor);
-            Check(rows.Count == 3 && rows[0].SourceText == "Game" && rows[1].SourceText == "Engine",
+            Check(rows.Length == 3 && rows[0].SourceText == "Game" && rows[1].SourceText == "Engine",
                 "Rows must show the source separately from severity.");
             Check(rows[1].DetailText.StartsWith("[Engine][Info]")
                 && rows[2].DetailText.StartsWith("[Engine][Error]")
@@ -251,17 +251,17 @@ static class ConsoleChecks
             filter.IsChecked = false;
             Log.Engine.Warning("shared hidden engine");
             Drain(editor);
-            Check(View(editor).Count == 1 && View(editor)[0].Entry.Source == LogSource.Game,
+            Check(View(editor).Length == 1 && View(editor)[0].Entry.Source == LogSource.Game,
                 "Engine filter must hide all engine levels, including newly received logs.");
             Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 4
                 && Control<TextBlock>(editor, "ConsoleErrorCount").Text == "1",
                 "Source filtering must retain history and severity totals.");
             filter.IsChecked = true;
-            Check(View(editor).Count == 4, "Re-enabling Engine must restore retained entries.");
+            Check(View(editor).Length == 4, "Re-enabling Engine must restore retained entries.");
             Control<CheckBox>(editor, "ConsoleInfoFilter").IsChecked = false;
             Control<TextBox>(editor, "ConsoleSearch").Text = "hidden";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 1 && View(editor)[0].Entry.Level == LogLevel.Warning,
+            Check(View(editor).Length == 1 && View(editor)[0].Entry.Level == LogLevel.Warning,
                 "Source, severity, and search filters must combine.");
         }
         finally { CloseEditor(editor); }
@@ -333,35 +333,35 @@ static class ConsoleChecks
             var search = Control<TextBox>(editor, "ConsoleSearch");
             search.Text = "entry-00";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 1, "Search must leave exactly one entry.");
+            Check(View(editor).Length == 1, "Search must leave exactly one entry.");
             Check(scroll.Offset.Y <= 1, "A single search result must be at the top.");
             // Clearing the search restores the full list without jumping away from the top.
             search.Text = "";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 80, "Clearing search must restore all entries.");
+            Check(View(editor).Length == 80, "Clearing search must restore all entries.");
             Check(scroll.Extent.Height > scroll.Viewport.Height, "Restored list must overflow.");
             Check(scroll.Offset.Y <= 1, $"Clearing search must not scroll; got {scroll.Offset.Y}.");
             // A no-match search and a level filter must also restore the list at the top.
             search.Text = "no-match";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 0, "Unmatched search must be empty.");
+            Check(View(editor).Length == 0, "Unmatched search must be empty.");
             search.Text = "";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 80 && scroll.Offset.Y <= 1,
+            Check(View(editor).Length == 80 && scroll.Offset.Y <= 1,
                 "Clearing an unmatched search must restore entries at the top.");
             var info = Control<CheckBox>(editor, "ConsoleInfoFilter");
             info.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 0, "Disabling Info must hide the entries.");
+            Check(View(editor).Length == 0, "Disabling Info must hide the entries.");
             info.IsChecked = true;
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 80 && scroll.Offset.Y <= 1,
+            Check(View(editor).Length == 80 && scroll.Offset.Y <= 1,
                 "Re-enabling Info must restore entries at the top.");
             scroll.Offset = new Vector(0, 200);
             Dispatcher.UIThread.RunJobs();
             search.Text = "entry";
             Dispatcher.UIThread.RunJobs();
-            Check(View(editor).Count == 80 && Math.Abs(scroll.Offset.Y - 200) < 1,
+            Check(View(editor).Length == 80 && Math.Abs(scroll.Offset.Y - 200) < 1,
                 $"Search with matching entries must preserve the offset; got {scroll.Offset.Y}.");
             CloseEditor(editor);
         }
@@ -403,7 +403,7 @@ static class ConsoleChecks
             Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 1, "Setup log missing.");
             Control<Button>(editor, "ConsoleClear").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 0 && View(editor).Count == 0, "Clear must empty history/view.");
+            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 0 && View(editor).Length == 0, "Clear must empty history/view.");
             Check(Field<int>(editor, "_consoleHistoryDropped") == 0, "Clear must reset history drops.");
 
             // Clear on Play is ON by default and runs before Start without erasing the start log.
@@ -492,7 +492,7 @@ static class ConsoleChecks
             // Stop後もログを読める.
             var list = Control<ListBox>(editor, "ConsoleList");
             var rows = View(editor);
-            Check(rows.Count > 0, "Logs must remain readable after Stop.");
+            Check(rows.Length > 0, "Logs must remain readable after Stop.");
             list.SelectedItem = rows.First(row => row.Entry.Message.Contains("Failer"));
             Dispatcher.UIThread.RunJobs();
             Check(Control<TextBox>(editor, "ConsoleDetail").Text?.Contains("destroy failure") == true,
@@ -523,7 +523,7 @@ static class ConsoleChecks
         try
         {
             var scene = EditScene(auto);
-            var services = Field<GameSession>(auto, "_editSession");
+            var services = Field<GameSession>(auto, "EditSession");
             var owner = Field<ProjectComponents>(auto, "_components");
             var item = scene.AddEmpty();
             owner.TryAttach(item, typeof(ConsoleFailUpdate), services.Factory);
@@ -595,6 +595,7 @@ static class ConsoleChecks
 
     public sealed class ConsoleProbe
     {
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [Start] private void Begin() { }
     }
 
@@ -615,6 +616,7 @@ static class ConsoleChecks
     {
         [Start] public void Begin() { }
         [Destroy] public void End() => throw new ApplicationException("destroy failure B");
+#pragma warning restore CA1822
         public void Dispose() { }
     }
 }

@@ -250,7 +250,7 @@ static class ProjectServiceRegistrationChecks
             var scene = Field<EditSceneStore>(editor, "_editScene").Current;
             var item = scene.AddEmpty();
             item.Rename("Board");
-            var services = Field<GameSession>(editor, "_editSession");
+            var services = Field<GameSession>(editor, "EditSession");
             var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
             Check(opened.Components.TryAttach(item, boardType, services.Factory), "Reload test requires an attached board.");
             dynamic board = item.Components.Single();
@@ -261,7 +261,7 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "MarkSceneChanged");
             Dispatcher.UIThread.RunJobs();
             var oldBoard = (object)board;
-            var oldServices = Field<GameSession>(editor, "_editSession");
+            var oldServices = Field<GameSession>(editor, "EditSession");
             dynamic oldLog = board.Log;
             var oldLogObject = (object)oldLog;
 
@@ -279,7 +279,7 @@ static class ProjectServiceRegistrationChecks
                 "Reload must preserve selection.");
             Check(renewed.Bonus is not null && !ReferenceEquals((object)renewed.Log, oldLogObject),
                 "Reload must resolve new services from the new registration.");
-            var currentServices = Field<GameSession>(editor, "_editSession");
+            var currentServices = Field<GameSession>(editor, "EditSession");
             Check(!ReferenceEquals(currentServices, oldServices), "Reload must swap to the new service group.");
             dynamic oldBoardDynamic = oldBoard;
             Check((int)oldBoardDynamic.Disposes == 1 && (bool)oldBoardDynamic.DisposedWithLiveServices,
@@ -317,13 +317,13 @@ static class ProjectServiceRegistrationChecks
         {
             var scene = Field<EditSceneStore>(editor, "_editScene").Current;
             var item = scene.AddEmpty();
-            var services = Field<GameSession>(editor, "_editSession");
+            var services = Field<GameSession>(editor, "EditSession");
             var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
             Check(opened.Components.TryAttach(item, boardType, services.Factory), "Failure tests require an attached board.");
             dynamic good = item.Components.Single();
             good.Score = 21;
             var goodObject = (object)good;
-            var goodServices = Field<GameSession>(editor, "_editSession");
+            var goodServices = Field<GameSession>(editor, "EditSession");
             var goodType = goodObject.GetType();
             var status = editor.FindControl<TextBlock>("FileStatus")!;
 
@@ -366,7 +366,7 @@ static class ProjectServiceRegistrationChecks
                 Dispatcher.UIThread.RunJobs();
                 Check(ReferenceEquals(item.Components.Single(), goodObject),
                     $"{label} must preserve the exact old instances.");
-                Check(ReferenceEquals(Field<GameSession>(editor, "_editSession"), goodServices),
+                Check(ReferenceEquals(Field<GameSession>(editor, "EditSession"), goodServices),
                     $"{label} must preserve the old service group.");
                 Check(opened.Components.Registry.GetType(opened.Components.Registry.GetId(goodType)) == goodType,
                     $"{label} must preserve the old registration.");
@@ -480,18 +480,20 @@ static class ProjectServiceRegistrationChecks
     private sealed class NeedMissing
     {
         public NeedMissing(UnregisteredService service) => _ = service;
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [PureEngine.Core.Start] private void Begin() { }
+#pragma warning restore CA1822
     }
 
-    private sealed class GoodProbe : IDisposable
+    private sealed class GoodProbe(PureEngine.Editor.Samples.BattleSession session) : IDisposable
     {
         public static readonly List<GoodProbe> Disposed = [];
         public static PureEngine.Editor.Samples.BattleSession? LastSession;
-        public readonly PureEngine.Editor.Samples.BattleSession Session;
+        public readonly PureEngine.Editor.Samples.BattleSession Session = session;
         [PureEngine.Core.Inspector] public string Tag = "";
         public int Starts;
         private bool _disposed;
-        public GoodProbe(PureEngine.Editor.Samples.BattleSession session) => Session = session;
+
         [PureEngine.Core.Start] private void Begin() => Starts++;
         public void Dispose()
         {

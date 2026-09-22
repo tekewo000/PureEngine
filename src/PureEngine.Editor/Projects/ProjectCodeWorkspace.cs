@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.Versioning;
 using System.Xml.Linq;
 using Microsoft.Extensions.DependencyInjection;
+using PureEngine.Analyzers;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -33,6 +34,7 @@ public static class ProjectCodeWorkspace
                     new XElement("CheckForOverflowUnderflow", "true"),
                     new XElement("DefaultItemExcludes", "$(DefaultItemExcludes);**/bin/**;**/obj/**;**/.*/**")),
                 new XElement("ItemGroup",
+                    new XElement("Analyzer", new XAttribute("Include", typeof(LifecycleUsageSuppressor).Assembly.Location)),
                     new XElement("Reference", new XAttribute("Include", "PureEngine.Core"),
                         new XElement("HintPath", core.Location),
                         new XElement("Private", "false")))));

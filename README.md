@@ -69,6 +69,12 @@ ProjectごとのC#読み込み・自動反映に対応。素材の取り込み�
 
 ## 自作C#と自動反映
 
+生成するゲーム用csprojには、Zed/Roslyn向けのライフサイクル診断Suppressorを自動登録します。
+PureEngineの `[Start]`・`[Update]`・`[Destroy]` が付いたprivateメソッドは、未使用メソッドの診断IDE0051から除外します。
+通常の未使用メソッドや別の同名属性には診断が残ります。ゲームコードにpragmaを追加する必要はありません。
+既存の生成済みプロジェクトは、更新したEditorで開き直すと参照が更新されます。Zedに古い診断が残る場合は言語サーバーを再起動してください。
+手動管理のcsprojは上書きしないため、Editorに同梱された `PureEngine.Analyzers.dll` をAnalyzer参照として追加してください。
+
 Project内に、例えば `Gameplay/Actors/Player.cs` を作成します。専用のComponentsフォルダは不要です。
 
 Project欄のフォルダまたはファイル一覧を右クリックして **Create C#** を選ぶと、ファイル名を指定してC#を作成できます（.csは省略可）。ひな形は `public sealed class ファイル名` と空の本体です。同名ファイルは上書きしません。作成後は通常の自動コンパイルでアタッチ可能になります。
@@ -232,6 +238,18 @@ if (play.Runtime.IsRunning) play.Step(1f / 60f);
 編集用 Component はシーン切替・オブジェクト削除・読み込みキャンセル・ウィンドウ終了で Dispose し、ゲーム用の Destroy は呼びません。ウィンドウ終了では Component を先に、サービスを後に解放します。
 
 ## コアの動作確認
+
+コードの提案をまとめて修正し、残りの診断・ビルド・Core/Editorチェックまで実行します。
+
+```powershell
+./tools/code-quality.ps1
+```
+
+変更せずに検査する場合は `./tools/code-quality.ps1 -Check`。GitHub Actionsもpush/PRで同じ検査を実行します。
+ルールは `.editorconfig`、SDKは `global.json` で固定します。namespaceの名前・有無・宣言形式は修正対象外です。
+static化・未使用引数の削除・引数順序の変更は自動適用せず、呼び出し元とリフレクション利用を確認して修正します。
+`[Start]`・`[Update]`・`[Destroy]` はインスタンスメソッドのまま維持し、必要なCA1822の例外はその宣言に理由付きで記載します。
+コールバックで使わない引数は削除せず `_` と命名します。画面バインディングや異常系テストも必要な例外だけ局所的に抑制します。
 
 追加・名前変更・検証・ID・削除・アタッチ・属性検出に加えて、YAMLの保存と復元、文字列の保持、不正データの拒否、保存失敗時の元ファイル保護を確認します。SDKが使える環境で実行してください。
 

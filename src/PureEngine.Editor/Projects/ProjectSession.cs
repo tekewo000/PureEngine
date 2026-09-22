@@ -35,8 +35,8 @@ public sealed class ProjectSession : IDisposable
         return Prepare(project, UserCodeCompiler.CompileProject(project.RootDirectory));
     }
 
-    public static async Task<ProjectSession> OpenAsync(string manifestPath, CancellationToken cancellationToken = default,
-        Func<string, CancellationToken, Task<UserCodeCompileResult>>? compileAsync = null)
+    public static async Task<ProjectSession> OpenAsync(string manifestPath,
+        Func<string, CancellationToken, Task<UserCodeCompileResult>>? compileAsync = null, CancellationToken cancellationToken = default)
     {
         var project = ProjectFile.Open(manifestPath);
         ProjectCodeWorkspace.Ensure(project);

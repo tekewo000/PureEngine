@@ -45,7 +45,7 @@ public sealed class SceneObject : INotifyPropertyChanged
     {
         get
         {
-            Matrix4x4 result = Matrix4x4.Identity;
+            var result = Matrix4x4.Identity;
             for (var ancestor = this; ancestor != null; ancestor = ancestor.Parent)
             {
                 var transform = ancestor.GetComponent<Transform>();
@@ -94,10 +94,7 @@ public sealed class SceneObject : INotifyPropertyChanged
     }
 
     /// <summary>Returns the first attached component assignable to <typeparamref name="T"/>, or null.</summary>
-    public T? GetComponent<T>() where T : class
-    {
-        return _components.OfType<T>().FirstOrDefault();
-    }
+    public T? GetComponent<T>() where T : class => _components.OfType<T>().FirstOrDefault();
 
     /// <summary>Start Priority for one attachment. Defaults to 0; negatives are allowed.</summary>
     public int GetStartPriority(object component) => ReadPriorities(component).Start;

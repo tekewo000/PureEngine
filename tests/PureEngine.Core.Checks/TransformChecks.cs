@@ -18,10 +18,7 @@ static class TransformChecks
         Near(a.M31, b.M31) && Near(a.M32, b.M32) && Near(a.M33, b.M33) && Near(a.M34, b.M34) &&
         Near(a.M41, b.M41) && Near(a.M42, b.M42) && Near(a.M43, b.M43) && Near(a.M44, b.M44);
 
-    private static void CheckMatrix(Matrix4x4 actual, Matrix4x4 expected, string message)
-    {
-        Check(MatrixNear(actual, expected), $"{message} Expected M41-43=({expected.M41},{expected.M42},{expected.M43}).");
-    }
+    private static void CheckMatrix(Matrix4x4 actual, Matrix4x4 expected, string message) => Check(MatrixNear(actual, expected), $"{message} Expected M41-43=({expected.M41},{expected.M42},{expected.M43}).");
 
     public static void Run()
     {

@@ -69,7 +69,7 @@ static class LifecycleChecks
             var good = new LifecycleDisposableProbe();
             source.AddEmpty().Attach(good);
             source.AddEmpty().Attach(new LifecycleBadStatic());
-            Reject<InvalidOperationException>(() => new SceneRuntime(source, registry));
+            Reject<InvalidOperationException>(() => { using var runtime = new SceneRuntime(source, registry); });
             Check(good.Starts == 0 && good.Destroys == 0 && good.Disposes == 0,
                 "Preparation failure must call no lifecycle and no disposal for source instances.");
         }
@@ -244,6 +244,8 @@ static class LifecycleChecks
         }
     }
 
+    private static readonly int[] ExpectedCleanupOrder = [3, 2, 1];
+
     private static void PreparationCleanupErrors()
     {
         var registry = RegistryFor((typeof(PreparationCleanupProbe), "cleanup"),
@@ -258,7 +260,7 @@ static class LifecycleChecks
         try
         {
             // Exercise both direct scene loading and Runtime's Clone preparation.
-            foreach (Action restore in new Action[]
+            foreach (var restore in new Action[]
                 { () => serializer.Deserialize(yaml), () => { using var runtime = new SceneRuntime(source, registry); } })
             {
                 PreparationCleanupProbe.Released.Clear();
@@ -268,7 +270,7 @@ static class LifecycleChecks
                 Check(error.InnerExceptions[1] == PreparationCleanupProbe.ThirdFailure
                     && error.InnerExceptions[2] == PreparationCleanupProbe.SecondFailure,
                     "Cleanup errors must retain their identity and reverse-creation order.");
-                Check(PreparationCleanupProbe.Released.SequenceEqual(new[] { 3, 2, 1 }),
+                Check(PreparationCleanupProbe.Released.SequenceEqual(ExpectedCleanupOrder),
                     "Cleanup must continue in reverse order after disposal failures.");
             }
         }
@@ -314,7 +316,9 @@ static class LifecycleChecks
     private sealed class PreparationSetterProbe
     {
         public static Exception? Failure;
+#pragma warning disable CA1822 // Reflection tests require these lifecycle/Inspector members to remain instance members.
         [Inspector] public int Value { get => 0; set { if (Failure is not null) throw Failure; } }
+#pragma warning restore CA1822
     }
 
     private static void ReplayAndSeparation()
@@ -382,7 +386,7 @@ public sealed class LifecycleDisposableProbe : IDisposable
     public int Starts, Updates, Destroys, Disposes;
     public long DestroyOrder = -1, DisposeOrder = -1;
     public Action? OnStart, OnUpdate, OnDestroy, OnDispose;
-    public static int CreatedDisposes;
+    public static int CreatedDisposes { get; set; }
     private static long _sequence;
     private bool _disposed;
 
@@ -398,6 +402,6 @@ public sealed class LifecycleDisposableProbe : IDisposable
     }
 
     [Start] private void Begin() { Starts++; OnStart?.Invoke(); }
-    [Update] private void Tick(float dt) { Updates++; Value++; OnUpdate?.Invoke(); }
+    [Update] private void Tick(float _) { Updates++; Value++; OnUpdate?.Invoke(); }
     [Destroy] private void End() { Destroys++; DestroyOrder = ++_sequence; OnDestroy?.Invoke(); }
 }
