@@ -45,7 +45,7 @@ public sealed class SceneRuntime : IDisposable
     private readonly Dictionary<SceneObject, RuntimeObject> _objects = [];
     // Remember lifetime ownership without retaining deleted components for the rest of the session.
     private static readonly object AcceptedComponent = new();
-    private readonly ConditionalWeakTable<object, object> _instances = new();
+    private readonly ConditionalWeakTable<object, object> _instances = [];
     private readonly List<Invocation> _pendingStarts = [];
     private readonly List<Invocation> _updates = [];
     private readonly List<RuntimeObject> _removals = [];

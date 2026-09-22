@@ -7,7 +7,7 @@ namespace PureEngine.Core;
 public static class ComponentSchema
 {
     internal sealed record LifecycleMethods(MethodInfo? Start, MethodInfo? Update, MethodInfo? Destroy);
-    private static readonly ConditionalWeakTable<Type, LifecycleMethods> Lifecycles = new();
+    private static readonly ConditionalWeakTable<Type, LifecycleMethods> Lifecycles = [];
 
     /// <summary>Validates the lifecycle declarations and returns the Start method, if present.</summary>
     public static MethodInfo? GetStartMethod(Type type) => GetLifecycle(type).Start;

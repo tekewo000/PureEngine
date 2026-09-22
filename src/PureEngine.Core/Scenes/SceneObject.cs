@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Numerics;
 
 namespace PureEngine.Core;
 
@@ -18,7 +19,7 @@ public sealed class SceneObject : INotifyPropertyChanged
 {
     private string _name;
     private readonly List<object> _components = [];
-    private readonly Dictionary<object, Priorities> _priorities = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, Priorities> _priorities = [with(ReferenceEqualityComparer.Instance)];
     internal SceneRuntime? Runtime { get; set; }
 
     private sealed class Priorities
@@ -35,6 +36,27 @@ public sealed class SceneObject : INotifyPropertyChanged
     /// <summary>Display name edited in the Editor.</summary>
     public string Name => _name;
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public SceneObject? Parent { get; private set; } = null;
+    public IReadOnlyList<SceneObject> Children => _children.AsReadOnly();
+    private readonly List<SceneObject> _children = [];
+
+    public Matrix4x4 WorldMatrix
+    {
+        get
+        {
+            Matrix4x4 result = Matrix4x4.Identity;
+            for (var ancestor = this; ancestor != null; ancestor = ancestor.Parent)
+            {
+                var transform = ancestor.GetComponent<Transform>();
+                if (transform != null)
+                {
+                    result *= transform.LocalMatrix;
+                }
+            }
+            return result;
+        }
+    }
 
     /// <summary>Creates an object with the given display name.</summary>
     public SceneObject(string name) : this(Guid.NewGuid(), name) { }
@@ -190,5 +212,20 @@ public sealed class SceneObject : INotifyPropertyChanged
     {
         if (stored.Start == 0 && stored.Update == 0 && stored.Destroy == 0)
             _priorities.Remove(component);
+    }
+
+    public void SetParent(SceneObject? parent)
+    {
+        if (parent == Parent) return;
+
+        for (var ancestor = parent; ancestor != null; ancestor = ancestor.Parent)
+        {
+            if (ancestor == this)
+                throw new InvalidOperationException("Parent cycle is not allowed.");
+        }
+
+        Parent?._children.Remove(this);
+        Parent = parent;
+        Parent?._children.Add(this);
     }
 }

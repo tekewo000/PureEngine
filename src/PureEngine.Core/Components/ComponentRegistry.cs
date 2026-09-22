@@ -3,9 +3,9 @@ namespace PureEngine.Core;
 /// <summary>Stable scene IDs for explicitly registered plain C# component types.</summary>
 public sealed class ComponentRegistry
 {
-    private readonly Dictionary<string, Type> _types = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Type> _types = [with(StringComparer.Ordinal)];
 
-    public IReadOnlyList<Type> Types => _types.Values.ToArray();
+    public IReadOnlyList<Type> Types => [.. _types.Values];
 
     public void Register<T>(string id) where T : class => RegisterType(typeof(T), id);
 
@@ -35,5 +35,5 @@ public sealed class ComponentRegistry
         return _types.Remove(entry.Key);
     }
 
-    public IReadOnlyList<string> Ids => _types.Keys.ToArray();
+    public IReadOnlyList<string> Ids => [.. _types.Keys];
 }

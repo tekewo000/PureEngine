@@ -23,7 +23,7 @@ public sealed record UserCodeCompileAttempt(
 /// </summary>
 public sealed class UserCodeCompileTracker : IDisposable
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly Func<string, CancellationToken, Task<UserCodeCompileResult>> _compileAsync;
     private long _latest;
     private bool _disposed;

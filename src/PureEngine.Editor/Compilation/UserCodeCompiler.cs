@@ -204,7 +204,7 @@ public static class UserCodeCompiler
             if (diagnostic.Severity == DiagnosticSeverity.Hidden) continue;
             var line = 0;
             var column = 0;
-            var path = files.FirstOrDefault() ?? "";
+            var path = files is [var first, ..] ? first : "";
             if (diagnostic.Location.IsInSource && diagnostic.Location.SourceTree is not null)
             {
                 path = diagnostic.Location.SourceTree.FilePath;
@@ -233,7 +233,7 @@ public static class UserCodeCompiler
             if (diagnostic.Severity != DiagnosticSeverity.Error) continue; // WarningはGetDiagnostics側で既に収集済み
             var line = 0;
             var column = 0;
-            var path = files.FirstOrDefault() ?? "";
+            var path = files is [var first, ..] ? first : "";
             if (diagnostic.Location.IsInSource && diagnostic.Location.SourceTree is not null)
             {
                 path = diagnostic.Location.SourceTree.FilePath;

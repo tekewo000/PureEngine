@@ -9,7 +9,7 @@ namespace PureEngine.Core;
 /// <summary>Version 1 YAML scenes. Restoring never mutates the caller's current scene.</summary>
 public sealed class SceneSerializer(ComponentRegistry registry)
 {
-    private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = new();
+    private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = [];
     private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .WithQuotingNecessaryStrings().DisableAliases()
