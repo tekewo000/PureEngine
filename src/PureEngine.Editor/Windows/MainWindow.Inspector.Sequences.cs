@@ -48,7 +48,7 @@ public partial class MainWindow
 
     private TextBox BuildSequenceStringBox(object component, MemberInfo member, int index, string automationName)
     {
-        var box = new TextBox { Text = SequenceStringValue(component, member, index), Width = 160 };
+        var box = new TextBox { Text = SequenceStringValue(component, member, index), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         box.TextChanged += (_, _) =>
@@ -68,7 +68,7 @@ public partial class MainWindow
     private TextBox BuildSequenceIntBox(object component, MemberInfo member, int index, string automationName)
     {
         const string hint = "Enter an integer — Press Esc to revert";
-        var box = new TextBox { Text = SequenceScalarText(component, member, index), Width = 120 };
+        var box = new TextBox { Text = SequenceScalarText(component, member, index), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
@@ -97,7 +97,7 @@ public partial class MainWindow
     private TextBox BuildSequenceFloatBox(object component, MemberInfo member, int index, string automationName, bool isDouble)
     {
         const string hint = "Enter a number — Press Esc to revert";
-        var box = new TextBox { Text = SequenceScalarText(component, member, index), Width = 120 };
+        var box = new TextBox { Text = SequenceScalarText(component, member, index), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
@@ -152,13 +152,16 @@ public partial class MainWindow
         return check;
     }
 
-    private StackPanel BuildSequenceVectorRow(object component, MemberInfo member, Type elementType, int index, string automationName)
+    private Grid BuildSequenceVectorRow(object component, MemberInfo member, Type elementType, int index, string automationName)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        var grid = new Grid { ColumnSpacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         string[] axes = elementType == typeof(Vector2) ? ["X", "Y"] : elementType == typeof(Vector3) ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
+        foreach (var _ in axes)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        var column = 0;
         foreach (var axis in axes)
         {
-            var box = new TextBox { Text = SequenceVectorAxisText(component, member, index, axis), Width = 56, FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var box = new TextBox { Text = SequenceVectorAxisText(component, member, index, axis), MinWidth = 40, FontSize = 12, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{axis}");
             const string hint = "Enter a number — Press Esc to revert";
@@ -188,15 +191,16 @@ public partial class MainWindow
                 box.Text = SequenceVectorAxisText(component, member, index, captured);
                 e.Handled = true;
             };
-            row.Children.Add(box);
+            Grid.SetColumn(box, column++);
+            grid.Children.Add(box);
         }
-        return row;
+        return grid;
     }
 
     private TextBox BuildSequenceNullableBox(object component, MemberInfo member, Type _, Type underlying, int index, string automationName)
     {
         const string hint = "Empty = null — Press Esc to revert";
-        var box = new TextBox { Text = SequenceScalarText(component, member, index), Width = 120, PlaceholderText = "Null" };
+        var box = new TextBox { Text = SequenceScalarText(component, member, index), MinWidth = 40, PlaceholderText = "Null", HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
@@ -232,7 +236,7 @@ public partial class MainWindow
     {
         const string hint = "Enter a number — Press Esc to revert";
         var intHint = "Enter an integer — Press Esc to revert";
-        var box = new TextBox { Text = DictionaryScalarText(component, member, key), Width = 120 };
+        var box = new TextBox { Text = DictionaryScalarText(component, member, key), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, isInt ? intHint : hint);
@@ -288,13 +292,16 @@ public partial class MainWindow
         return box;
     }
 
-    private StackPanel BuildDictionaryVectorRow(object component, MemberInfo member, Type valueType, string key, string automationName)
+    private Grid BuildDictionaryVectorRow(object component, MemberInfo member, Type valueType, string key, string automationName)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        var grid = new Grid { ColumnSpacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         string[] axes = valueType == typeof(Vector2) ? ["X", "Y"] : valueType == typeof(Vector3) ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
+        foreach (var _ in axes)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        var column = 0;
         foreach (var axis in axes)
         {
-            var box = new TextBox { Text = DictionaryVectorAxisText(component, member, key, axis), Width = 56, FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var box = new TextBox { Text = DictionaryVectorAxisText(component, member, key, axis), MinWidth = 40, FontSize = 12, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{axis}");
             const string hint = "Enter a number — Press Esc to revert";
@@ -325,15 +332,16 @@ public partial class MainWindow
                 box.Text = DictionaryVectorAxisText(component, member, key, captured);
                 e.Handled = true;
             };
-            row.Children.Add(box);
+            Grid.SetColumn(box, column++);
+            grid.Children.Add(box);
         }
-        return row;
+        return grid;
     }
 
     private TextBox BuildDictionaryNullableBox(object component, MemberInfo member, Type _, Type underlying, string key, string automationName)
     {
         const string hint = "Empty = null — Press Esc to revert";
-        var box = new TextBox { Text = DictionaryScalarText(component, member, key), Width = 120, PlaceholderText = "Null" };
+        var box = new TextBox { Text = DictionaryScalarText(component, member, key), MinWidth = 40, PlaceholderText = "Null", HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
@@ -448,7 +456,8 @@ public partial class MainWindow
             return BuildFlagsEditor(component, member, automationName, elementType,
                 getCurrent: () => SequenceElement(component, member, index) ?? Enum.ToObject(elementType, 0),
                 setCurrent: value => SetSequenceElement(component, member, index, value));
-        var combo = new ComboBox { MinWidth = 120, HorizontalAlignment = HorizontalAlignment.Left };
+        var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        combo.Classes.Add("inspectorCombo");
         combo.SetValue(AutomationProperties.NameProperty, automationName);
         var items = Enum.GetValues(elementType).Cast<object>().ToList();
         var current = SequenceElement(component, member, index);
@@ -508,7 +517,8 @@ public partial class MainWindow
             refresh();
             return root;
         }
-        var combo = new ComboBox { MinWidth = 120, HorizontalAlignment = HorizontalAlignment.Left };
+        var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        combo.Classes.Add("inspectorCombo");
         combo.SetValue(AutomationProperties.NameProperty, automationName);
         var names = Enum.GetNames(underlying).ToList();
         var current = SequenceElement(component, member, index)?.ToString();
@@ -542,7 +552,8 @@ public partial class MainWindow
                     dictionary[key] = value;
                     MarkSceneChanged();
                 });
-        var combo = new ComboBox { MinWidth = 120, HorizontalAlignment = HorizontalAlignment.Left };
+        var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        combo.Classes.Add("inspectorCombo");
         combo.SetValue(AutomationProperties.NameProperty, automationName);
         var items = Enum.GetValues(valueType).Cast<object>().ToList();
         var current = DictionaryEnumValue(component, member, key);
@@ -614,7 +625,8 @@ public partial class MainWindow
             refresh();
             return root;
         }
-        var combo = new ComboBox { MinWidth = 120, HorizontalAlignment = HorizontalAlignment.Left };
+        var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        combo.Classes.Add("inspectorCombo");
         combo.SetValue(AutomationProperties.NameProperty, automationName);
         var names = Enum.GetNames(underlying).ToList();
         var current = DictionaryEnumValue(component, member, key)?.ToString();

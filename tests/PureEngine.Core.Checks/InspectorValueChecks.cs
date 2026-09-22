@@ -118,7 +118,10 @@ static class InspectorValueChecks
         sample.Position = new Vector3(1, 2, 3);
         var yamlBase = serializer.Serialize(scene);
         Reject(() => serializer.Deserialize(yamlBase.Replace("Ratio: 2.5", "Ratio: NaN")), "NaN double accepted.");
-        Reject(() => serializer.Deserialize(yamlBase.Replace("Position:", "Missing:")), "Unknown member discarded.");
+        var removedVector = serializer.Deserialize(yamlBase.Replace("\n      Position:", "\n      RemovedPosition:"));
+        Check(removedVector.Objects[0].GetComponent<ExtendedProbe>()!.Position == Vector3.Zero
+            && removedVector.Objects[0].GetComponent<ExtendedProbe>()!.Ratio == 2.5,
+            "Unknown structured Inspector values must be ignored while matching values remain intact.");
         Reject(() => serializer.Deserialize(yamlBase.Replace("Scores:", "Scores: not-a-sequence")), "String accepted as sequence.");
         Reject(() => serializer.Deserialize(yamlBase.Replace("Level: Normal", "Level: Impossible")), "Unknown enum name accepted.");
         var numericEnum = serializer.Deserialize(yamlBase.Replace("Level: Normal", "Level: 0"));

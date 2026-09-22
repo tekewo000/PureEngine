@@ -94,4 +94,23 @@ public static class ComponentSchema
         found.Sort((a, b) => a.MetadataToken.CompareTo(b.MetadataToken));
         return found;
     }
+
+    internal static Dictionary<string, MemberInfo> GetInspectorMemberNames(Type type)
+    {
+        var members = GetInspectorMembers(type);
+        Dictionary<string, MemberInfo> names = [with(StringComparer.Ordinal)];
+        foreach (var member in members)
+            if (!names.TryAdd(member.Name, member))
+                throw new InvalidDataException($"Ambiguous Inspector member name in {type.FullName}: {member.Name}.");
+        foreach (var member in members)
+        foreach (var former in member.GetCustomAttributes<FormerlySerializedAsAttribute>(inherit: true))
+        {
+            var name = former.OldName;
+            if (string.IsNullOrWhiteSpace(name) || name != name.Trim())
+                throw new InvalidDataException($"{type.FullName}.{member.Name}: former Inspector name must be non-empty without surrounding whitespace.");
+            if (!names.TryAdd(name, member) && !Equals(names[name], member))
+                throw new InvalidDataException($"{type.FullName}: Inspector name '{name}' refers to multiple members.");
+        }
+        return names;
+    }
 }

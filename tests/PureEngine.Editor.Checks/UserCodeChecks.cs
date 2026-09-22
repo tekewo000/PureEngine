@@ -161,7 +161,6 @@ static class UserCodeChecks
             good = Player(editor);
             foreach (var incompatible in new[] {
                 Source(6).Replace("int Health = 10", "float Health = 10"),
-                Source(6).Replace("[Inspector] public int Health = 10;", ""),
                 Source(6).Replace("[Start] public void Start()", "public void Start()"),
                 Source(6).Replace("public int Version => 6;", "public Player() { throw new System.Exception(\"ctor-failure\"); } public int Version => 6;")
             })
@@ -196,6 +195,67 @@ static class UserCodeChecks
                 && EditScene(editor).Objects.Single().GetStartPriority(Player(editor)) == -9,
                 "Renames must retain component identity, Inspector values and Priority.");
 
+            var legacyYaml = new SceneSerializer(owner.Registry).Serialize(EditScene(editor));
+            var renamedSource = Source(9).Replace("namespace Game;", "namespace Renamed.Game;")
+                .Replace("class Player", "class Hero")
+                .Replace("[Inspector] public int Health = 10;",
+                    "[Inspector, FormerlySerializedAs(\"Health\")] public int HitPoints { get; set; } = 10;");
+            File.WriteAllText(file, renamedSource);
+            PumpUntil(() => Version(editor) == 9, "Inspector member renames must reload automatically.");
+            var renamedPlayer = Player(editor);
+            var hitPoints = renamedPlayer.GetType().GetProperty("HitPoints")!;
+            Check((int)hitPoints.GetValue(renamedPlayer)! == 81 && editor.Title!.StartsWith("* ")
+                && EditScene(editor).Objects.Single().Id == id
+                && EditScene(editor).Objects.Single().GetStartPriority(renamedPlayer) == -9
+                && ReferenceEquals(editor.FindControl<ListBox>("SceneObjects")!.SelectedItem, EditScene(editor).Objects.Single())
+                && editor.GetVisualDescendants().OfType<TextBox>().Any(box => AutomationProperties.GetName(box) == "Hero.HitPoints" && box.Text == "81"),
+                "Renamed members must retain unsaved values, identity, Priority and selection, with the new Inspector label.");
+            var legacyScene = new SceneSerializer(owner.Registry).Deserialize(legacyYaml);
+            Check((int)hitPoints.GetValue(legacyScene.Objects.Single().Components.Single())! == 81,
+                "Unopened old scenes must load into renamed members.");
+            foreach (var invalid in new[]
+            {
+                renamedSource.Replace("public int HitPoints", "public float HitPoints"),
+                renamedSource.Replace("[Inspector] public int Added = 42;", "[Inspector, FormerlySerializedAs(\"Health\")] public int Added = 42;"),
+            })
+            {
+                File.WriteAllText(file, invalid);
+                Call(editor, "ReloadUserCode");
+                Check(ReferenceEquals(Player(editor), renamedPlayer) && (int)hitPoints.GetValue(renamedPlayer)! == 81,
+                    "Incompatible or ambiguous member renames must retain the old code and data.");
+            }
+            File.WriteAllText(file, renamedSource);
+            Call(editor, "ReloadUserCode");
+            Call(editor, "StartPlay");
+            Check(editor.IsPlaying, "A renamed Inspector member must support Play cloning.");
+            Call(editor, "StopPlay");
+
+            // Plain renames/deletions need no migration attributes: drop old values and keep new initializers.
+            Check(((Task<bool>)Call(editor, "SaveSceneAsync", false)!).GetAwaiter().GetResult() && !EditStore(editor).IsDirty,
+                "Reset checks must start from a saved scene.");
+            var resetSource = renamedSource.Replace(", FormerlySerializedAs(\"Health\")", "")
+                .Replace("HitPoints", "Life").Replace("[Inspector] public int Added = 42;", "")
+                .Replace("Version => 9", "Version => 10");
+            File.WriteAllText(file, resetSource);
+            PumpUntil(() => Version(editor) == 10, "Unannotated Inspector renames and deletions must reload without an error.");
+            var resetPlayer = Player(editor);
+            Check((int)resetPlayer.GetType().GetProperty("Life")!.GetValue(resetPlayer)! == 10
+                && resetPlayer.GetType().GetField("Added") is null
+                && EditScene(editor).Objects.Single().Id == id
+                && EditScene(editor).Objects.Single().GetStartPriority(resetPlayer) == -9
+                && ReferenceEquals(editor.FindControl<ListBox>("SceneObjects")!.SelectedItem, EditScene(editor).Objects.Single())
+                && editor.Title!.StartsWith("* "), "Resetting renamed fields must preserve identity, Priority, selection and dirty state.");
+            var resetSerializer = new SceneSerializer(owner.Registry);
+            var oldScene = resetSerializer.Deserialize(legacyYaml);
+            Check((int)resetPlayer.GetType().GetProperty("Life")!.GetValue(oldScene.Objects.Single().Components.Single())! == 10,
+                "Old scenes must open without attributes and use the new member's initializer.");
+            var resetYaml = resetSerializer.Serialize(EditScene(editor));
+            Check(!resetYaml.Contains("Health:") && !resetYaml.Contains("HitPoints:") && !resetYaml.Contains("Added:")
+                && resetYaml.Contains("Life: 10"), "Saving must discard obsolete names and store the new member.");
+            Call(editor, "StartPlay");
+            Check(editor.IsPlaying, "Resetting renamed members must allow Play.");
+            Call(editor, "StopPlay");
+
             // Failed opening of another project must not mutate active code registrations.
             var other = ProjectFile.Create(parent, "BrokenUserCodeProject", "version: 999\nobjects: []");
             File.WriteAllText(Path.Combine(other.RootDirectory, "Other.cs"), "public class Other {}");
@@ -207,6 +267,24 @@ static class UserCodeChecks
             // Round-trip the reloaded instance, then reopen in a new editor.
             var save = (Task<bool>)Call(editor, "SaveSceneAsync", false)!;
             Check(save.GetAwaiter().GetResult(), "Reloaded scene should save.");
+            Check(File.ReadAllText(project.StartupScenePath) == resetYaml,
+                "Saving after a rename must remove obsolete Inspector entries from the actual YAML file.");
+
+            // A project reopened with older YAML must offer saving the cleaned representation as well.
+            SceneFile.Write(project.StartupScenePath, legacyYaml);
+            using (var staleSession = ProjectSession.Open(project.ManifestPath))
+            {
+                var staleEditor = new MainWindow(staleSession);
+                Check(EditStore(staleEditor).IsDirty && staleEditor.Title!.StartsWith("* "),
+                    "Opening a project with obsolete Inspector names must mark the scene dirty.");
+                EditStore(staleEditor).MarkClean();
+                staleEditor.Close();
+            }
+            Call(editor, "OpenScenePathAsync", project.StartupScenePath);
+            Check(EditStore(editor).IsDirty, "Opening an older scene must mark cleanup as unsaved.");
+            Check(((Task<bool>)Call(editor, "SaveSceneAsync", false)!).GetAwaiter().GetResult()
+                && File.ReadAllText(project.StartupScenePath) == resetYaml && !EditStore(editor).IsDirty,
+                "Saving a loaded older scene must clean its YAML and clear the dirty state.");
         }
         finally
         {
@@ -219,7 +297,7 @@ static class UserCodeChecks
         var restored = reopened.Scene.Objects.Single();
         Check(restored.Components.Single().GetType().FullName == "Renamed.Game.Hero",
             "Renamed identity must survive closing and reopening the project.");
-        Check(restored.Id == id && (int)restored.Components.Single().GetType().GetField("Health")!.GetValue(restored.Components.Single())! == 81,
+        Check(restored.Id == id && (int)restored.Components.Single().GetType().GetProperty("Life")!.GetValue(restored.Components.Single())! == 10,
             "Saved user components must restore after a fresh compile.");
         using var next = ProjectSession.Create(parent, "NoUserCode");
         Check(next.Components.UserTypes.Count == 0, "New projects must start without user code.");

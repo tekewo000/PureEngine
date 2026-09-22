@@ -46,7 +46,7 @@ public sealed class EditSceneStore(Scene initial, string? path = null, bool dirt
 
     /// <summary>
     /// 新しい編集Sceneを採用し、旧Sceneを返す。旧SceneのComponent破棄は呼び出し側が行う。
-    /// Dirtyは呼び出し側が指定する（再読み込みでは旧Dirtyを維持し、開く・新規ではfalseにする）。
+    /// Dirtyは呼び出し側が指定する。再読み込みでは旧Dirtyを維持し、保存項目の変更時もtrueにする。
     /// </summary>
     public Scene Replace(Scene next, string? path, bool dirty)
     {

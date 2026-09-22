@@ -22,11 +22,21 @@ static class PriorityInspectorChecks
                 && (box.GetValue(AutomationProperties.NameProperty) as string)?.EndsWith("Priority", StringComparison.Ordinal) == true)];
 
     private static TextBox FindPriorityBox(MainWindow editor, string automationName) => editor.GetVisualDescendants().OfType<TextBox>()
-            .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
+
+    private static void Click(Button button)
+    {
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>S/U/D letter inside its badge chip: the field panel holds [badge Border, box].</summary>
+    private static TextBlock? PriorityLabel(TextBox box) => (box.Parent as StackPanel)?.Children.OfType<Border>().SingleOrDefault()?.Child as TextBlock;
 
     private static readonly string[] PriorityTooltips = ["Start Priority", "Update Priority", "Destroy Priority"];
     private static readonly string[] PriorityLabels = ["S", "U", "D"];
     private static readonly string[] PriorityColors = ["#8AB4F8", "#81C995", "#F28B82"];
+    private static readonly string[] PriorityBadgeBackgrounds = ["#2A3A57", "#24402E", "#472D2D"];
 
     public static void Run(MainWindow editor)
     {
@@ -60,15 +70,18 @@ static class PriorityInspectorChecks
         Check(fullBoxes.Select(box => ToolTip.GetTip(box) as string)
             .SequenceEqual(PriorityTooltips),
             "Priority tooltips must identify each lifecycle in order.");
-        Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Text)
+        Check(fullBoxes.Select(box => PriorityLabel(box)?.Text)
             .SequenceEqual(PriorityLabels),
             "Priority fields must show S/U/D labels in lifecycle order.");
-        Check(fullBoxes.Select(box => ((box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault()?.Foreground as Avalonia.Media.SolidColorBrush)?.Color.ToString())
+        Check(fullBoxes.Select(box => (PriorityLabel(box)?.Foreground as Avalonia.Media.SolidColorBrush)?.Color.ToString())
             .SequenceEqual(PriorityColors.Select(hex => Avalonia.Media.Color.Parse(hex).ToString())),
             "Priority S/U/D labels must use lifecycle accent colors.");
-        Check(fullBoxes.Select(box => (box.Parent as StackPanel)?.Children.OfType<TextBlock>().SingleOrDefault())
+        Check(fullBoxes.Select(PriorityLabel)
             .All(label => label?.FontWeight == Avalonia.Media.FontWeight.SemiBold),
             "Priority S/U/D labels must be semibold for scannability.");
+        Check(fullBoxes.Select(box => ((PriorityLabel(box)?.Parent as Border)?.Background as Avalonia.Media.SolidColorBrush)?.Color.ToString())
+            .SequenceEqual(PriorityBadgeBackgrounds.Select(hex => Avalonia.Media.Color.Parse(hex).ToString())),
+            "Priority badges must use per-lifecycle fills so S/U/D read apart.");
         Check(fullBoxes.All(box => box.Width == 24 && box.FontSize == 10
             && box.TextAlignment == Avalonia.Media.TextAlignment.Center),
             "Priority boxes must stay compact and centered.");
@@ -150,6 +163,31 @@ static class PriorityInspectorChecks
         Dispatcher.UIThread.RunJobs();
         Check(fullObject.GetUpdatePriority(full) == 7 && fullObject.GetDestroyPriority(full) == -3
             && fullObject.GetStartPriority(full) == -12, "Priorities must stay independent.");
+
+        // Collapse hides member editors but keeps the header; state survives reselection.
+        sceneObjects.SelectedItem = dataObject;
+        Dispatcher.UIThread.RunJobs();
+        static TextBox MemberBox(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<TextBox>()
+            .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        static Button CollapseToggle(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<Button>()
+            .Single(toggle => Equals(toggle.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        Check(MemberBox(editor, $"{nameof(InspectorDataOnly)}.Value").IsEffectivelyVisible, "Member editor must start visible.");
+        var dataCollapse = CollapseToggle(editor, $"{nameof(InspectorDataOnly)}.Collapse");
+        Check((dataCollapse.Foreground as Avalonia.Media.SolidColorBrush)?.Color.ToString()
+            == Avalonia.Media.Color.Parse("#8B7CF6").ToString(), "Collapse toggle must carry accent color.");
+        Click(dataCollapse);
+        Dispatcher.UIThread.RunJobs();
+        Check(((dataCollapse.Background as Avalonia.Media.SolidColorBrush)?.Color.ToString())
+            == Avalonia.Media.Color.Parse("#2E2A4A").ToString(), "Collapsed toggle must show its wash fill.");
+        Check(!MemberBox(editor, $"{nameof(InspectorDataOnly)}.Value").IsEffectivelyVisible, "Collapsed card must hide member editors.");
+        sceneObjects.SelectedItem = fullObject;
+        Dispatcher.UIThread.RunJobs();
+        sceneObjects.SelectedItem = dataObject;
+        Dispatcher.UIThread.RunJobs();
+        Check(!MemberBox(editor, $"{nameof(InspectorDataOnly)}.Value").IsEffectivelyVisible, "Collapse state must survive reselection.");
+        Click(CollapseToggle(editor, $"{nameof(InspectorDataOnly)}.Collapse"));
+        Dispatcher.UIThread.RunJobs();
+        Check(MemberBox(editor, $"{nameof(InspectorDataOnly)}.Value").IsEffectivelyVisible, "Expanded card must show member editors again.");
 
         Console.WriteLine("PASS: priority Inspector display, edit, validation, Esc revert, dirty, and save guard.");
     }

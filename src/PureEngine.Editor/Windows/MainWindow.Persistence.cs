@@ -30,7 +30,7 @@ public partial class MainWindow
     private void SetFileStatus(string message, bool error = false)
     {
         FileStatus.Text = message;
-        FileStatus.Foreground = new SolidColorBrush(Color.Parse(error ? "#FF5252" : "#BBBBBB"));
+        FileStatus.Foreground = new SolidColorBrush(Color.Parse(error ? "#FF9E99" : "#B8BDC5"));
         ToolTip.SetTip(FileStatus, message);
     }
 
@@ -115,8 +115,9 @@ public partial class MainWindow
         ComponentAssets.DisposeComponents(restored.Objects.SelectMany(item => item.Components));
         if (!await ConfirmUnsavedChanges()) return;
         // Saving the old scene during confirmation may overwrite the file just selected.
-        restored = _sceneSerializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
+        restored = _sceneSerializer.Deserialize(File.ReadAllText(path), out var membersChanged, EditSession.Factory);
         SetCurrentScene(restored, path);
+        if (membersChanged) MarkSceneChanged();
         SetFileStatus($"Loaded: {path}");
     }
 

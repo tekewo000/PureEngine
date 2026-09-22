@@ -39,13 +39,13 @@ public partial class MainWindow
         return box;
     }
 
-    private StackPanel BuildVector2Editor(object component, MemberInfo member, string automationName) =>
+    private Grid BuildVector2Editor(object component, MemberInfo member, string automationName) =>
         BuildVectorEditor(component, member, automationName, 2);
 
-    private StackPanel BuildVector3Editor(object component, MemberInfo member, string automationName) =>
+    private Grid BuildVector3Editor(object component, MemberInfo member, string automationName) =>
         BuildVectorEditor(component, member, automationName, 3);
 
-    private StackPanel BuildVector4Editor(object component, MemberInfo member, string automationName, bool isQuaternion)
+    private Grid BuildVector4Editor(object component, MemberInfo member, string automationName, bool isQuaternion)
     {
         var panel = BuildVectorEditor(component, member, automationName, 4);
         if (isQuaternion)
@@ -53,12 +53,11 @@ public partial class MainWindow
         return panel;
     }
 
-    private StackPanel BuildVectorEditor(object component, MemberInfo member, string automationName, int dimensions)
+    private Grid BuildVectorEditor(object component, MemberInfo member, string automationName, int dimensions)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         string[] labels = dimensions == 2 ? ["X", "Y"] : dimensions == 3 ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
-        foreach (var label in labels)
-            panel.Children.Add(BuildVectorComponentBox(component, member, automationName, label));
+        var boxes = labels.Select(label => BuildVectorComponentBox(component, member, automationName, label)).ToList();
+        var panel = BuildAxisGrid(labels, boxes);
         ToolTip.SetTip(panel, "Enter numbers — Press Esc in a field to revert");
         return panel;
     }
@@ -68,7 +67,6 @@ public partial class MainWindow
         var box = new TextBox
         {
             Text = FormatVectorAxis(GetMemberValue(component, member), axis),
-            Width = 64,
             FontSize = 12,
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -188,24 +186,20 @@ public partial class MainWindow
     private StackPanel BuildNullableVectorEditor(object component, MemberInfo member, string automationName, int dimensions)
     {
         var root = new StackPanel { Spacing = 6 };
-        var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var nullLabel = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
-        nullRow.Children.Add(nullLabel);
-        nullRow.Children.Add(create);
+        var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var header = BuildSplitHeader(status, create, clear);
         var vectorPanel = BuildVectorEditorForNullable(component, member, automationName, dimensions);
-        var clear = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
-        root.Children.Add(nullRow);
+        root.Children.Add(header);
         root.Children.Add(vectorPanel);
-        root.Children.Add(clear);
         void refresh()
         {
             var isNull = GetMemberValue(component, member) is null;
-            nullRow.IsVisible = isNull;
-            vectorPanel.IsVisible = !isNull;
+            status.IsVisible = isNull;
+            create.IsVisible = isNull;
             clear.IsVisible = !isNull;
+            vectorPanel.IsVisible = !isNull;
             if (!isNull)
                 RefreshVectorBoxes(vectorPanel, GetMemberValue(component, member));
         }
@@ -225,13 +219,13 @@ public partial class MainWindow
         return root;
     }
 
-    private StackPanel BuildVectorEditorForNullable(object component, MemberInfo member, string automationName, int dimensions)
+    private Grid BuildVectorEditorForNullable(object component, MemberInfo member, string automationName, int dimensions)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         string[] labels = dimensions == 2 ? ["X", "Y"] : dimensions == 3 ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
+        var boxes = new List<TextBox>();
         foreach (var label in labels)
         {
-            var box = new TextBox { Width = 64, FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var box = new TextBox { FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{label}");
             const string hint = "Enter a number — Press Esc to revert";
@@ -266,37 +260,34 @@ public partial class MainWindow
                 box.Text = FormatVectorAxis(GetMemberValue(component, member), axis);
                 e.Handled = true;
             };
-            panel.Children.Add(box);
+            boxes.Add(box);
         }
-        return panel;
+        return BuildAxisGrid(labels, boxes);
     }
 
     private StackPanel BuildTransformEditor(object component, MemberInfo member, string automationName)
     {
         var root = new StackPanel { Spacing = 6 };
-        var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-        var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
-        nullRow.Children.Add(create);
+        var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var header = BuildSplitHeader(status, create, clear);
         var body = new StackPanel { Spacing = 6 };
         body.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Position" });
         body.Children.Add(BuildTransformAxisRow(component, member, automationName, "LocalPosition"));
-        body.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Rotation" });
+        body.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Rotation (Quaternion)" });
         body.Children.Add(BuildTransformAxisRow(component, member, automationName, "LocalRotation"));
         body.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Scale" });
         body.Children.Add(BuildTransformAxisRow(component, member, automationName, "LocalScale"));
-        var clear = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
-        root.Children.Add(nullRow);
+        root.Children.Add(header);
         root.Children.Add(body);
-        root.Children.Add(clear);
         void refresh()
         {
             var isNull = GetMemberValue(component, member) is not PureEngine.Core.Transform;
-            nullRow.IsVisible = isNull;
-            body.IsVisible = !isNull;
+            status.IsVisible = isNull;
+            create.IsVisible = isNull;
             clear.IsVisible = !isNull;
+            body.IsVisible = !isNull;
             if (!isNull)
                 RefreshTransformRows(body, (PureEngine.Core.Transform)GetMemberValue(component, member)!);
         }
@@ -320,13 +311,102 @@ public partial class MainWindow
         return root;
     }
 
-    private StackPanel BuildTransformAxisRow(object component, MemberInfo member, string automationName, string property)
+    /// <summary>Axis badge chip matching the S/U/D badge style. X/Y/Z reuse the lifecycle tints; W stays neutral.</summary>
+    private static Border BuildAxisBadge(string axis)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var background = axis switch
+        {
+            "X" => DestroyBadgeBackground,
+            "Y" => UpdateBadgeBackground,
+            "Z" => StartBadgeBackground,
+            _ => NeutralBadgeBackground,
+        };
+        var foreground = axis switch
+        {
+            "X" => DestroyAccent,
+            "Y" => UpdateAccent,
+            "Z" => StartAccent,
+            _ => MemberLabelBrush,
+        };
+        var letter = new TextBlock
+        {
+            Text = axis,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = foreground,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        return new Border
+        {
+            Background = background,
+            CornerRadius = new Avalonia.CornerRadius(4),
+            Width = 20,
+            Height = 20,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = letter,
+        };
+    }
+
+    /// <summary>Axis badge + value grid. Boxes share the available width so 4-axis rows (Quaternion) never clip.</summary>
+    private static Grid BuildAxisGrid(string[] axes, List<TextBox> boxes)
+    {
+        var grid = new Grid { ColumnSpacing = 6 };
+        for (var i = 0; i < boxes.Count; i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+            var badge = BuildAxisBadge(axes[i]);
+            Grid.SetColumn(badge, i * 2);
+            boxes[i].MinWidth = 40;
+            boxes[i].HorizontalAlignment = HorizontalAlignment.Stretch;
+            Grid.SetColumn(boxes[i], i * 2 + 1);
+            grid.Children.Add(badge);
+            grid.Children.Add(boxes[i]);
+        }
+        return grid;
+    }
+
+    /// <summary>Header action button (Add/Clear/Set Null/Create) with unified sizing.</summary>
+    private static Button BuildHeaderButton(string content, string automationName)
+    {
+        var button = new Button { Content = content, FontSize = 11, Padding = new Avalonia.Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center };
+        button.SetValue(AutomationProperties.NameProperty, automationName);
+        return button;
+    }
+
+    /// <summary>Fixed-width remove button so collection rows align vertically.</summary>
+    private static Button BuildRemoveButton(string automationName)
+    {
+        var remove = new Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), MinWidth = 28, VerticalAlignment = VerticalAlignment.Center };
+        remove.SetValue(AutomationProperties.NameProperty, automationName);
+        return remove;
+    }
+
+    /// <summary>Split header: left status block, right action buttons. Grid keeps actions right-aligned in narrow panes.</summary>
+    private static Grid BuildSplitHeader(Control left, params Button[] actions)
+    {
+        var header = new Grid { ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        header.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        header.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        left.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(left, 0);
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var action in actions)
+            panel.Children.Add(action);
+        Grid.SetColumn(panel, 1);
+        header.Children.Add(left);
+        header.Children.Add(panel);
+        return header;
+    }
+
+    private Grid BuildTransformAxisRow(object component, MemberInfo member, string automationName, string property)
+    {
         string[] axes = property == "LocalPosition" || property == "LocalScale" ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
+        var boxes = new List<TextBox>();
         foreach (var axis in axes)
         {
-            var box = new TextBox { Width = 56, FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var box = new TextBox { FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{property}.{axis}");
             const string hint = "Enter a number — Press Esc to revert";
@@ -363,9 +443,9 @@ public partial class MainWindow
                     : FormatFloat(transform.LocalRotation.GetAxis(capturedAxis));
                 e.Handled = true;
             };
-            row.Children.Add(box);
+            boxes.Add(box);
         }
-        return row;
+        return BuildAxisGrid(axes, boxes);
     }
 
     private StackPanel BuildSequenceEditor(object component, MemberInfo member, string automationName)
@@ -373,26 +453,22 @@ public partial class MainWindow
         var memberType = GetMemberType(member);
         var elementType = memberType.IsArray ? memberType.GetElementType()! : memberType.GetGenericArguments()[0];
         var root = new StackPanel { Spacing = 6 };
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
-        var add = new Button { Content = "Add", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        add.SetValue(AutomationProperties.NameProperty, $"{automationName}.Add");
-        var clear = new Button { Content = "Clear", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Clear");
-        var setNull = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        setNull.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
-        var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-        var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
-        nullRow.Children.Add(create);
+        var add = BuildHeaderButton("Add", $"{automationName}.Add");
+        var clear = BuildHeaderButton("Clear", $"{automationName}.Clear");
+        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var elements = new StackPanel { Spacing = 4 };
-        header.Children.Add(count);
-        header.Children.Add(add);
-        header.Children.Add(clear);
-        header.Children.Add(setNull);
+        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, _collapsedMembers,
+            nowExpanded => elements.IsVisible = nowExpanded);
+        var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        left.Children.Add(toggle);
+        left.Children.Add(count);
+        var header = BuildSplitHeader(left, add, clear, setNull);
+        var nullHeader = BuildSplitHeader(nullStatus, create);
         root.Children.Add(header);
-        root.Children.Add(nullRow);
+        root.Children.Add(nullHeader);
         root.Children.Add(elements);
         void refresh()
         {
@@ -402,17 +478,17 @@ public partial class MainWindow
             var value = GetMemberValue(component, member);
             if (value is null)
             {
-                nullRow.IsVisible = true;
+                nullHeader.IsVisible = true;
                 header.IsVisible = false;
                 elements.IsVisible = false;
             }
             else
             {
-                nullRow.IsVisible = false;
+                nullHeader.IsVisible = false;
                 header.IsVisible = true;
-                elements.IsVisible = true;
+                elements.IsVisible = !_collapsedMembers.TryGetValue(automationName, out var elementsCollapsed) || !elementsCollapsed;
                 var items = value is IEnumerable enumerable ? enumerable.Cast<object?>().ToList() : [];
-                count.Text = $"Count: {items.Count}";
+                count.Text = $"{items.Count} items";
                 for (var i = 0; i < items.Count; i++)
                     elements.Children.Add(BuildSequenceElementRow(component, member, elementType, i, automationName, refresh));
             }
@@ -447,19 +523,28 @@ public partial class MainWindow
         return root;
     }
 
-    private StackPanel BuildSequenceElementRow(object component, MemberInfo member, Type elementType, int index, string automationName, Action refresh)
+    private Grid BuildSequenceElementRow(object component, MemberInfo member, Type elementType, int index, string automationName, Action refresh)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        row.Children.Add(new TextBlock { Text = $"[{index}]", Classes = { "memberType" }, Width = 36, VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(BuildSequenceElementEditor(component, member, elementType, index, automationName));
-        var remove = new Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), VerticalAlignment = VerticalAlignment.Center };
-        remove.SetValue(AutomationProperties.NameProperty, $"{automationName}.Remove[{index}]");
+        var row = new Grid { ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        var label = new TextBlock { Text = $"[{index}]", Classes = { "memberType" }, Width = 36, VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(label, 0);
+        var editor = BuildSequenceElementEditor(component, member, elementType, index, automationName);
+        editor.HorizontalAlignment = HorizontalAlignment.Stretch;
+        editor.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(editor, 1);
+        var remove = BuildRemoveButton($"{automationName}.Remove[{index}]");
+        Grid.SetColumn(remove, 2);
         remove.Click += (_, _) =>
         {
             if (IsPlaying) return;
             RemoveSequenceElement(component, member, index);
             refresh();
         };
+        row.Children.Add(label);
+        row.Children.Add(editor);
         row.Children.Add(remove);
         return row;
     }
@@ -496,26 +581,22 @@ public partial class MainWindow
         var memberType = GetMemberType(member);
         var valueType = memberType.GetGenericArguments()[1];
         var root = new StackPanel { Spacing = 6 };
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
-        var add = new Button { Content = "Add", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        add.SetValue(AutomationProperties.NameProperty, $"{automationName}.Add");
-        var clear = new Button { Content = "Clear", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Clear");
-        var setNull = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        setNull.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
-        var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-        var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
-        nullRow.Children.Add(create);
+        var add = BuildHeaderButton("Add", $"{automationName}.Add");
+        var clear = BuildHeaderButton("Clear", $"{automationName}.Clear");
+        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var rows = new StackPanel { Spacing = 4 };
-        header.Children.Add(count);
-        header.Children.Add(add);
-        header.Children.Add(clear);
-        header.Children.Add(setNull);
+        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, _collapsedMembers,
+            nowExpanded => rows.IsVisible = nowExpanded);
+        var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        left.Children.Add(toggle);
+        left.Children.Add(count);
+        var header = BuildSplitHeader(left, add, clear, setNull);
+        var nullHeader = BuildSplitHeader(nullStatus, create);
         root.Children.Add(header);
-        root.Children.Add(nullRow);
+        root.Children.Add(nullHeader);
         root.Children.Add(rows);
         void refresh()
         {
@@ -525,17 +606,17 @@ public partial class MainWindow
             var value = GetMemberValue(component, member);
             if (value is not IDictionary dictionary)
             {
-                nullRow.IsVisible = true;
+                nullHeader.IsVisible = true;
                 header.IsVisible = false;
                 rows.IsVisible = false;
             }
             else
             {
-                nullRow.IsVisible = false;
+                nullHeader.IsVisible = false;
                 header.IsVisible = true;
-                rows.IsVisible = true;
+                rows.IsVisible = !_collapsedMembers.TryGetValue(automationName, out var rowsCollapsed) || !rowsCollapsed;
                 var keys = dictionary.Keys.Cast<string>().OrderBy(key => key, StringComparer.Ordinal).ToList();
-                count.Text = $"Count: {keys.Count}";
+                count.Text = $"{keys.Count} entries";
                 for (var i = 0; i < keys.Count; i++)
                     rows.Children.Add(BuildDictionaryRow(component, member, valueType, keys[i], i, automationName, refresh));
             }
@@ -575,10 +656,13 @@ public partial class MainWindow
         return root;
     }
 
-    private StackPanel BuildDictionaryRow(object component, MemberInfo member, Type valueType, string key, int rowIndex, string automationName, Action refresh)
+    private Grid BuildDictionaryRow(object component, MemberInfo member, Type valueType, string key, int rowIndex, string automationName, Action refresh)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        var keyBox = new TextBox { Text = key, Width = 96, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        var row = new Grid { ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        var keyBox = new TextBox { Text = key, MinWidth = 40, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         keyBox.Classes.Add("inspectorField");
         keyBox.SetValue(AutomationProperties.NameProperty, $"{automationName}.Key[{rowIndex}]");
         ToolTip.SetTip(keyBox, "Dictionary key — must be unique and non-empty");
@@ -611,9 +695,14 @@ public partial class MainWindow
             e.Handled = true;
         };
         row.Children.Add(keyBox);
-        row.Children.Add(BuildDictionaryValueEditor(component, member, valueType, key, automationName, rowIndex));
-        var remove = new Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), VerticalAlignment = VerticalAlignment.Center };
-        remove.SetValue(AutomationProperties.NameProperty, $"{automationName}.Remove[{rowIndex}]");
+        var valueEditor = BuildDictionaryValueEditor(component, member, valueType, key, automationName, rowIndex);
+        valueEditor.HorizontalAlignment = HorizontalAlignment.Stretch;
+        valueEditor.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(keyBox, 0);
+        Grid.SetColumn(valueEditor, 1);
+        row.Children.Add(valueEditor);
+        var remove = BuildRemoveButton($"{automationName}.Remove[{rowIndex}]");
+        Grid.SetColumn(remove, 2);
         remove.Click += (_, _) =>
         {
             if (IsPlaying) return;
@@ -631,7 +720,7 @@ public partial class MainWindow
         var valueName = $"{automationName}.Value[{rowIndex}]";
         if (valueType == typeof(string))
         {
-            var box = new TextBox { Text = DictionaryStringValue(component, member, key), Width = 120 };
+            var box = new TextBox { Text = DictionaryStringValue(component, member, key), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, valueName);
             box.TextChanged += (_, _) =>
@@ -692,9 +781,10 @@ public partial class MainWindow
         var enumType = GetMemberType(member);
         if (enumType.IsDefined(typeof(FlagsAttribute), inherit: false))
             return BuildFlagsEditor(component, member, automationName, enumType, getCurrent: () => GetMemberValue(component, member), setCurrent: value => SetMemberValue(component, member, value));
-        var combo = new ComboBox { MinWidth = 140, HorizontalAlignment = HorizontalAlignment.Left };
+        var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        combo.Classes.Add("inspectorCombo");
         combo.SetValue(AutomationProperties.NameProperty, automationName);
-        ToolTip.SetTip(combo, $"{member.Name} : {enumType.Name} — Select a value");
+        ToolTip.SetTip(combo, $"{member.Name} : {FriendlyTypeName(enumType)} — Select a value");
         var items = Enum.GetValues(enumType).Cast<object>().ToList();
         var current = GetMemberValue(component, member);
         if (current is not null && !items.Contains(current))
@@ -739,7 +829,7 @@ public partial class MainWindow
             var check = new CheckBox { Content = name, VerticalAlignment = VerticalAlignment.Center };
             check.Classes.Add("inspectorCheck");
             check.SetValue(AutomationProperties.NameProperty, $"{automationName}.{name}");
-            ToolTip.SetTip(check, $"{member.Name} : {enumType.Name} flag");
+            ToolTip.SetTip(check, $"{member.Name} : {FriendlyTypeName(enumType)} flag");
             var captured = flag;
             check.IsCheckedChanged += (_, _) =>
             {
@@ -769,24 +859,21 @@ public partial class MainWindow
     {
         var enumType = Nullable.GetUnderlyingType(GetMemberType(member))!;
         var root = new StackPanel { Spacing = 6 };
-        var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-        var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
-        nullRow.Children.Add(create);
+        var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var header = BuildSplitHeader(status, create, clear);
         var body = new StackPanel { Spacing = 4 };
-        var clear = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
-        root.Children.Add(nullRow);
+        root.Children.Add(header);
         root.Children.Add(body);
-        root.Children.Add(clear);
         void refresh()
         {
             var value = GetMemberValue(component, member);
             var isNull = value is null;
-            nullRow.IsVisible = isNull;
-            body.IsVisible = !isNull;
+            status.IsVisible = isNull;
+            create.IsVisible = isNull;
             clear.IsVisible = !isNull;
+            body.IsVisible = !isNull;
             body.Children.Clear();
             if (!isNull)
             {
@@ -794,7 +881,8 @@ public partial class MainWindow
                     body.Children.Add(BuildFlagsEditor(component, member, automationName, enumType, getCurrent: () => GetMemberValue(component, member) ?? Enum.ToObject(enumType, 0), setCurrent: v => SetMemberValue(component, member, v)));
                 else
                 {
-                    var combo = new ComboBox { MinWidth = 140, HorizontalAlignment = HorizontalAlignment.Left };
+                    var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+                    combo.Classes.Add("inspectorCombo");
                     combo.SetValue(AutomationProperties.NameProperty, automationName);
                     var items = Enum.GetValues(enumType).Cast<object>().ToList();
                     if (!items.Contains(value!))
@@ -848,7 +936,7 @@ public partial class MainWindow
             Classes = { "kindBadge", "unsupportedBadge" },
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock { Text = $"Unsupported: {memberType.Name}", FontSize = 11, Foreground = UnsupportedBadgeBrush },
+            Child = new TextBlock { Text = $"Unsupported: {FriendlyTypeName(memberType)}", FontSize = 11, Foreground = UnsupportedBadgeBrush },
         };
 
     private static string FormatDoubleMember(object component, MemberInfo member) =>
@@ -888,7 +976,7 @@ public partial class MainWindow
 
     private static void RefreshVectorBoxes(Panel panel, object? value)
     {
-        var axes = panel.Children.OfType<TextBox>().ToList();
+        var axes = panel.GetVisualDescendants().OfType<TextBox>().ToList();
         string[] labels = axes.Count == 2 ? ["X", "Y"] : axes.Count == 3 ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
         for (var i = 0; i < axes.Count && i < labels.Length; i++)
             axes[i].Text = FormatVectorAxis(value, labels[i]);
@@ -896,7 +984,7 @@ public partial class MainWindow
 
     private static void RefreshTransformRows(Panel body, PureEngine.Core.Transform transform)
     {
-        var rows = body.Children.OfType<StackPanel>().Where(panel => panel.Orientation == Orientation.Horizontal).ToList();
+        var rows = body.Children.OfType<Grid>().ToList();
         if (rows.Count != 3) return;
         RefreshTransformRow(rows[0], transform.LocalPosition);
         RefreshTransformRow(rows[1], transform.LocalRotation);
@@ -905,7 +993,8 @@ public partial class MainWindow
 
     private static void RefreshTransformRow(Panel row, object vector)
     {
-        var boxes = row.Children.OfType<TextBox>().ToList();
+        // Boxes sit inside badge+box pairs, so collect them in document order instead of direct children.
+        var boxes = row.GetVisualDescendants().OfType<TextBox>().ToList();
         string[] axes = boxes.Count == 3 ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
         for (var i = 0; i < boxes.Count && i < axes.Length; i++)
             boxes[i].Text = FormatFloat(vector.GetAxis(axes[i]));

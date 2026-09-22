@@ -3,10 +3,10 @@
         xmlns:editor="using:PureEngine.Editor"
         x:Class="PureEngine.Editor.LauncherWindow"
         Title="PureEngine Launcher" Width="920" Height="580" MinWidth="800" MinHeight="500"
-        WindowStartupLocation="CenterScreen" Background="#292929" Foreground="#E6E6E6"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource EditorBackgroundBrush}" Foreground="{StaticResource EditorTextBrush}"
         FontFamily="Segoe UI" FontSize="12">
   <Window.Styles>
-    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#BBBBBB" /></Style>
+    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" /></Style>
     <Style Selector="TextBlock.sectionTitle"><Setter Property="FontSize" Value="16" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
     <Style Selector="Button"><Setter Property="MinHeight" Value="32" /><Setter Property="Padding" Value="12,6" /></Style>
     <Style Selector="TextBox"><Setter Property="MinHeight" Value="32" /></Style>
@@ -23,7 +23,7 @@
     <Grid Grid.Row="2" ColumnDefinitions="*,24,300">
       <Grid RowDefinitions="Auto,12,*">
         <TextBlock Text="Recent Projects" Classes="sectionTitle" />
-        <Border Grid.Row="2" Background="#383838" BorderBrush="#555555" BorderThickness="1" CornerRadius="6" Padding="6">
+        <Border Grid.Row="2" Background="{StaticResource EditorSurfaceBrush}" BorderBrush="{StaticResource EditorBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="6">
           <Grid>
             <ListBox x:Name="RecentList" Background="Transparent" BorderThickness="0"
                      SelectionMode="Single" DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown"
@@ -53,11 +53,11 @@
           <Button Grid.Column="2" Content="Browse…" Click="OnBrowseLocation" AutomationProperties.Name="Choose project parent folder" />
         </Grid>
         <TextBlock Grid.Row="10" x:Name="ProjectDestination" Classes="muted" FontSize="11" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
-        <Button Grid.Row="12" x:Name="CreateProjectButton" Content="Create Project" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+        <Button Grid.Row="12" x:Name="CreateProjectButton" Classes="accent" Content="Create Project" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                 Click="OnCreateProject" AutomationProperties.Name="Create new project" />
       </Grid>
     </Grid>
-    <TextBlock Grid.Row="3" x:Name="LauncherError" Foreground="#FFB4AB" TextWrapping="Wrap"
+    <TextBlock Grid.Row="3" x:Name="LauncherError" Foreground="{StaticResource EditorErrorTextBrush}" TextWrapping="Wrap"
                Margin="0,16,0,0" IsVisible="False" AutomationProperties.Name="Launcher status" />
   </Grid>
 </Window>

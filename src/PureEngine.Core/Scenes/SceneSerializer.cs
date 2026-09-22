@@ -21,7 +21,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     public string Serialize(Scene scene) => _writer.Value.Serialize(Capture(scene));
 
     /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
-    public Scene Clone(Scene scene, Func<Type, object>? factory = null) => Restore(Capture(scene), factory);
+    public Scene Clone(Scene scene, Func<Type, object>? factory = null) => Restore(Capture(scene), factory, out _);
 
     private SceneDocument Capture(Scene scene)
     {
@@ -64,11 +64,16 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         return saved;
     }
 
-    public Scene Deserialize(string yaml, Func<Type, object>? factory = null) => Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
-            ?? throw new InvalidDataException("The scene document is empty."), factory);
+    public Scene Deserialize(string yaml, Func<Type, object>? factory = null) => Deserialize(yaml, out _, factory);
 
-    private Scene Restore(SceneDocument document, Func<Type, object>? factory = null)
+    /// <summary>Reports Inspector names added, renamed or discarded so editors can request a save.</summary>
+    public Scene Deserialize(string yaml, out bool membersChanged, Func<Type, object>? factory = null) =>
+        Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
+            ?? throw new InvalidDataException("The scene document is empty."), factory, out membersChanged);
+
+    private Scene Restore(SceneDocument document, Func<Type, object>? factory, out bool membersChanged)
     {
+        membersChanged = false;
         if (document.Version != 1)
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
@@ -89,18 +94,31 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                     if (data is null || string.IsNullOrWhiteSpace(data.TypeId) || data.Values is null)
                         throw new InvalidDataException($"{saved.Name}: component typeId and values are required.");
                     var type = registry.GetType(data.TypeId);
-                    var members = Members(type).ToDictionary(member => member.Name, StringComparer.Ordinal);
-                    foreach (var name in data.Values.Keys)
-                        if (!members.ContainsKey(name))
-                            throw new InvalidDataException($"{data.TypeId}.{name}: unknown Inspector member.");
+                    var names = ComponentSchema.GetInspectorMemberNames(type);
+                    Dictionary<MemberInfo, object?> values = [];
+                    foreach (var (name, raw) in data.Values)
+                    {
+                        if (!names.TryGetValue(name, out var member))
+                        {
+                            membersChanged = true;
+                            continue; // Removed or renamed Inspector members are discarded on the next save.
+                        }
+                        if (name != member.Name) membersChanged = true;
+                        if (!values.TryAdd(member, raw))
+                            throw new InvalidDataException($"{data.TypeId}.{member.Name}: multiple saved names refer to the same Inspector member.");
+                    }
                     var (start, update, destroy) = ReadPriorities(data, type);
                     var component = CreateComponent(type, factory, data.TypeId, saved.Name);
                     created.Add(component);
-                    foreach (var member in members.Values)
+                    foreach (var member in Members(type))
                     {
                         InspectorValueTypes.ValidateType(MemberType(member));
                         // A newly added member keeps its class initializer when absent from older scenes.
-                        if (!data.Values.TryGetValue(member.Name, out var raw)) continue;
+                        if (!values.TryGetValue(member, out var raw))
+                        {
+                            membersChanged = true;
+                            continue;
+                        }
                         var value = InspectorValueTypes.FromStorable(raw, MemberType(member), $"{data.TypeId}.{member.Name}");
                         if (member is FieldInfo field) field.SetValue(component, value);
                         else ((PropertyInfo)member).SetValue(component, value);
@@ -158,12 +176,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     }
 
     private static MemberInfo[] Members(Type type) => InspectorMembers.GetValue(type, static type =>
-    {
-        var members = ComponentSchema.GetInspectorMembers(type).OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
-        if (members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != members.Length)
-            throw new InvalidDataException($"Ambiguous Inspector member names in {type.FullName}.");
-        return members;
-    });
+        [.. ComponentSchema.GetInspectorMemberNames(type).Values.Distinct().OrderBy(member => member.Name, StringComparer.Ordinal)]);
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field
         ? field.FieldType : ((PropertyInfo)member).PropertyType;

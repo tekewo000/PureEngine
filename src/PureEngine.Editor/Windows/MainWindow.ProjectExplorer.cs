@@ -39,11 +39,11 @@ public sealed record ProjectExplorerEntry(
         _ => "C#",
     };
 
-    /// <summary>Tile frame. Scene reuses structural lavender (same as Startup pill/Engine border/focus ring);
+    /// <summary>Tile frame. Scene reuses the structural purple accent (same as Startup pill/Engine border/focus ring);
     /// others stay neutral so the grid reads calm.</summary>
     public SolidColorBrush TileBorderBrush => IsScene
-        ? new SolidColorBrush(Color.Parse("#B2A0E0"))
-        : new SolidColorBrush(Color.Parse("#454545"));
+        ? new SolidColorBrush(Color.Parse("#8B7CF6"))
+        : new SolidColorBrush(Color.Parse("#333842"));
 
     /// <summary>Icon selectors. Exactly one is true per row; C# files are told apart from plain files by extension.</summary>
     public bool IsFolder => Kind == ProjectExplorerKind.Folder;

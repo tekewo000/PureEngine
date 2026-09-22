@@ -1,4 +1,5 @@
 using System.Numerics;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -25,6 +26,12 @@ static class InspectorValueEditorChecks
             .Single(combo => Equals(combo.GetValue(AutomationProperties.NameProperty) as string, automationName));
         static CheckBox Flag(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<CheckBox>()
             .Single(check => Equals(check.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        static TextBlock? AxisBadge(TextBox box)
+        {
+            if (box.Parent is not Panel parent) return null;
+            var index = parent.Children.IndexOf(box);
+            return parent.Children.Take(index).OfType<Border>().LastOrDefault()?.Child as TextBlock;
+        }
         static void Click(Button button)
         {
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -58,6 +65,7 @@ static class InspectorValueEditorChecks
         // Vector3 editing reaches the scene and marks dirty.
         var positionX = Box(editor, $"{nameof(InspectorValueProbe)}.Position.X");
         Check(positionX.Text == "1", $"Initial Position.X must be 1, got '{positionX.Text}'.");
+        Check(AxisBadge(positionX)?.Text == "X", "Vector axis value must carry its axis badge.");
         positionX.Text = "10";
         Dispatcher.UIThread.RunJobs();
         Check(probe.Position.X == 10f, "Vector edit did not reach the scene.");
@@ -106,6 +114,32 @@ static class InspectorValueEditorChecks
         Dispatcher.UIThread.RunJobs();
         Check(probe.Counts[freshKey] == 7, "Dictionary value edit did not reach the scene.");
 
+        // Sequence and dictionary element lists collapse; headers stay visible.
+        static Point Position(Visual visual, Visual relativeTo) =>
+            visual.TranslatePoint(new Point(0, 0), relativeTo) ?? new Point(-1, -1);
+        Check(Box(editor, $"{nameof(InspectorValueProbe)}.Scores[0]").IsEffectivelyVisible, "Sequence elements must start visible.");
+        var scoresToggle = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Collapse");
+        var scoresAdd = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Add");
+        var toggleWidth = scoresToggle.Bounds.Width;
+        var addPosition = Position(scoresAdd, editor);
+        Check(toggleWidth > 0 && addPosition.X > 0, "Header layout must be measurable.");
+        Click(scoresToggle);
+        Dispatcher.UIThread.RunJobs();
+        Check(scoresToggle.Bounds.Width == toggleWidth, "Collapse toggle size must not change between states.");
+        Check(Position(scoresAdd, editor) == addPosition, "Header buttons must not shift when collapsing.");
+        Check(!Box(editor, $"{nameof(InspectorValueProbe)}.Scores[0]").IsEffectivelyVisible, "Collapsed sequence must hide elements.");
+        Check(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Add").IsEffectivelyVisible, "Collapsed sequence must keep its header.");
+        Click(scoresToggle);
+        Dispatcher.UIThread.RunJobs();
+        Check(Box(editor, $"{nameof(InspectorValueProbe)}.Scores[0]").IsEffectivelyVisible, "Expanded sequence must show elements again.");
+        var countsToggle = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Counts.Collapse");
+        Click(countsToggle);
+        Dispatcher.UIThread.RunJobs();
+        Check(!valueBox.IsEffectivelyVisible, "Collapsed dictionary must hide entries.");
+        Click(countsToggle);
+        Dispatcher.UIThread.RunJobs();
+        Check(valueBox.IsEffectivelyVisible, "Expanded dictionary must show entries again.");
+
         // Transform member null -> Create -> edit -> Set Null.
         var createTarget = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Target.Create");
         Click(createTarget);
@@ -114,6 +148,14 @@ static class InspectorValueEditorChecks
         targetX.Text = "5";
         Dispatcher.UIThread.RunJobs();
         Check(probe.Target!.LocalPosition.X == 5f, "Transform nested edit did not reach the scene.");
+        var targetXBadge = AxisBadge(targetX);
+        Check(targetXBadge?.Text == "X", "Transform axis value must carry its axis badge.");
+        var targetW = Box(editor, $"{nameof(InspectorValueProbe)}.Target.LocalRotation.W");
+        var targetWBadge = AxisBadge(targetW);
+        Check(targetWBadge?.Text == "W", "Quaternion rotation must show X/Y/Z/W badges.");
+        var rotationGrid = targetW.Parent as Grid;
+        Check(rotationGrid is not null && targetW.Bounds.Right <= rotationGrid.Bounds.Width + 1,
+            "Quaternion row must fit without clipping the W box.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Target.Null"));
         Check(probe.Target is null, "Transform Set Null must clear the member.");
 

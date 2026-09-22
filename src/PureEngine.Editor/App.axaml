@@ -2,28 +2,72 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="PureEngine.Editor.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <SolidColorBrush x:Key="EditorBackgroundBrush" Color="#1A1C20" />
+    <SolidColorBrush x:Key="EditorSurfaceBrush" Color="#23262C" />
+    <SolidColorBrush x:Key="EditorFloatBrush" Color="#2E333B" />
+    <SolidColorBrush x:Key="EditorFieldBrush" Color="#333842" />
+    <SolidColorBrush x:Key="EditorFieldHoverBrush" Color="#3B4250" />
+    <SolidColorBrush x:Key="EditorBorderBrush" Color="#3A3F47" />
+    <SolidColorBrush x:Key="EditorBorderStrongBrush" Color="#565E6A" />
+    <SolidColorBrush x:Key="EditorTextBrush" Color="#E8EAED" />
+    <SolidColorBrush x:Key="EditorTextSecondaryBrush" Color="#B8BDC5" />
+    <SolidColorBrush x:Key="EditorTextTertiaryBrush" Color="#7D848F" />
+    <SolidColorBrush x:Key="EditorAccentBrush" Color="#8B7CF6" />
+    <SolidColorBrush x:Key="EditorAccentHoverBrush" Color="#A294FF" />
+    <SolidColorBrush x:Key="EditorAccentPressedBrush" Color="#6E5DE0" />
+    <SolidColorBrush x:Key="EditorAccentWashBrush" Color="#2E2A4A" />
+    <SolidColorBrush x:Key="EditorErrorWashBrush" Color="#3D2A2E" />
+    <SolidColorBrush x:Key="EditorErrorTextBrush" Color="#FF9E99" />
+    <SolidColorBrush x:Key="EditorInfoBrush" Color="#7AB5F0" />
+    <SolidColorBrush x:Key="EditorWarningBrush" Color="#E0B45A" />
+    <SolidColorBrush x:Key="EditorErrorBrush" Color="#E06A5A" />
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
     <Style Selector="Button, TextBox, ListBoxItem, MenuItem">
-      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="{StaticResource EditorAccentBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.accent:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorAccentHoverBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.accent:pressed">
+      <Setter Property="Background" Value="{StaticResource EditorAccentPressedBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.accent:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="MenuItem:disabled">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextTertiaryBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
     </Style>
     <Style Selector="TextBox">
-      <Setter Property="Background" Value="#454545" />
-      <Setter Property="BorderBrush" Value="#6E6E6E" />
+      <Setter Property="Background" Value="{StaticResource EditorFieldBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Foreground" Value="#F5F5F5" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
       <Setter Property="CaretBrush" Value="#FFFFFF" />
-      <Setter Property="SelectionBrush" Value="#B2A0E0" />
-      <Setter Property="SelectionForegroundBrush" Value="#1A1A1A" />
+      <Setter Property="SelectionBrush" Value="{StaticResource EditorAccentBrush}" />
+      <Setter Property="SelectionForegroundBrush" Value="#1A1C20" />
       <Setter Property="Padding" Value="8,4" />
     </Style>
     <Style Selector="TextBox:pointerover">
-      <Setter Property="Background" Value="#4A4A4A" />
-      <Setter Property="BorderBrush" Value="#8A8A8A" />
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
     </Style>
     <Style Selector="TextBox:focus">
-      <Setter Property="Background" Value="#4E4A5E" />
-      <Setter Property="BorderBrush" Value="#B2A0E0" />
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
     </Style>
     <Style Selector="TextBox:disabled">
       <Setter Property="Opacity" Value="0.55" />

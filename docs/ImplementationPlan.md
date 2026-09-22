@@ -37,6 +37,7 @@
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Components/InspectorValueTypes.cs) |
 | シーン保存 | YAML version 1、ID・名前・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
+| Inspectorメンバー改名 | 属性なしで改名・削除可能。新名は初期値、同名の値は維持し、保存時に古いYAML項目を削除。値を引き継ぐ旧名属性は任意。仕様は [EngineArchitecture.md](EngineArchitecture.md) のInspector節 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
 | ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Project側の登録口（`ConfigureGameServices`）と組み込み登録から、編集・Play別のprovider＋Scopeで生成。登録変更を含む再読み込み・Project読み込みは成功後に採用し、失敗時は旧状態を維持。終了順と失敗時解放を維持 | [ProjectGameServices](../src/PureEngine.Editor/Game/ProjectGameServices.cs)、[GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Runtime/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
@@ -54,7 +55,7 @@
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
-- YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
+- YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
 - ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
@@ -119,6 +120,16 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+### Inspectorメンバー改名（2026-09-22）
+
+`./tools/code-quality.ps1 -Check` がPASS。提案レベルの解析、警告をエラー扱いにしたDebugビルド（警告・エラー0件）、Core／Editorチェックをローカルで確認。
+
+- Core：旧名付きのフィールド・プロパティ・継承メンバーを復元し、複数の旧名、null、新名での再保存・再読込・Clone・実行中ではないSceneの移行を確認。空白旧名、別メンバーとの名前衝突、保存データ内の新旧名や複数旧名の競合を拒否することを確認。
+- Editor Headless：自作C#のフィールドを旧名属性付きプロパティへ改名して保存し、自動コンパイル後も未保存値・ID・Priority・選択・未保存状態を保持し、新しいInspector名を表示することを確認。旧シーンの読み込み、Play／Stop、新名で保存後のProject再Openを確認。
+- 属性なしの改名・削除：scalar・ベクトルの古い保存名を読み飛ばして新メンバーを初期化し、他の値を保持することを確認。Editorでは保存済みSceneのC#を改名・削除し、自動反映後の未保存表示、ID・Priority・選択の保持、Playを確認。
+- YAML整理：改名後のSaveで実際のファイルから旧項目が消えること、古いProject／SceneのOpenでも整理対象を未保存にすること、保存・再Openで新名と初期値だけが残ることを確認。
+- 同名メンバーの互換性のない型変更と旧名属性の衝突では旧インスタンスと値を保持することを確認。変更後に `./tools/code-quality.ps1 -Check` を再実行し全項目PASS。CIと実画面での操作確認は今回未実施。
 
 ### B1コンポーネント削除の統合（2026-09-22）
 

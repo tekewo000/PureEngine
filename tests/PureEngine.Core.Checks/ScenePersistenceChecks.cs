@@ -54,10 +54,17 @@ static class ScenePersistenceChecks
                 $"String scalar did not survive: {text ?? "<null>"}");
         }
         sample.Title = "001";
+        CheckFormerNames(scene, registry, yaml);
         Check(serializer.Deserialize(serializer.Serialize(new Scene())).Objects.Count == 0, "Empty scene failed.");
         Reject(() => serializer.Deserialize(yaml.Replace("version: 1", "version: 99")), "Future version accepted.");
         Reject(() => serializer.Deserialize(yaml.Replace("checks.probe", "missing.type")), "Unknown component accepted.");
-        Reject(() => serializer.Deserialize(yaml.Replace("Count:", "Missing:")), "Unknown member discarded.");
+        var renamed = serializer.Deserialize(yaml.Replace("Count:", "Missing:"), out var membersChanged);
+        Check(membersChanged && renamed.Objects[0].GetComponent<PersistenceProbe>()!.Count == 10
+            && renamed.Objects[0].GetComponent<PersistenceProbe>()!.Title == "001"
+            && !serializer.Serialize(renamed).Contains("Missing:"),
+            "Unknown Inspector names must be ignored, preserve other values, and disappear on the next save.");
+        _ = serializer.Deserialize(serializer.Serialize(renamed), out membersChanged);
+        Check(!membersChanged, "A cleaned YAML must not require another save.");
         Reject(() => serializer.Deserialize(yaml.Replace("Count: -25", "Count: wrong")), "Invalid int accepted.");
         Reject(() => serializer.Deserialize(yaml.Replace("Count: -25", "Count: 2147483648")), "Int overflow accepted.");
         Reject(() => serializer.Deserialize(yaml.Replace("Count: -25", "Count: [1, 2]")), "Collection accepted as scalar.");
@@ -120,6 +127,53 @@ static class ScenePersistenceChecks
             Directory.Delete(directory);
         }
     }
+
+    private static void CheckFormerNames(Scene scene, ComponentRegistry oldRegistry, string yaml)
+    {
+        static void Check(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException(message);
+        }
+        static void Reject(Action action)
+        {
+            try { action(); }
+            catch (InvalidDataException) { return; }
+            throw new Exception("Ambiguous or invalid former Inspector names were accepted.");
+        }
+        var registry = new ComponentRegistry();
+        registry.Register<RenamedPersistenceProbe>("checks.probe");
+        var serializer = new SceneSerializer(registry);
+        var restored = serializer.Deserialize(yaml);
+        var value = restored.Objects[0].GetComponent<RenamedPersistenceProbe>()!;
+        Check(value.Total == -25 && value.Label == "001" && value.IsEnabled && value.Seconds == 0.125f,
+            "Former names must restore fields, properties and inherited members.");
+        var currentYaml = serializer.Serialize(restored);
+        Check(currentYaml.Contains("Total: -25") && !currentYaml.Contains("Count:") && !currentYaml.Contains("Title:"),
+            "Saving must write current member names only.");
+        Check(serializer.Serialize(serializer.Deserialize(currentYaml)) == currentYaml
+            && serializer.Serialize(serializer.Clone(restored)) == currentYaml,
+            "Renamed values must survive saving, reopening and Play cloning.");
+        Check(serializer.Serialize(SceneCodeMigrator.Migrate(scene, oldRegistry, registry)) == currentYaml,
+            "Live migration must resolve former names consistently with saved scenes.");
+        Check(serializer.Deserialize(yaml.Replace("Count:", "Amount:")).Objects[0]
+            .GetComponent<RenamedPersistenceProbe>()!.Total == -25, "Multiple historical names must remain readable.");
+        value.Label = null;
+        Check(serializer.Deserialize(serializer.Serialize(restored).Replace("Label:", "Title:")).Objects[0]
+            .GetComponent<RenamedPersistenceProbe>()!.Label is null, "Former names must preserve null values.");
+        Reject(() => serializer.Deserialize(yaml.Replace("Count: -25", "Count: -25\n      Total: 1")));
+        Reject(() => serializer.Deserialize(yaml.Replace("Count: -25", "Count: -25\n      Amount: 1")));
+        foreach (var type in new[] { typeof(ConflictingFormerNames), typeof(FormerNameMatchesCurrent), typeof(BlankFormerName) })
+        {
+            var invalidRegistry = new ComponentRegistry();
+            invalidRegistry.RegisterType(type, "checks.probe");
+            var invalidSerializer = new SceneSerializer(invalidRegistry);
+            var invalid = new Scene();
+            invalid.AddEmpty().Attach(Activator.CreateInstance(type)!);
+            Reject(() => invalidSerializer.Serialize(invalid));
+            Reject(() => invalidSerializer.Deserialize(yaml));
+        }
+        Console.WriteLine("PASS: former Inspector names load/reload/clone, save with current names, and reject ambiguous mappings.");
+    }
 }
 
 public sealed class PersistenceProbe
@@ -129,4 +183,34 @@ public sealed class PersistenceProbe
     [Inspector] public float Seconds { get; set; }
     [Inspector] public bool Enabled;
     public int Hidden { get; set; } = 7;
+}
+
+public class RenamedPersistenceBase
+{
+    [Inspector, FormerlySerializedAs("Count"), FormerlySerializedAs("Amount")]
+    public int Total = 10;
+}
+
+public sealed class RenamedPersistenceProbe : RenamedPersistenceBase
+{
+    [Inspector, FormerlySerializedAs("Title")] public string? Label { get; set; } = "default";
+    [Inspector, FormerlySerializedAs("Enabled")] public bool IsEnabled { get; set; }
+    [Inspector] public float Seconds { get; set; }
+}
+
+public sealed class ConflictingFormerNames
+{
+    [Inspector, FormerlySerializedAs("Count")] public int First = 0;
+    [Inspector, FormerlySerializedAs("Count")] public int Second = 0;
+}
+
+public sealed class FormerNameMatchesCurrent
+{
+    [Inspector] public int Count = 0;
+    [Inspector, FormerlySerializedAs("Count")] public int Total = 0;
+}
+
+public sealed class BlankFormerName
+{
+    [Inspector, FormerlySerializedAs(" ")] public int Count = 0;
 }

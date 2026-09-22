@@ -22,9 +22,9 @@ public sealed class UserCodeReloadCoordinator
             if (!compiled.Success) return new(false, compiled.Diagnostics, null);
             var registry = components.CreateCandidateRegistry(compiled);
             services = GameSession.Create(GameServices.ForUserCode(compiled));
-            candidate = SceneCodeMigrator.Migrate(state.Current, components.Registry, registry, services.Factory);
+            candidate = SceneCodeMigrator.Migrate(state.Current, components.Registry, registry, out var membersChanged, services.Factory);
             var oldCode = components.Exchange(compiled);
-            var previous = state.Replace(candidate, state.Path, state.IsDirty);
+            var previous = state.Replace(candidate, state.Path, state.IsDirty || membersChanged);
             var previousServices = state.ReplaceServices(services);
             adopted = true;
             try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }

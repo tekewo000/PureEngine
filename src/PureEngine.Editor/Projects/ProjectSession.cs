@@ -9,6 +9,7 @@ public sealed class ProjectSession : IDisposable
     public ProjectFile Project { get; }
     public ProjectComponents Components { get; }
     public Scene Scene { get; }
+    internal bool SceneNeedsSave { get; private init; }
     public GameSession EditServices { get; }
     private bool _disposed;
     private bool _ownershipTransferred;
@@ -68,9 +69,10 @@ public sealed class ProjectSession : IDisposable
             _ = project.ListDirectories();
             _ = project.ListFiles("Scenes");
             services = GameSession.Create(GameServices.ForUserCode(compiled.Success ? compiled : null));
+            bool membersChanged;
             try
             {
-                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), services.Factory);
+                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
             }
             catch (Exception error) when (!compiled.Success)
             {
@@ -79,7 +81,7 @@ public sealed class ProjectSession : IDisposable
                         .Select(UserCodeCompiler.FormatDiagnostic)), error);
             }
             components.Adopt(compiled.Success ? compiled : null);
-            return new(project, components, scene, services);
+            return new(project, components, scene, services) { SceneNeedsSave = membersChanged };
         }
         catch (Exception error)
         {

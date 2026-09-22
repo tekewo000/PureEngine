@@ -29,6 +29,10 @@ public partial class MainWindow : Window
     private Point _assetPressPosition;
     private IReadOnlyList<Type>? _dragTypes;
     private readonly HashSet<TextBox> _invalidFields = [];
+    /// <summary>Componentカードの折りたたみ状態。型単位で保持し、選択切替をまたいで維持する。</summary>
+    private readonly Dictionary<string, bool> _collapsedCards = [with(StringComparer.Ordinal)];
+    /// <summary>収集メンバー（List／Dictionary）の要素一覧の折りたたみ状態。メンバー単位で保持する。</summary>
+    private readonly Dictionary<string, bool> _collapsedMembers = [with(StringComparer.Ordinal)];
     private bool _viewportFitted;
 
     /// <summary>画面由来の入力エラー有無。Gate判定へ値として渡す。</summary>
@@ -54,6 +58,7 @@ public partial class MainWindow : Window
             _sceneSerializer = new SceneSerializer(_components.Registry);
             _project = session.Project;
             SetCurrentScene(session.Scene, session.Project.StartupScenePath);
+            if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
             StartUserCodeWatching();
         }
@@ -242,14 +247,72 @@ public partial class MainWindow : Window
             : null);
     }
 
+    /// <summary>Collapse toggle colors. The glyph always carries the structural accent; collapsed state adds a wash fill.</summary>
+    private static readonly SolidColorBrush CollapseToggleBrush = new(Color.Parse("#8B7CF6"));
+    private static readonly SolidColorBrush CollapseToggleWashBrush = new(Color.Parse("#2E2A4A"));
+
+    /// <summary>Componentカードと収集エディタで共有する折りたたみトグル。状態は <paramref name="store"/> に保持する。</summary>
+    /// <remarks>Button ベースにする。ToggleButton は Fluent テーマの checked 状態で
+    /// テンプレート部品に直接アクセント塗りが付くため、透明化スタイルでは消し切れない。</remarks>
+    private static Button BuildCollapseToggle(string automationName, string collapseKey, Dictionary<string, bool> store, Action<bool> apply)
+    {
+        var expandedState = !store.TryGetValue(collapseKey, out var collapsed) || !collapsed;
+        var toggle = new Button
+        {
+            Content = expandedState ? "▾" : "▸",
+            // Fixed square so the ▾/▸ swap never shifts the button, title, or header buttons.
+            Width = 18,
+            Height = 18,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Foreground = CollapseToggleBrush,
+            Background = expandedState ? Brushes.Transparent : CollapseToggleWashBrush,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        toggle.Classes.Add("collapseToggle");
+        toggle.SetValue(AutomationProperties.NameProperty, automationName);
+        ToolTip.SetTip(toggle, expandedState ? "Collapse" : "Expand");
+        toggle.Click += (_, _) =>
+        {
+            expandedState = !expandedState;
+            toggle.Content = expandedState ? "▾" : "▸";
+            toggle.Background = expandedState ? Brushes.Transparent : CollapseToggleWashBrush;
+            ToolTip.SetTip(toggle, expandedState ? "Collapse" : "Expand");
+            store[collapseKey] = !expandedState;
+            apply(expandedState);
+        };
+        apply(expandedState);
+        return toggle;
+    }
+
     private Border BuildComponentCard(SceneObject item, object component)
     {
         var type = component.GetType();
+        var members = ComponentSchema.GetInspectorMembers(type);
+        var priorityFields = BuildPriorityFields(item, component);
+        // Divider before each row so tall editors (Transform, List, Dictionary) read as separate blocks.
+        var content = new StackPanel { Spacing = 8 };
+        foreach (var member in members)
+        {
+            content.Children.Add(new Separator { Classes = { "divider" }, Margin = new Thickness(0, 2) });
+            content.Children.Add(BuildMemberRow(component, member));
+        }
+        if (members.Count == 0 && priorityFields.Count == 0)
+            content.Children.Add(new TextBlock { Classes = { "cardMeta" }, Text = "No editable fields" });
+        var collapseKey = type.FullName ?? type.Name;
+        var toggle = BuildCollapseToggle($"{type.Name}.Collapse", collapseKey, _collapsedCards,
+            nowExpanded => content.IsVisible = nowExpanded);
         var body = new StackPanel { Spacing = 8 };
         var header = new Grid { ColumnDefinitions = [with("*,Auto")], ColumnSpacing = 8 };
+        // Collapse toggle shares the title cell so the header Grid keeps a single
+        // title TextBlock and the right-docked priority panel (see PriorityInspectorChecks).
+        header.Children.Add(toggle);
         var title = new TextBlock { Text = type.Name, FontSize = 13, FontWeight = FontWeight.SemiBold,
             Foreground = CardTitleBrush,
-            MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 160, TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(22, 0, 0, 0),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
         ToolTip.SetTip(title, type.FullName);
@@ -261,26 +324,12 @@ public partial class MainWindow : Window
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
-        foreach (var field in BuildPriorityFields(item, component))
+        foreach (var field in priorityFields)
             priorities.Children.Add(field);
         Grid.SetColumn(priorities, 1);
         header.Children.Add(priorities);
         body.Children.Add(header);
-        var members = ComponentSchema.GetInspectorMembers(type);
-        // Meta line aids scannability: field count + lifecycle presence. Kept out of the
-        // header Grid so priority-header tests (Single title TextBlock, right-docked panel) stay green.
-        var meta = new TextBlock
-        {
-            Classes = { "cardMeta" },
-            Text = members.Count == 0
-                ? (priorities.Children.Count > 0 ? "Lifecycle only — no editable fields" : "No editable fields")
-                : $"{members.Count} field{(members.Count == 1 ? "" : "s")}"
-                    + (priorities.Children.Count > 0 ? " • lifecycle" : ""),
-        };
-        body.Children.Add(meta);
-        body.Children.Add(new Separator { Classes = { "divider" }, Margin = new Thickness(0, 2) });
-        foreach (var member in members)
-            body.Children.Add(BuildMemberRow(component, member));
+        body.Children.Add(content);
         var remove = new MenuItem { Header = "Remove" };
         var card = new Border
         {
@@ -345,6 +394,12 @@ public partial class MainWindow : Window
             ComponentLifecycle.Update => UpdateAccent,
             _ => DestroyAccent,
         };
+        var badgeBackground = kind switch
+        {
+            ComponentLifecycle.Start => StartBadgeBackground,
+            ComponentLifecycle.Update => UpdateBadgeBackground,
+            _ => DestroyBadgeBackground,
+        };
         Func<int> getter = kind switch
         {
             ComponentLifecycle.Start => () => item.GetStartPriority(component),
@@ -357,15 +412,25 @@ public partial class MainWindow : Window
             ComponentLifecycle.Update => value => item.SetUpdatePriority(component, value),
             _ => value => item.SetDestroyPriority(component, value),
         };
-        var label = new TextBlock
+        var letter = new TextBlock
         {
             Text = shortLabel,
-            FontSize = 10,
+            FontSize = 11,
             FontWeight = FontWeight.SemiBold,
             Foreground = accent,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
-        ToolTip.SetTip(label, displayName);
+        ToolTip.SetTip(letter, displayName);
+        var badge = new Border
+        {
+            Background = badgeBackground,
+            CornerRadius = new CornerRadius(4),
+            Width = 20,
+            Height = 20,
+            Child = letter,
+        };
+        ToolTip.SetTip(badge, displayName);
         var box = new TextBox
         {
             Text = getter().ToString(CultureInfo.InvariantCulture),
@@ -410,7 +475,7 @@ public partial class MainWindow : Window
             Spacing = 4,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
-        field.Children.Add(label);
+        field.Children.Add(badge);
         field.Children.Add(box);
         ToolTip.SetTip(field, displayName);
         return field;
@@ -419,11 +484,12 @@ public partial class MainWindow : Window
     private Grid BuildMemberRow(object component, MemberInfo member)
     {
         var memberType = GetMemberType(member);
-        var row = new Grid { ColumnDefinitions = [with("104,*")], ColumnSpacing = 8 };
+        var friendlyType = FriendlyTypeName(memberType);
+        var row = new Grid { ColumnDefinitions = [with("120,*")], ColumnSpacing = 8 };
         row.Classes.Add("inspectorRow");
         // Two-line label: name (primary) + type (secondary). Type is visible without hover
         // so int/float/string/bool scan at a glance; full "name : type" stays in the tooltip.
-        var labelStack = new StackPanel { Spacing = 0, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        var labelStack = new StackPanel { Spacing = 0, Margin = new Thickness(0, 3, 0, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
         var nameBlock = new TextBlock
         {
             Text = member.Name,
@@ -435,16 +501,18 @@ public partial class MainWindow : Window
         var typeBlock = new TextBlock
         {
             Classes = { "memberType" },
-            Text = memberType.Name,
+            Text = friendlyType,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         labelStack.Children.Add(nameBlock);
         labelStack.Children.Add(typeBlock);
-        ToolTip.SetTip(labelStack, $"{member.Name} : {memberType.Name}");
-        ToolTip.SetTip(nameBlock, $"{member.Name} : {memberType.Name}");
+        ToolTip.SetTip(labelStack, $"{member.Name} : {friendlyType}");
+        ToolTip.SetTip(nameBlock, $"{member.Name} : {friendlyType}");
         Grid.SetColumn(labelStack, 0);
         var editor = BuildMemberEditor(component, member);
-        editor.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+        // Top-anchored so collapsing a tall editor (List/Dictionary) never sinks its header:
+        // a centered editor drops by half the label/editor height gap once it becomes shorter than the label.
+        editor.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
         Grid.SetColumn(editor, 1);
         row.Children.Add(labelStack);
         row.Children.Add(editor);
@@ -570,17 +638,23 @@ public partial class MainWindow : Window
     }
 
     private static readonly SolidColorBrush InvalidBrush = new(Color.Parse("#FF8A80"));
-    private static readonly SolidColorBrush InvalidFieldBackground = new(Color.Parse("#4A1F1F"));
+    private static readonly SolidColorBrush InvalidFieldBackground = new(Color.Parse("#3D2A2E"));
 
     /// <summary>Inspector member labels. Brighter than muted so label/value pairs scan as units.</summary>
-    private static readonly SolidColorBrush MemberLabelBrush = new(Color.Parse("#E2E2E2"));
-    private static readonly SolidColorBrush CardTitleBrush = new(Color.Parse("#F2F2F2"));
-    private static readonly SolidColorBrush UnsupportedBadgeBrush = new(Color.Parse("#CCCCCC"));
+    private static readonly SolidColorBrush MemberLabelBrush = new(Color.Parse("#DEE2E8"));
+    private static readonly SolidColorBrush CardTitleBrush = new(Color.Parse("#F0F2F5"));
+    private static readonly SolidColorBrush UnsupportedBadgeBrush = new(Color.Parse("#B8BDC5"));
 
     /// <summary>S/U/D priority label accents. The letter stays the primary cue; color is redundant.</summary>
     private static readonly SolidColorBrush StartAccent = new(Color.Parse("#8AB4F8"));
     private static readonly SolidColorBrush UpdateAccent = new(Color.Parse("#81C995"));
     private static readonly SolidColorBrush DestroyAccent = new(Color.Parse("#F28B82"));
+    /// <summary>Priority badge chip fills, tinted per lifecycle so S/U/D read apart at a glance.</summary>
+    private static readonly SolidColorBrush StartBadgeBackground = new(Color.Parse("#2A3A57"));
+    private static readonly SolidColorBrush UpdateBadgeBackground = new(Color.Parse("#24402E"));
+    private static readonly SolidColorBrush DestroyBadgeBackground = new(Color.Parse("#472D2D"));
+    /// <summary>Neutral badge chip fill for the Quaternion W axis, which has no axis hue.</summary>
+    private static readonly SolidColorBrush NeutralBadgeBackground = new(Color.Parse("#333842"));
 
     private void MarkInvalid(TextBox box, string? message, string? validTip = null)
     {
@@ -626,6 +700,26 @@ public partial class MainWindow : Window
             PropertyInfo property => property.PropertyType,
             _ => throw new NotSupportedException($"Unsupported member: {member.Name}"),
         };
+
+    /// <summary>CLR名漏れ（Int32・List`1・Dictionary`2・Nullable`1）を人が読める表記に直す。表示専用。</summary>
+    private static string FriendlyTypeName(Type type) =>
+        type == typeof(string) ? "string" :
+        type == typeof(int) ? "int" :
+        type == typeof(float) ? "float" :
+        type == typeof(double) ? "double" :
+        type == typeof(bool) ? "bool" :
+        type == typeof(Vector2) ? nameof(Vector2) :
+        type == typeof(Vector3) ? nameof(Vector3) :
+        type == typeof(Vector4) ? nameof(Vector4) :
+        type == typeof(Quaternion) ? nameof(Quaternion) :
+        type == typeof(PureEngine.Core.Transform) ? nameof(PureEngine.Core.Transform) :
+        Nullable.GetUnderlyingType(type) is { } underlying ? $"{FriendlyTypeName(underlying)}?" :
+        type.IsArray ? $"{FriendlyTypeName(type.GetElementType()!)}[]" :
+        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>) ? $"List<{FriendlyTypeName(type.GetGenericArguments()[0])}>" :
+        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>) ? $"Dictionary<{FriendlyTypeName(type.GetGenericArguments()[0])}, {FriendlyTypeName(type.GetGenericArguments()[1])}>" :
+        type.IsEnum ? type.Name :
+        type.IsGenericType ? $"{type.Name.Split('`')[0]}<{string.Join(", ", type.GetGenericArguments().Select(FriendlyTypeName))}>" :
+        type.Name;
 
     private static object? GetMemberValue(object component, MemberInfo member) =>
         member switch
