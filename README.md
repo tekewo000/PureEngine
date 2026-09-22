@@ -6,7 +6,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 設計方針・Attribute・Priority・保存データ・将来の構想は [EngineArchitecture.md](docs/EngineArchitecture.md) にまとめています。
 実装済みの範囲・制限・次の作業・検証状況は [実装計画・進捗](docs/ImplementationPlan.md) にまとめています。
 
-C#15＋VulkanによるScene View／Game表示と単体実行は [描画の実装計画](docs/VulkanRenderingPlan.md) を参照してください。現在は計画段階で、描画はまだ利用できません。まずScene Viewへの埋め込みを実機検証し、操作・ビルド手順は各機能の実装後に追加します。
+C#15＋VulkanのV0〜V2を実装しました。Scene Viewに矩形・画像・日本語の固定サンプルを表示します。シーンの配置編集・Game／Play接続・保存プロジェクトの単体実行はV3以降です。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
 
 ## 現在できること
 
@@ -305,3 +305,31 @@ Coreのチェックにはライフサイクル・編集データの分離・追�
 ```powershell
 dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark
 ```
+
+
+## Vulkan描画の確認（Windows x64）
+
+通常のEditorを起動してProjectを開くと、Scene Viewに固定サンプルを表示します。対応しないGPU・表示バックエンドでは描画領域に理由を表示し、Consoleへ記録します。既存の編集・保存機能は利用できます。
+
+Editorに依存しない描画確認用ウィンドウ：
+
+```powershell
+dotnet run --project src/PureEngine.Player
+```
+
+これはV2の描画試作であり、保存したゲームのPlayerではありません。開発SDKはglobal.jsonの指定版、実行時はVulkan対応GPUドライバーが必要です。シェーダー・フォントは同梱するので実行時のVulkan SDK／シェーダーコンパイラは不要です。
+
+シェーダーの変更後は次を実行します。固定版glslang 16.6.0をtools/.cacheへ取得してGLSLをSPIR-Vへコンパイルします。生成物とHashes.propsも変更に含めてください。通常ビルドは欠落・ソースと生成物のハッシュ不一致を拒否します。
+
+```powershell
+./tools/build-shaders.ps1
+./tools/code-quality.ps1 -Check
+```
+
+GPUの実ウィンドウ検証は通常CIと分離しています。Khronos Validation Layersを用意して実行してください（未導入をPASSにはしません）。
+
+```powershell
+./tools/vulkan-check.ps1 -ValidationLayerPath 'C:/VulkanSDK/1.4.341.1/Bin'
+```
+
+Scene Viewのリサイズ・サイズ0・最小化／復元・Gameタブ切替・20回の取り外し／再作成・ハンドル数・Inspectorのヒットテストを検査します。目視確認時は `$env:PUREENGINE_VISUAL_CHECK='1'` を設定すると最後にウィンドウを残します。使用後は環境変数を削除してください。描画規約・資源の所有権・依存ライセンスは[設計書](docs/EngineArchitecture.md#v0v2の描画経路と資源所有)を参照してください。

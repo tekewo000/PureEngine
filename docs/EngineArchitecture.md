@@ -12,7 +12,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 - **Runtime**：GameSession・PlaySessionによるサービス生成と実行接続。CoreとMicrosoft.Extensions.DependencyInjectionに依存し、Editor・Avaloniaには依存しない。
 - **Editor**：Coreのデータを編集する。制作画面には.NET 11とAvaloniaを使う。
 - **Analyzers**：ゲームの外部エディター向け診断を調整する。Roslynに依存する独立DLLをEditorに同梱する。Core・Runtimeからは参照しない。
-- **ゲーム実行部分（設計方針）**：C#15製のVulkan描画・入力と既存Runtimeを接続し、EditorのGameと単体実行で描画処理を共有する。実装・実機検証は未着手。
+- **ゲーム実行部分（設計方針）**：C#15製のVulkan描画・入力と既存Runtimeを接続し、EditorのGameと単体実行で描画処理を共有する。固定描画サンプルはV2まで実装。ゲームデータ・入力・Runtimeとの接続は後続。
 - **ゲーム側のコード**：配札・投票・勝敗判定などのルールを、描画やSteamから独立したC#で記述する。
 
 独自のカード表示や投票結果なども、標準部品と同じ仕組みで追加できることを目指す。
@@ -31,7 +31,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 
 位置・サイズなどのUI情報を基本構成に追加するかは、今は決めない。
 オブジェクトや素材の参照はID方式とし、名前やファイルパスだけには依存させない。
-現在のオブジェクトIDは `Guid`。親子関係の具体的なAPI、循環の扱い、親削除時の子の扱いは未決定。
+現在のオブジェクトIDは `Guid`。Parent／Children／SetParentと循環拒否は実装済み。保存・兄弟順・子孫削除を含む拡張は[V3設計案](#v3親子素材参照ui保存の設計案)を参照。
 
 ## クラスのアタッチ
 
@@ -303,19 +303,169 @@ components:
 - 履歴はProject名とmanifestのローカルパスを最大12件保存する。保存先は `%LOCALAPPDATA%/PureEngine/recent-projects.json`。履歴が破損・保存不可でもProjectの作成・読み込みは妨げない。
 - Launcherから新規作成するProjectは空のMainシーンを持つ。Editor内でのProject作成・切り替え操作はLauncherへの復帰に統一する。
 
-## UI・描画・プレビュー：設計方針（実装は未着手）
+## UI・描画・プレビュー
 
-2026-09-22、描画の土台をC#15とVulkanで作る方針を実装計画へ反映した。以下は目標と責務であり、動作確認済みの機能ではない。作業順・候補技術・完了条件は [Vulkan描画の実装計画](VulkanRenderingPlan.md) を参照する。
+2026-09-22、固定サンプルの描画基盤をV2まで実装した。以下の制作・ゲーム実行機能はV3以降の目標であり、実装済み基盤は次節に区別する。作業順・候補技術・完了条件は [Vulkan描画の実装計画](VulkanRenderingPlan.md) を参照する。
 
 - 制作者はScene Viewで画像・文字・ボタンを配置し、Inspectorで調整してシーンへ保存する。UnityのCanvas・RectTransformに近い親子・矩形配置の制作体験を目指す。具体的な保存形式・APIは実装前に確定する。
-- 描画本体と資源管理はリポジトリのC#15で実装し、既存バインディングからVulkanを呼ぶ。GPUドライバー等のネイティブ依存は残る。シェーダーはSPIR-Vを使い、HLSL等のソース言語とコンパイラは別途選定する。シェーダーまでC#15で書けるという意味ではない。
+- 描画本体と資源管理はリポジトリのC#15で実装し、既存バインディングからVulkanを呼ぶ。GPUドライバー等のネイティブ依存は残る。シェーダーはGLSL 450を固定版glslangでSPIR-Vへ事前コンパイルする。シェーダーまでC#15で書けるという意味ではない。
 - AvaloniaはEditorの操作画面を担当する。ゲーム内UIはゲーム用の描画処理で表示し、Avaloniaの標準UI部品への変換は行わない。
 - Vulkanで描いたGPU画像をAvaloniaの表示領域へ渡す経路を第一候補とする。既存Avalonia版・GPU・ドライバーでの埋め込み、同期、リサイズ、表示領域の破棄・再作成を最初に実機検証する。
 - Scene Viewは編集用Sceneを編集用の視点で表示し、選択枠・配置ハンドルを加える。ゲームのライフサイクルは実行しない。Gameは既存PlaySessionの実行用Sceneを表示し、ゲーム操作を受け付ける。Play中の編集禁止とStop後の編集データ保持を維持する。
 - 単体実行とEditorで描画・入力規則・Runtimeを共有し、ウィンドウと表示先への接続を分ける。Core／RuntimeはAvalonia・Vulkanに依存させず、GPU資源を保存データに含めない。
 - 最初は画面上の2D UIを対象とし、画像・日本語の文字・ボタン・矩形クリップを実装する。UIの矩形配置とゲーム空間のTransformは役割を区別する。World Space Canvas・3D・高度な演出編集は後続の範囲とする。
 
-Windows x64から検証する計画。最低Vulkanバージョン・対応GPU・使用拡張・描画性能は試作後に記録し、現時点で保証しない。
+Windows x64の検証構成・残る制限は[実装状況](ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)に記録する。
+
+### V0〜V2の描画経路と資源所有
+
+`PureEngine.Rendering`はEditor／Avalonia／Core／Runtimeに依存しない。`DrawList`が投入順に矩形・画像・文字を三角形へ展開し、`VulkanRenderer`が単一のアトラスと1回のDrawで描く。テクスチャで並べ替えないため、半透明の前後関係を維持する。ゲームデータはまだ読み取らず、`RenderingSample`をEditorと試作Playerで共有する。`PureEngine.Rendering.Avalonia`はGPU画像の取り込みとウィンドウ寿命だけを担当し、PlayerからEditorへの参照はない。
+
+WindowsのAvalonia 12.1.2標準ANGLE/D3D11バックエンドを維持する。LUIDで同じ物理GPUを選び、D3D11が確保したRGBA8 UNORMテクスチャをNT handleでVulkanへ専用割り当てとしてimportする。図形の描画はすべてVulkan。CPUへの毎フレーム読み戻しは行わず、Avaloniaの`CompositionDrawingSurface.UpdateWithKeyedMutexAsync`で表示する。Vulkan 1.1、`VK_KHR_external_memory_win32`、`VK_KHR_win32_keyed_mutex`と互換D3D11共有テクスチャを必要とする。
+
+描画はKeyed Mutexのkey 0を取得しkey 1で返す。Avaloniaはkey 1を取得してGPUコピー後にkey 0で返す。画像は外部キュー所有からgraphics queueへ取得し、COLOR_ATTACHMENT_OPTIMALで描画後、GENERALへ遷移して外部へ所有を戻す。NT handleはimport完了後にCloseHandleする。CPU側は5秒のfence待機で自分のGPU処理完了を確認し、importの破棄完了後に画像／メモリを解放する。D3D11の遅延破棄をFlushして資源を退役させる。
+
+`VulkanDevice`はアプリケーションが所有し、Vulkan／D3D11デバイスをアプリ終了まで保持する。ペインごとの`VulkanRenderer`はターゲット・バッファ・pipeline・GPUアトラスを、`DrawList`はCPUアトラス・フォント・文字キャッシュを所有する。取り外し時に更新を止め、進行中のimport／presentを待ってペイン資源を解放する。ウィンドウ終了も同じ処理を待ち、全ウィンドウ終了後にデバイスを解放する。単一UIスレッド上で使用する。複数の物理GPUや並列描画は対象外。初期化途中の失敗も生成済み資源を解放し、device lostや描画失敗は領域を停止して通知する。自動再初期化しない。
+
+座標は左上原点・X右・Y下の論理座標。`Matrix3x2`で位置／回転／拡縮を与え、クリップは変換後のターゲット論理座標の矩形とする。物理ターゲット寸法はBounds×RenderScalingを切り上げ、ポインターの物理座標も同じ倍率で変換する。Avaloniaのimport側の原点に合わせ、最終頂点シェーダーでYを反転する。色はsRGB符号化値のRGBA8 UNORM、アルファはpremultiplied、合成はONE／ONE_MINUS_SRC_ALPHA。リニアライト合成やHDRは行わない。入力色は0〜1に制限し、色乗算時にアルファも乗じる。
+
+文字は同梱Noto Sans CJK JP RegularをSkiaSharpのCPUフォント機能でラスタライズする。日本語／英数字／句読点を初期対象とし、Unicode text element単位の幅折り返し、改行、文字サイズ、行間、欠落文字の「□」を扱う。複雑な双方向文字・結合スクリプトのシェーピング、禁則処理、IMEは対象外。HarfBuzzを必要とするスクリプトを追加する時にシェーピングを導入する。
+
+文字列行と画像を同じ2048×2048・16 MiBのアトラスに追加し、変更時だけGPUへ転送する。キャッシュは最大4096項目、1テキスト16384 UTF-16単位、1バッチ60000頂点。容量超過は明示的に失敗する。自動退避・無制限拡張をせず、破棄時に全項目を解放する。画像キーはDrawListの寿命中不変の素材を指す。動的な文字の高頻度更新には部分転送や字形単位のキャッシュが今後の改善候補になる。
+
+| 依存／配布物 | 固定版・ライセンス |
+| --- | --- |
+| Silk.NET.Vulkan／Extensions.KHR／Direct3D11／DXGI | 2.23.0、MIT。Vulkanバインディングと共有メモリ確保用 |
+| Avalonia.Desktop | 12.1.2、MIT。Editorと描画確認用ウィンドウで共用 |
+| SkiaSharp／libSkiaSharp | 3.119.4、MIT＋Skiaの第三者ライセンス。画像デコードと文字ラスタライズのみ |
+| glslang | 16.6.0、BSD系の複合ライセンス。開発時だけ使用し実行物へ同梱しない |
+| NotoSansCJKjp-Regular.otf | SIL OFL 1.1。noto-cjk commit `165c01b46ea533872e002e0785ff17e44f6d97d8`、SHA256 `68A3FC98800B2A27B371F2FB79991DAF3633BD89309D4FFAA6946FD587F375B5` |
+| チェック柄のテスト画像 | リポジトリ内のコードで生成。外部画像素材なし |
+
+フォント・SPIR-VはRendering DLLへ埋め込み、ライセンス本文は出力の`licenses/`へコピーする。Microsoft提供のD3D11／DXGIとGPUドライバーのVulkanローダーを利用し、独自C++層は追加しない。[Avalonia 12.1.2公式interop実装](https://github.com/AvaloniaUI/Avalonia/blob/12.1.2/src/Windows/Avalonia.Win32/OpenGl/Angle/AngleExternalObjectsFeature.cs)、[KhronosのWin32共有メモリ規約](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_external_memory_win32.html)を採用パッケージと照合した。
+
+### V3：親子・素材参照・UI保存の設計案
+
+2026-09-22作成。**設計案であり未実装**。親削除時に子孫も削除する方針はユーザー確認済み。それ以外は以下を実装のたたき台とする。V3の成果はGPU不要で保存・復元・配置計算を検証できる状態。Scene Viewの制作操作はV4、実入力からのクリック発火はV5、保存ゲームのPlayer起動はV6で行う。
+
+#### 既存実装を使う範囲
+
+`SceneObject.Parent`／`Children`／`SetParent`と循環拒否、`Transform.LocalMatrix`／`SceneObject.WorldMatrix`は実装済み。一方、現状のSceneSerializerは親子をCaptureせず、Clone・コード再読み込みで失う。Scene所属の照合、兄弟順、親削除時の子の解放も未対応。新しい保存シーンや第二のライフサイクルは作らず、ここを先に補う。
+
+UI用の値・コンポーネント・配置計算・クリック契約は`PureEngine.Core`に置く。Core／RuntimeへVulkan・Avalonia・Skia依存は足さない。組み込みUI型はCoreで共通登録できる入口を設け、既存Editorの`ComponentAssets.RegisterBuiltins`から利用する。ゲームのコンパイル参照は既にCoreを含むため、UIを使うだけのためにRendering DLLをゲーム用csprojへ追加しない。
+
+#### 親子と削除
+
+| 項目 | V3の規則 |
+| --- | --- |
+| 所属 | Scene内のオブジェクトは同じScene内だけで親子にできる。現行テストで使う未所属同士のSetParentは維持し、所属あり／なしの混在は拒否する |
+| 操作 | 既存`SetParent(parent)`を維持し、ローカル値を変えず新しい兄弟の末尾へ移す。同じ親は従来どおりno-op。`SetSiblingIndex(index)`で並べ替える。範囲外・自己参照・循環・別Sceneを変更前に拒否する |
+| 列挙 | `Scene.Objects`のフラットな作成順は維持。`Scene.RootObjects`と`Children`が表示用の兄弟順を持ち、SiblingIndexはその位置。ライフサイクルの走査順と表示順を兼用しない |
+| 付け替え | Transform／RectTransformのローカル値を保持。見た目の位置を保つ付け替えはV4の編集操作として別途座標を計算し、V3 APIへ曖昧な既定値を入れない |
+| 親削除 | 指定オブジェクトと、その時点の子孫をまとめて削除。残したい子は削除前に親を付け替える |
+| 実行中 | Remove受付時に対象子孫を全て削除予約し、以後のStart／Updateから除外。実体の除去は既存のフレーム末尾。予約済みの子を付け替えて救出すること、予約済みの親へ追加することは拒否 |
+| 実行中の付け替え | 単一スレッド上で検証して即時反映する。更新の対象リスト・Priorityは変わらない。Destroy中・Stop要求後・削除予約済みなら拒否し、別の予約キューは作らない |
+| 後始末 | Runtimeは削除対象全体の既存Destroy Priority→Disposeを維持し、各componentを一度だけ終了する。親→子等の新しい終了順は導入しない。Editorは削除前の子孫componentを回収し、編集用Disposeだけを一度実行する |
+
+構造の切断・ID索引の削除は単一オブジェクト用の内部操作に分ける。Runtimeが予約済み集合を後始末するときに、公開の再帰削除をもう一度呼ばない。失敗時は元の構造を維持する。IDの照合と検索には既存のID管理を辞書へ拡張し、重複する別索引を増やさない。
+
+#### ID参照と素材ファイル
+
+提案する保存用の参照は`ObjectRef`・`ImageRef`・`FontRef`の3つの小さな不変値型。保持する値はGuidだけで、実オブジェクト・Type・デリゲート・GPUハンドルを持たない。YAMLではGuidのD形式文字列、未指定はnull（内部ではGuid.Empty）とする。汎用の`AssetRef<T>`や任意オブジェクトグラフのシリアライズは導入しない。
+
+- ObjectRefは渡されたScene内でのみ解決する。CloneではIDを保ち、解決先は必ずClone先のSceneとする。欠落した対象は解決結果null＋診断とし、保存済みIDは消さない。構造を壊す欠落Parent IDとは区別する。
+- ImageRefの未指定は画像なし。存在しない非空IDや不正な画像は、描画接続後に欠落表示＋診断。FontRefの未指定はV2同梱Noto、非空IDの欠落はIDを残して同梱フォントへ代替する。
+- 参照はプロジェクトローカル。同じIDが別Projectにあっても別の索引を使う。異なるProjectのオブジェクト／素材を暗黙に検索しない。
+
+画像・フォントは`Assets/`以下へ明示的に取り込む。初期の対象はPNG／JPEGとTTF／OTF。素材ごとに隣接ファイル（例：`Assets/Cards/ace.png.pureasset.yaml`）を置き、`version: 1`・`id: <Guid>`・`kind: image|font`を保存する。素材の相対パスはサイドカーに重複保存せず、Project所有の索引が走査結果からID→パスを作る。既存の`.pureengine/types.json`はC#型ID専用のままとする。
+
+素材とサイドカーを一緒に移動・改名すればIDを維持する。外部ツールで素材だけを移動した場合は、孤立メタデータ／未登録素材として知らせ、内容ハッシュで勝手に対応を推測しない。コピーによるID重複は曖昧なIDを解決不能にして報告し、自動でどちらかのIDを変更しない。明示的な新規取込／複製では新IDを発行する。索引の再走査だけではファイルを作成・書換しない。
+
+Project内の素材サービスはEditorが所有する。初期実装はProject Open時と明示Refreshで再走査し、自動ファイル監視はV3の必須範囲にしない。プレイヤー向けパッケージ索引の生成はV6で扱う。取込APIと索引検証はV3、ドラッグ＆ドロップ等の制作UIはV4とする。
+
+ProjectFileの既存のパス検証を共通化して使い、相対パスの正規化後にAssets配下であることを検査する。絶対パス・`..`による脱出・リンク／junction経由の脱出を拒否し、読み込み／コピーの直前にも検査する。外部素材は明示的にコピーして取り込み、外部パスそのものは保存しない。取込は一時領域へ素材とメタデータを準備してから公開し、失敗時は既存素材を上書きしない。ID重複・壊れたメタデータ・種別違いは診断し、任意のパスへのフォールバックはしない。
+
+素材のライセンスをエンジンが推定することはできない。配布許可の確認と素材のライセンス文書の保持は取り込む側の責任。V3のチェックにはV2の同梱フォントと生成画像を使う。
+
+#### UIコンポーネント
+
+名前・typeIdは以下を提案する。全て普通のC#クラスで、保存対象だけを既存の`[Inspector]`で公開する。色は既存Vector4をRGBAとして使い、新しいColor型は追加しない。
+
+| 型／typeId | 保存する設定と初期値 |
+| --- | --- |
+| `UiCanvas`／`core.ui.canvas` | `ReferenceSize = (1280,720)` |
+| `RectTransform`／`core.ui.rect` | `AnchorMin = AnchorMax = (0,0)`、`Pivot = (0.5,0.5)`、`Position = (0,0)`、`SizeDelta = (100,100)`、`RotationDegrees = 0`、`Scale = (1,1)`、`Visible = true`、`Opacity = 1`、`ClipChildren = false` |
+| `UiImage`／`core.ui.image` | `Image`（ImageRef、未指定）、`Color = (1,1,1,1)`。初期は矩形へのStretchのみ |
+| `UiText`／`core.ui.text` | `Text = ""`、`Font`（FontRef、同梱フォント）、`FontSize = 24`、`LineSpacing = 1.35`、`Color = (1,1,1,1)`。左上揃え・Rectの幅で折り返し |
+| `UiButton`／`core.ui.button` | `Interactable = true`。ホバー／押下／フォーカス／イベント購読は保存しない。状態別の外観とキーボード操作はV5で接続 |
+
+Scene内のCanvasは最初は0または1個、配置できるのはルートのみ。Canvas自身の矩形はReferenceSizeから決まり、RectTransformやTransformは付けない。UI要素はRectTransformを持ち、直接の親はCanvasか別のRectTransformとする。見た目のないグループもRectTransformで表す。ネストCanvas・World Space Canvasは対象外。
+
+UiImage／UiText／UiButtonはRectTransformとCanvas祖先を必要とする。UIノードではTransformとRectTransformの併用を拒否し、既存のWorldMatrixへUI変換を混ぜない。UIではないオブジェクトのTransformと親子の計算は維持する。
+
+構築途中のAttach順序を妨げないよう、依存componentの不足は即時の自動追加ではなく編集診断とする。Save／Clone／Loadの完成Scene検証では不足や不正な配置を拒否する。UIコンポーネントが全くない既存SceneはCanvasを要求しない。数値は有限、Anchorは各軸0〜1かつMin≦Max、Pivotは0〜1、ReferenceSize／FontSize／LineSpacingは正、Opacity／色は0〜1。Scaleは負値と0を許し、0で非可逆となった要素は描画・ヒット対象から外す。
+
+#### 配置計算と画面サイズ
+
+最初のCanvas拡縮方式は**基準解像度全体を収める等倍比率のFit**だけとする。物理ビューポート寸法をW,H、基準をRw,Rhとしたとき、`scale = min(W/Rw, H/Rh)`、余白は中央のレターボックス。DPIは物理サイズを求める入口で一度だけ適用する。配置計算は基準解像度の論理座標で行う。ポインターは余白を引いてscaleで割り、余白領域はCanvas外として扱う。幅または高さ0なら描画／入力対象なし。
+
+RectTransformは左上原点、X右・Y下。親の未変形の矩形サイズをPとし、各軸で次を計算する。
+
+```text
+a = P * AnchorMin
+b = P * AnchorMax
+size = (b - a) + SizeDelta
+pivotPosition = a + (b - a) * Pivot + Position
+local = Translate(-Pivot * size) * Scale(Scale)
+        * Rotate(RotationDegrees) * Translate(pivotPosition)
+world = local * parentWorld
+```
+
+行ベクトルのSystem.Numerics規約に揃える。正の回転はY下向き画面で時計回り。AnchorMin=AnchorMaxなら固定サイズ、異なれば親サイズに合わせて伸びる。SizeDeltaは負値を許すが、解決後のsizeが負なら不正、0なら描画しない。親の回転・拡縮は子のAnchor計算後に適用する。例えば親(400,200)、両Anchor=(0.5,0.5)、Pivot=(0.5,0.5)、SizeDelta=(100,40)、Position=0なら左上は(150,80)。Anchor=(0,0)〜(1,1)、SizeDelta=(-20,-20)、Pivot=(0.5,0.5)なら左上(10,10)、size=(380,180)。
+
+この方式ではウィンドウの縦横比変更はレターボックスで吸収し、Canvasの論理寸法は変わらない。親矩形やReferenceSizeを変えるとStretchが再計算される。画面全体への伸張・幅高さMatchスライダー・自動レイアウトは追加しない。
+
+Coreの`UiLayout`（提案）はScene＋表示寸法から結果を毎回計算する。結果にはObject ID、ローカルサイズ、変換／逆変換、実効Visible／Opacity、クリップ矩形の変換情報、表示順を持たせ、元Scene・ユーザーcomponentをGPU側のキャッシュへ保持しない。初期はO(n)の再計算とし、変更通知や差分キャッシュは測定で必要になってから追加する。
+
+#### 重なり・クリップ・入力との境界
+
+親を先に描き、Childrenを兄弟順に深さ優先で辿る。後の兄弟の部分木が手前になる。同じオブジェクトにImageとTextがあればImage→Textの順。Buttonは独立した絵を持たず、V5で入力を受ける。Visible=falseの部分木は全体を非表示にし、Opacityは祖先との積。これらは描画／入力の設定であり、非表示を理由に既存のUpdateを停止しない。透明でもVisible=true・Interactable=trueならButtonの入力対象になり得る。
+
+ClipChildrenは親のローカル矩形で子孫を切る。UiImageは自身の矩形に収まり、UiTextは自身の矩形でもクリップする。回転／拡縮した親のクリップは変換された矩形のまま扱い、画面上のAABBへの拡大で代用しない。入れ子は全祖先のクリップの共通部分になる。
+
+**V2との接続上の注意：** 現在のDrawListは画面軸に平行なクリップ矩形のみを扱う。V3ではCoreに変換付き矩形のクリップ列を持たせ、点の包含をGPUなしで検証する。V4の描画接続では、描画三角形をこれらの凸矩形でCPUクリップし、UVを補間して既存の頂点バッチへ渡す処理を追加する。軸平行の場合は従来の矩形クリップを利用できる。Stencil／Render Graph／別バックエンドは不要。正確な親クリップが通るまでUI描画の接続完了とはしない。 またV2のDrawListはフォントが同梱Notoに固定されているため、FontRefの保存だけで外部フォントが表示可能になったとは扱わない。V4では素材索引から画像・フォントを解決する接続、フォントID／サイズを含むキャッシュキー、素材変更時のキャッシュ退役も必要になる。V3ではこれらをGPU非依存の参照検証までとする。
+
+V3は共通の座標変換・矩形包含・クリップ包含を用意し、実際の選択と逆順ヒット検索はV4／V5が同じ結果を使う。非可逆変換、Canvas外、Visible=false、クリップ外はヒットしない。ButtonのInteractable=falseはそのButtonを対象外にし、親のButtonを無効にしても別の子Buttonを自動で無効化しない。
+
+#### ボタンとゲームコードの接続
+
+提案する契約は`IUiButtonHandler.OnClick(UiClickContext context)`。UiButtonと同じSceneObjectに、この契約を実装したゲームcomponentを付ける。基底クラスは不要。1つのButtonに対応するhandlerは最大1個とし、複数なら完成Scene検証で拒否する。0個は操作しても処理のないボタンとして有効。保存するのは既存のcomponent typeIdとInspector値のみで、メソッド名やデリゲートは保存しない。
+
+contextは実行用SceneとButtonのSceneObjectを持つ一時的な呼出情報。handlerはInspectorで設定したObjectRefをcontext.Sceneで解決し、得点ラベルのUiText等へアクセスする。例えば得点用handlerをButtonへ付け、そのObjectRefにラベルのIDを設定する。クリック時にC#メソッド内で得点を増やし、解決したラベルのTextを変更する。これなら新しいScene注入サービスやStartの別経路を作らず、対象を明示してゲームコードを呼べる。
+
+V3では参照と型契約の保存・復元・Clone分離まで扱う。V5で実行用Sceneのhandlerだけを入力処理の境界で呼び、例外は既存Playのエラー停止へつなぐ。編集中に呼ばず、クリック中の削除予約・Stop後に残りの入力を発火しない。イベント一覧やInspectorのメソッド選択UIは初期範囲に含めない。
+
+#### 保存形式・移行・Inspector
+
+シーンの新規保存形式は**version: 2**。オブジェクトに`parentId`（ルートはnull）と`siblingIndex`を追加し、componentsの形式は既存どおり。フラットなobjects配列の順序も保存し、兄弟表示順とは独立に維持する。同じ親のsiblingIndexは0〜件数-1の一意な連続値とし、欠落・重複・負数・範囲外を拒否する。
+
+version: 1は読み続け、全てルート・配列順の兄弟として復元する。次の明示保存で2へ更新し、読み込み時にファイルを書き換えない。旧エンジンへ2の読み込み互換は約束しない。Project manifestは新しい必須項目を足さないためversion: 1を維持する。
+
+復元は、文書構造／ID／親／順序の検証→全オブジェクトの作成→親子接続→既存factoryでcomponent生成／値復元→UIの完成Scene検証→公開、の順。欠落Parent、循環、重複ID、未知typeIdはScene全体を不採用。生成途中の失敗は既存Serializerの逆順Disposeを維持し、編集中のSceneは置き換えない。保存時も同じ構造・UI検証を通す。素材欠落や通常ObjectRefの解決失敗は警告としてIDを保持し、構造エラーと同じ理由で編集データを開けなくしない。
+
+ObjectRef／ImageRef／FontRefはInspectorValueTypesの共通の対応型へ追加し、単体・Nullable・既存の一次元配列／List／stringキーDictionaryの葉で同じ変換を使う。任意class・任意structの反射シリアライズには広げない。Inspectorでは対象名＋ID＋欠落状態と選択／解除を用意する。候補は現在のSceneまたはProjectの期待種別のみ。SceneSerializer.CloneとSceneCodeMigratorは同じ保存経路で親子・順序・参照を運び、旧Scene／旧ユーザー型への参照を残さない。
+
+#### 実装順と受入チェック
+
+| 順序 | 実装単位 | GPU不要の確認 |
+| --- | --- | --- |
+| V3-a | Scene所属・ルート／兄弟順・子孫削除 | 別Scene／混在／循環拒否、失敗時不変、予約削除の重複と付け替え拒否、既存Priority順と単一Dispose |
+| V3-b | version 2と参照値型 | v1→v2往復、親が後ろにある文書、同じIDでもClone先へ解決、順序保持、不正構造拒否、コード再読み込み失敗時の旧Scene保持 |
+| V3-c | 素材取込・サイドカー・索引 | ファイル対の移動、Project移動、重複／欠落／種別違い、取込失敗、パス脱出／リンク拒否、読取だけで書換しないこと |
+| V3-d | UIコンポーネント・UiLayout | 固定／Stretch／Pivotの数値例、親の回転と拡縮、レターボックス／DPI、0寸法、非表示／Opacity、入れ子・回転クリップの包含 |
+| V3-e | 共通Inspector・クリック契約 | 参照の設定／解除と保存、組み込み型の再登録、handler複数拒否、Cloneしたボタンの対象が編集用ラベルへ解決されないこと |
+
+Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Checksは参照編集・未保存表示・再読み込みを確認する。C#実装時は既存`tools/code-quality.ps1 -Check`を実行する。設計文書を追加しただけでは、上記の実装・検証を完了扱いにしない。
 
 ## マルチプレイ・Steam：将来の構想
 

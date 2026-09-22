@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <ShaderFile Include="Shaders/quad.vert" ExpectedHash="D8B249CF8BDF8B09D84C2CABFC1C3283BA03B35895E77665A9B219084A0BDF84" />
+    <ShaderFile Include="Shaders/quad.vert.spv" ExpectedHash="CB00FE0CE7EF23111552E344D123A73005644A11745AB972487F6040997DE685" />
+    <ShaderFile Include="Shaders/quad.frag" ExpectedHash="DFB75BE97451056ECD685866E5D5F9C928B2F8F264FE8392A179766345309855" />
+    <ShaderFile Include="Shaders/quad.frag.spv" ExpectedHash="A5633684AB8ACDFE2B04CC8C409570BEAED82B752CC6B2071103EF350E564A60" />
+  </ItemGroup>
+</Project>

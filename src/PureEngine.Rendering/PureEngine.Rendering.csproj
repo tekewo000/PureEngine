@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Direct3D11" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.DXGI" Version="2.23.0" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <EmbeddedResource Include="Shaders/*.spv;Assets/*" />
+    <None Update="Assets/*.txt" CopyToOutputDirectory="PreserveNewest" TargetPath="licenses/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Import Project="Shaders/Hashes.props" />
+  <Target Name="ValidateShaders" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('Shaders/quad.vert.spv') Or !Exists('Shaders/quad.frag.spv')" Text="Run tools/build-shaders.ps1 to compile the Vulkan shaders." />
+    <GetFileHash Files="@(ShaderFile)"><Output TaskParameter="Items" ItemName="ShaderHash" /></GetFileHash>
+    <Error Condition="'%(ShaderHash.FileHash)' != '%(ShaderHash.ExpectedHash)'" Text="Stale Vulkan shader: %(ShaderHash.Identity). Run tools/build-shaders.ps1." />
+  </Target>
+</Project>
+
+

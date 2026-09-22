@@ -18,7 +18,7 @@
 
 **LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値とPriorityを編集し、YAMLで保存・復元できる。**
 
-制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene View／Gameの描画はまだ行わない。
+制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene ViewにはV2の固定描画サンプルを表示する。Gameと実行用Sceneの描画接続はV5。
 
 ## 実装済み
 
@@ -107,16 +107,16 @@
 
 アタッチ条件・複数クラス・制限はREADMEの「自作C#と自動反映」を参照。
 
-### 6. C#15・Vulkan描画とScene View（計画作成済み・未実装）
+### 6. C#15・Vulkan描画とScene View（V0〜V2実装）
 
-2026-09-22、[Vulkan描画の実装計画](VulkanRenderingPlan.md) を作成した。設計方針の正本は [EngineArchitecture.md](EngineArchitecture.md#ui描画プレビュー設計方針実装は未着手)。最初に既存AvaloniaのScene ViewへVulkan描画を表示し、リサイズ・タブ切替・資源解放が実機で成立することを確認する。
+2026-09-22、[Vulkan描画の実装計画](VulkanRenderingPlan.md) を作成した。設計方針の正本は [EngineArchitecture.md](EngineArchitecture.md#ui描画プレビュー)。最初に既存AvaloniaのScene ViewへVulkan描画を表示し、リサイズ・タブ切替・資源解放が実機で成立することを確認する。
 
 | ID | 段階 | 状態 |
 | --- | --- | --- |
-| V0 | 依存関係・シェーダー・GPU共有経路の選定 | 未着手 |
-| V1 | Scene View埋め込みと単体ウィンドウの表示検証 | 未着手 |
-| V2 | 2D画像・日本語の文字・クリップ・GPU資源管理 | 未着手 |
-| V3 | 親子・素材参照・UIデータの保存 | 未着手 |
+| V0 | 依存関係・シェーダー・GPU共有経路の選定 | 実装・ローカル確認済み |
+| V1 | Scene View埋め込みと単体ウィンドウの表示検証 | 実装・実機確認済み（DPI 1.0） |
+| V2 | 2D画像・日本語の文字・クリップ・GPU資源管理 | 実装・ローカル／実機確認済み |
+| V3 | 親子・素材参照・UIデータの保存 | 設計案作成済み・実装未着手 |
 | V4 | Scene Viewでの配置・Inspector連動 | 未着手 |
 | V5 | Game表示・入力・Play／Stop接続 | 未着手 |
 | V6 | 同じプロジェクトの単体実行・配布確認 | 未着手 |
@@ -133,19 +133,33 @@ V1が成立する前にUI本実装へ進まない。最終目標は、カード�
 | ローカル複数実行・通信 | ホストとクライアント、状態同期、テスト用起動方式 |
 | Steam | ロビー・招待・参加、接続検証 |
 
-Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。Vulkan描画は計画作成までであり、実装済みとは扱わない。
+Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。描画の実装範囲はV2の固定サンプルまで。
 
 ## 検証状況
+
+### V3の設計（2026-09-22）
+
+[設計案の正本](EngineArchitecture.md#v3親子素材参照ui保存の設計案)を追加。既存Parent／Transform／SceneSerializer／SceneRuntime／素材パス検証を調べ、親子保存の不足を確認した。親削除時に子孫も削除する方針はユーザー確認済み。参照値型、素材サイドカー、UI配置、ボタンの型付き契約、version 2への移行とV3-a〜eの実装順は提案として記載した。
+
+この変更は文書のみ。V3のコード実装・自動チェック・GPU確認は行っておらず、code-quality.ps1 -CheckはAGENTS.mdに従い未実行。V0〜V2の過去の検証記録とは区別する。
 
 ### ゲーム用C#15対応（2026-09-22）
 
 組み込みRoslynを4.12.0から5.9.0へ更新し、生成ゲーム用csprojのLangVersionを13.0から15.0へ変更。`./tools/code-quality.ps1 -Check` がPASS（提案レベルの解析・警告をエラー扱いにしたDebugビルド警告・エラー0件・Core/Editorチェック全項目、終了コード0）。安定版NuGet（5.9.0）にLanguageVersion.CSharp15がまだ無いため、Editor内コンパイルはPreview設定でC#15相当として扱う。生成csprojのLangVersion 15.0は.NET 11 SDKでのビルドを確認済み。Zed実画面での補完確認とCI実行結果の確認は未実施。
 
-### Vulkan描画の計画（2026-09-22）
+### Vulkan V0〜V2の検証（2026-09-22）
 
-文書のみを追加・更新。既存の表示領域、PlaySession、保存・再読み込み、コンパイラ参照の接続先を確認して計画へ反映した。GPU初期化・描画・Scene View埋め込みの試作は未実施。V0〜V6のローカル自動検証・CI・実画面確認はすべて未実施で、既存機能のPASSを描画機能の検証に流用しない。
+実装は今回の作業ツリーにあり、コミットは未作成。設計・依存・資源の所有権は[描画設計](EngineArchitecture.md#v0v2の描画経路と資源所有)、操作は[README](../README.md#vulkan描画の確認windows-x64)を正本とする。
 
-文書のみの変更のため、AGENTS.mdに従い `./tools/code-quality.ps1 -Check` は実行しない。
+- 実機：Windows 11 10.0.26200 x64、NVIDIA GeForce RTX 4070、ドライバー616.92（32.0.16.1692）、Vulkan loader 1.4.341／GPU API 1.4.351。Avalonia 12.1.2のANGLE/D3D11、表示倍率1.0。
+- ローカル品質：`./tools/code-quality.ps1 -Check`は終了コード0（警告・エラー0）でPASS。[最終チェック記録](evidence/vulkan-v2-checks.txt)。提案レベル診断・警告をエラー扱いにしたビルド・既存Core／Editorチェックに、変換・透明順・クリップ・日本語改行／折り返し・欠落文字・キャッシュ再利用・不正値・頂点上限のCPUチェックを追加。
+- 実GPU：`tools/vulkan-check.ps1`の経路で、Scene View実ウィンドウの連続サイズ変更、サイズ0、最小化／復元、Scene View／Game切替、20回の取り外し／再作成、Inspectorヒットテスト、終了時解放をPASS。Validation Layers 1.4.341.1＋同期検証でエラー0件。
+- 20回の再作成のプロセスハンドル数：1159, 1161, 1159, 1159, 1160, 1160, 1160, 1160, 1160, 1160, 1162, 1159, 1159, 1161, 1161, 1161, 1163, 1159, 1159, 1159。各退役後のrenderer数は0、表示中は1。プロセス全体のハンドル数をGPUメモリ量そのものとは扱わない。
+- 目視：Editor内とEditor非依存の単体ウィンドウで、同じ画像・日本語・回転・半透明順・クリップを表示。通常のAvalonia BorderをGPU画像の上へ重ねられることを確認。[Scene View画面証跡](evidence/vulkan-v2-editor.png)、[単体ウィンドウ画面証跡](evidence/vulkan-v2-player.png)。
+- 初回の純Vulkan→Avalonia Vulkan経路では、Avalonia側swapchainの同期／セマフォ再利用診断を検出したため採用しなかった。最終経路はVulkan描画→共有D3D11→既存ANGLE。CPU読み戻しによる代替ではない。
+- 再作成検証で見つけたCOMとDLLの寿命不一致、D3D11テクスチャの遅延破棄、デバイス再生成によるハンドル増加を修正／回避。デバイスはアプリ単位、画像・バッファ等はペイン単位とし、共有テクスチャの解放後にFlushする。
+
+CIは未実行。別GPU・別OS・物理モニターのDPI変更／高DPI間移動、実際のdevice lost、1280×720の100画像＋20テキスト性能測定（CPU／GPU時間・割り当て量）は未検証。今回の結果から60fps性能を保証しない。V3以降のシーンデータ・UI編集・ゲーム入力・ゲーム配布も未実装。
 
 ### Inspectorメンバー改名（2026-09-22）
 

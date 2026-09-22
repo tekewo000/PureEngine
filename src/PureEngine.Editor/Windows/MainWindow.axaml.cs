@@ -99,6 +99,9 @@ public partial class MainWindow : Window
         }
         InitPlayControls();
         InitConsole();
+        var viewport = new PureEngine.Rendering.Avalonia.VulkanViewport();
+        viewport.RenderingFailed += error => Log.Engine.Error(error);
+        SceneViewport.Children.Add(viewport);
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)

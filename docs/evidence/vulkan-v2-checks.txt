@@ -1,0 +1,33 @@
+Vulkan V0–V2 local verification — 2026-09-22
+
+Environment: Windows 11 Home 10.0.26200 x64
+GPU: NVIDIA GeForce RTX 4070 / NVIDIA 616.92
+Vulkan: loader 1.4.341, physical device API 1.4.351
+Interop: Avalonia 12.1.2 ANGLE/D3D11, NT shared texture, keyed mutex
+Display scale: 1.0
+Validation Layers: 1.4.341.1, synchronization validation enabled
+
+./tools/code-quality.ps1 -Check
+Exit code: 0
+Info-level style/analyzer checks: PASS
+Build with warnings as errors: 0 warnings, 0 errors
+Core checks: PASS
+Editor headless checks and rendering CPU checks: PASS
+
+./tools/vulkan-check.ps1 -ValidationLayerPath tools/.cache/validation
+Exit code: 0
+Editor GPU resize / zero size / minimize-restore / tab switching: PASS
+20 viewport detach/recreation cycles: PASS
+Process handle counts:
+1159,1159,1159,1159,1159,1159,1159,1159,1159,1159,
+1159,1159,1159,1159,1159,1159,1159,1159,1160,1161
+Live renderer count: 0 after retirement, 1 while displayed, 0 after shutdown
+Inspector hit testing: PASS
+Validation errors: 0
+
+Standalone Player (Release): displayed the same fixed sample; validation output empty.
+Screenshots: vulkan-v2-editor.png, vulkan-v2-player.png
+
+Not verified: CI, other GPUs/OSes, physical DPI changes, actual device loss,
+1280x720 100-image/20-text CPU/GPU performance and GPU memory profiling.
+No 60fps performance guarantee is inferred.

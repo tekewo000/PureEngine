@@ -1,0 +1,3 @@
+src/PureEngine.Rendering/Shaders/*.vert text eol=lf
+src/PureEngine.Rendering/Shaders/*.frag text eol=lf
+src/PureEngine.Rendering/Shaders/*.spv binary

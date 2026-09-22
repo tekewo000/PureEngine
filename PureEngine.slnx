@@ -5,4 +5,7 @@
   <Project Path="tests/PureEngine.Core.Checks/PureEngine.Core.Checks.csproj" />
   <Project Path="src/PureEngine.Editor/PureEngine.Editor.csproj" />
   <Project Path="tests/PureEngine.Editor.Checks/PureEngine.Editor.Checks.csproj" />
+  <Project Path="src/PureEngine.Rendering/PureEngine.Rendering.csproj" />
+  <Project Path="src/PureEngine.Rendering.Avalonia/PureEngine.Rendering.Avalonia.csproj" />
+  <Project Path="src/PureEngine.Player/PureEngine.Player.csproj" />
 </Solution>

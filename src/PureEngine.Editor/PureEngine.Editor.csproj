@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../PureEngine.Rendering.Avalonia/PureEngine.Rendering.Avalonia.csproj" />
     <EmbeddedResource Include="../../global.json" LogicalName="PureEngine.Sdk.json" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <ProjectReference Include="../PureEngine.Core/PureEngine.Core.csproj" />

@@ -40,8 +40,14 @@ internal static class Program
     }
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        if (args.Contains("--vulkan"))
+        {
+            PureEngine.Rendering.Avalonia.VulkanViewport.Configure(AppBuilder.Configure<VulkanCheckApp>().UsePlatformDetect()).StartWithClassicDesktopLifetime([]);
+            return;
+        }
+        RenderingChecks.Run();
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PureEngine-LauncherChecks-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(root);
         try
