@@ -19,13 +19,13 @@ public partial class MainWindow
     {
         if (IsPlaying)
         {
-            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
         if (!await ConfirmUnsavedChanges()) return;
         SetCurrentScene(new Scene(), null);
         MarkSceneChanged();
-        SetFileStatus("新しいシーンを作成しました。Ctrl+Sで保存できます。");
+        SetFileStatus("Created a new scene. Save with Ctrl+S.");
     }
 
     private async void OnSetStartupScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
@@ -44,7 +44,7 @@ public partial class MainWindow
             _project.SetStartupScene(_editScene.Path!);
         }
         RefreshProjectExplorer();
-        SetFileStatus($"起動シーンに設定しました: {_project.Document.StartupScene}");
+        SetFileStatus($"Set as startup scene: {_project.Document.StartupScene}");
     });
 
 }

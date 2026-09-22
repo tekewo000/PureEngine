@@ -74,7 +74,7 @@ public sealed class ProjectSession : IDisposable
             }
             catch (Exception error) when (!compiled.Success)
             {
-                throw new InvalidDataException("C#のコンパイルに失敗したため起動シーンを開けません。\n"
+                throw new InvalidDataException("Cannot open the startup scene because C# compilation failed.\n"
                     + string.Join(Environment.NewLine, compiled.Diagnostics.Where(d => d.IsError)
                         .Select(UserCodeCompiler.FormatDiagnostic)), error);
             }

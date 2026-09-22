@@ -174,9 +174,9 @@ public partial class MainWindow
         ConsoleErrorCount.Text = error.ToString();
         var queueDropped = Log.DroppedCount - _consoleQueueDroppedBaseline;
         if (queueDropped < 0) queueDropped = 0;
-        ConsoleDropped.Text = $"破棄: キュー{queueDropped}件 / 履歴{_consoleHistoryDropped}件";
+        ConsoleDropped.Text = $"Dropped: queue {queueDropped} / history {_consoleHistoryDropped}";
         ToolTip.SetTip(ConsoleDropped,
-            $"キュー上限{Log.MaxQueuedEntries}件・履歴上限{ConsoleMaxHistory}件で破棄した件数。Clearで履歴と表示を消去します。");
+            $"Dropped because the queue limit ({Log.MaxQueuedEntries}) or history limit ({ConsoleMaxHistory}) was exceeded. Clear removes the history and the view.");
     }
 
     private void ShowConsoleDetail(ConsoleRow? row)

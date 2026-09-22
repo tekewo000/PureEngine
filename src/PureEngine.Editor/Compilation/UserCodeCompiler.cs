@@ -89,7 +89,7 @@ public static class UserCodeCompiler
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                throw new IOException($"C#フォルダを読み込めません: {directory}", error);
+                throw new IOException($"Cannot read C# folder: {directory}", error);
             }
             foreach (var entry in entries)
             {
@@ -173,7 +173,7 @@ public static class UserCodeCompiler
             }
             catch (Exception error)
             {
-                readDiagnostics.Add(new UserCodeDiagnostic(file, 0, 0, "PE-READ", $"ファイルを読み込めません: {error.GetBaseException().Message}", true));
+                readDiagnostics.Add(new UserCodeDiagnostic(file, 0, 0, "PE-READ", $"Cannot read file: {error.GetBaseException().Message}", true));
                 continue;
             }
             trees.Add(CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview), file));
@@ -267,7 +267,7 @@ public static class UserCodeCompiler
         {
             try { context.Unload(); } catch { }
             var list = diagnostics.ToList();
-            list.Add(new UserCodeDiagnostic("", 0, 0, "PE-LOAD", $"アセンブリを読み込めません: {error.GetBaseException().Message}", true));
+            list.Add(new UserCodeDiagnostic("", 0, 0, "PE-LOAD", $"Cannot load assembly: {error.GetBaseException().Message}", true));
             return new UserCodeCompileResult { Success = false, Diagnostics = list, SourceFiles = files };
         }
 

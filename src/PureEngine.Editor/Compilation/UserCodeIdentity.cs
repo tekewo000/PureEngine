@@ -21,7 +21,7 @@ internal static class UserCodeIdentity
             || catalog.Types.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id)
                 || !e.Id.StartsWith("user.", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(e.Name) || e.Files is null)
             || catalog.Types.Select(e => e.Id).Distinct(StringComparer.Ordinal).Count() != catalog.Types.Count)
-            throw new InvalidDataException("C#の型ID管理ファイルが不正です。既存のIDを保護するため反映を中止します。");
+            throw new InvalidDataException("C# type ID file is invalid. Aborting to protect existing IDs.");
 
         var types = result.AttachableTypes;
         var files = types.ToDictionary(type => type, type => result.FileTypes
@@ -59,7 +59,7 @@ internal static class UserCodeIdentity
         {
             var matches = catalog.Types.Where(entry => entry.Name == type.FullName).ToArray();
             if (matches.Length == 1) Assign(type, matches[0]);
-            else if (matches.Length > 1) throw new InvalidDataException($"型IDが曖昧です: {type.FullName}");
+            else if (matches.Length > 1) throw new InvalidDataException($"Ambiguous type ID: {type.FullName}");
         }
         foreach (var type in types.Where(type => !assigned.ContainsKey(type)))
         {
@@ -75,7 +75,7 @@ internal static class UserCodeIdentity
             if (matches.Length == 1 && types.Count(other => !assigned.ContainsKey(other) && SharesFile(other, matches[0])) == 1)
                 Assign(type, matches[0]);
             else if (matches.Length > 0)
-                throw new InvalidDataException($"{type.FullName}: 同じファイル内の複数クラスが変わり、改名前の型を特定できません。一つずつ改名して保存してください。");
+                throw new InvalidDataException($"{type.FullName}: Multiple classes in the same file changed; cannot determine the pre-rename type. Rename and save one at a time.");
         }
         foreach (var type in types)
         {

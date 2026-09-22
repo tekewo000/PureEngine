@@ -335,30 +335,30 @@ static class ProjectServiceRegistrationChecks
                     "reg-boom"),
                 ("ambiguous",
                     BasicCode() + "\npublic static class ExtraSetup { public static void ConfigureGameServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { } }",
-                    "複数"),
+                    "Multiple"),
                 ("invalid-signature",
                     BasicCode().Replace("public static void ConfigureGameServices(IServiceCollection services)",
                         "public static int ConfigureGameServices(IServiceCollection services)")
                         .Replace("services.AddScoped<QuestLog>();", "return 0;"),
-                    "形式が不正"),
+                    "Invalid"),
                 ("instance-registrar",
                     BasicCode().Replace("public static class GameSetup", "public class GameSetup")
                         .Replace("public static void ConfigureGameServices", "public void ConfigureGameServices"),
-                    "形式が不正"),
+                    "Invalid"),
                 ("async-registrar",
                     BasicCode().Replace("public static void ConfigureGameServices", "public static async void ConfigureGameServices")
                         .Replace("services.AddScoped<QuestLog>();", "await System.Threading.Tasks.Task.Yield(); services.AddScoped<QuestLog>();"),
-                    "形式が不正"),
+                    "Invalid"),
                 ("missing-dependency",
                     BasicCode().Replace("public QuestBoard(QuestLog log)",
                         "public QuestBoard(QuestLog log, IMissing missing)")
                         .Replace("Log = log ?? throw new System.ArgumentNullException(nameof(log));",
                         "Log = log ?? throw new System.ArgumentNullException(nameof(log)); _ = missing;")
                     + "\npublic interface IMissing { }\n",
-                    "反映できません"),
+                    "Cannot apply"),
                 ("scene-migration",
                     BasicCode().Replace("[Inspector] public int Score = 10;", "[Inspector] public float Score = 10;"),
-                    "反映できません"),
+                    "Cannot apply"),
             })
             {
                 File.WriteAllText(file, broken);
@@ -379,7 +379,7 @@ static class ProjectServiceRegistrationChecks
             File.WriteAllText(file, BasicCode());
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
-            Check(status.Text!.Contains("反映しました"), "Recovery after failures must work.");
+            Check(status.Text!.Contains("Applied C# changes"), "Recovery after failures must work.");
             Field<EditSceneStore>(editor, "_editScene").MarkClean();
         }
         finally

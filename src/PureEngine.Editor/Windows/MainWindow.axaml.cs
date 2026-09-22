@@ -180,7 +180,7 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
         e.DragEffects = DragDropEffects.None;
-        if (RejectWhenPlaying("アタッチ")) return;
+        if (RejectWhenPlaying("Attach")) return;
         var target = DropTarget(sender, e);
         var types = GetDragTypes(e).Where(t => _components.CanAttach(target, t)).ToArray();
         if (types.Length == 0) return;
@@ -212,7 +212,7 @@ public partial class MainWindow : Window
         }
         if (firstError is not null)
         {
-            AttachError.Text = $"{errorType!.Name} を追加できませんでした: {firstError}";
+            AttachError.Text = $"Could not add {errorType!.Name}: {firstError}";
             AttachError.IsVisible = true;
         }
     }
@@ -224,6 +224,7 @@ public partial class MainWindow : Window
         var item = SceneObjects.SelectedItem as SceneObject;
         var components = item?.Components.ToArray() ?? [];
         AttachedClasses.IsVisible = components.Length > 0;
+        NoComponentsHint.IsVisible = item is not null && components.Length == 0;
         AttachError.IsVisible = false;
         ComponentsHeader.Text = $"Components ({components.Length})";
         UpdateErrorBadge();
@@ -236,14 +237,18 @@ public partial class MainWindow : Window
     {
         ComponentsError.IsVisible = _invalidFields.Count > 0;
         ComponentsError.Text = $"Error {_invalidFields.Count}";
+        ToolTip.SetTip(ComponentsError, _invalidFields.Count > 0
+            ? $"{_invalidFields.Count} field(s) have invalid input — fix the highlighted fields to save."
+            : null);
     }
 
     private Border BuildComponentCard(SceneObject item, object component)
     {
         var type = component.GetType();
-        var body = new StackPanel { Spacing = 6 };
+        var body = new StackPanel { Spacing = 8 };
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         var title = new TextBlock { Text = type.Name, FontSize = 13, FontWeight = FontWeight.SemiBold,
+            Foreground = CardTitleBrush,
             MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
@@ -252,7 +257,7 @@ public partial class MainWindow : Window
         var priorities = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 6,
+            Spacing = 8,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
@@ -261,8 +266,20 @@ public partial class MainWindow : Window
         Grid.SetColumn(priorities, 1);
         header.Children.Add(priorities);
         body.Children.Add(header);
-        body.Children.Add(new Separator { Classes = { "divider" } });
-        foreach (var member in ComponentSchema.GetInspectorMembers(type))
+        var members = ComponentSchema.GetInspectorMembers(type);
+        // Meta line aids scannability: field count + lifecycle presence. Kept out of the
+        // header Grid so priority-header tests (Single title TextBlock, right-docked panel) stay green.
+        var meta = new TextBlock
+        {
+            Classes = { "cardMeta" },
+            Text = members.Count == 0
+                ? (priorities.Children.Count > 0 ? "Lifecycle only — no editable fields" : "No editable fields")
+                : $"{members.Count} field{(members.Count == 1 ? "" : "s")}"
+                    + (priorities.Children.Count > 0 ? " • lifecycle" : ""),
+        };
+        body.Children.Add(meta);
+        body.Children.Add(new Separator { Classes = { "divider" }, Margin = new Thickness(0, 2) });
+        foreach (var member in members)
             body.Children.Add(BuildMemberRow(component, member));
         return new Border { Classes = { "componentCard" }, Child = body };
     }
@@ -334,6 +351,7 @@ public partial class MainWindow : Window
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             BorderBrush = accent,
+            CornerRadius = new CornerRadius(4),
         };
         ToolTip.SetTip(box, displayName);
         box.Classes.Add("inspectorField");
@@ -349,11 +367,12 @@ public partial class MainWindow : Window
                     MarkSceneChanged();
                 }
                 MarkInvalid(box, null);
+                box.BorderBrush = accent;
                 ToolTip.SetTip(box, displayName);
             }
             else
             {
-                MarkInvalid(box, "整数を入力してください");
+                MarkInvalid(box, "Enter an integer");
             }
         };
         box.KeyDown += (_, e) =>
@@ -365,7 +384,7 @@ public partial class MainWindow : Window
         var field = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 2,
+            Spacing = 4,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
         field.Children.Add(label);
@@ -377,31 +396,12 @@ public partial class MainWindow : Window
     private Control BuildMemberRow(object component, MemberInfo member)
     {
         var memberType = GetMemberType(member);
-        if (memberType == typeof(bool))
-        {
-            // bool も他型と同じ96pxラベル列に揃え、ボックスと文字の間隔をグリッドで保証する。
-            var boolRow = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), ColumnSpacing = 8 };
-            boolRow.Classes.Add("inspectorRow");
-            var boolLabel = new TextBlock
-            {
-                Text = member.Name,
-                Foreground = MemberLabelBrush,
-                FontWeight = FontWeight.SemiBold,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            };
-            boolLabel.SetValue(ToolTip.TipProperty, $"{member.Name} : bool");
-            Grid.SetColumn(boolLabel, 0);
-            var check = (CheckBox)BuildMemberEditor(component, member);
-            check.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
-            Grid.SetColumn(check, 1);
-            boolRow.Children.Add(boolLabel);
-            boolRow.Children.Add(check);
-            return boolRow;
-        }
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), ColumnSpacing = 8 };
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("104,*"), ColumnSpacing = 8 };
         row.Classes.Add("inspectorRow");
-        var label = new TextBlock
+        // Two-line label: name (primary) + type (secondary). Type is visible without hover
+        // so int/float/string/bool scan at a glance; full "name : type" stays in the tooltip.
+        var labelStack = new StackPanel { Spacing = 0, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        var nameBlock = new TextBlock
         {
             Text = member.Name,
             Foreground = MemberLabelBrush,
@@ -409,11 +409,21 @@ public partial class MainWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
-        label.SetValue(ToolTip.TipProperty, $"{member.Name} : {memberType.Name}");
-        Grid.SetColumn(label, 0);
+        var typeBlock = new TextBlock
+        {
+            Classes = { "memberType" },
+            Text = memberType.Name,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        labelStack.Children.Add(nameBlock);
+        labelStack.Children.Add(typeBlock);
+        ToolTip.SetTip(labelStack, $"{member.Name} : {memberType.Name}");
+        ToolTip.SetTip(nameBlock, $"{member.Name} : {memberType.Name}");
+        Grid.SetColumn(labelStack, 0);
         var editor = BuildMemberEditor(component, member);
+        editor.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
         Grid.SetColumn(editor, 1);
-        row.Children.Add(label);
+        row.Children.Add(labelStack);
         row.Children.Add(editor);
         return row;
     }
@@ -425,33 +435,41 @@ public partial class MainWindow : Window
 
         if (memberType == typeof(string))
         {
-            var box = new TextBox { Text = (string?)GetMemberValue(component, member) ?? "" };
+            var box = new TextBox
+            {
+                Text = (string?)GetMemberValue(component, member) ?? "",
+                PlaceholderText = "Empty",
+            };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, automationName);
+            ToolTip.SetTip(box, $"{member.Name} : string — Press Esc to revert");
             box.TextChanged += (_, _) =>
             {
                 // Displaying a loaded null as an empty field must not change the scene.
                 if ((box.Text ?? "") != ((string?)GetMemberValue(component, member) ?? ""))
                     SetMemberValue(component, member, box.Text ?? "");
             };
+            AttachEscapeRevert(box, component, member);
             return box;
         }
 
         if (memberType == typeof(int))
         {
-            var box = new TextBox { Text = FormatMemberValue(component, member) };
+            const string hint = "Enter an integer — Press Esc to revert";
+            var box = new TextBox { Text = FormatMemberValue(component, member), PlaceholderText = "0" };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, automationName);
+            ToolTip.SetTip(box, hint);
             box.TextChanged += (_, _) =>
             {
                 if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
                 {
                     SetMemberValue(component, member, value);
-                    MarkInvalid(box, null);
+                    MarkInvalid(box, null, hint);
                 }
                 else
                 {
-                    MarkInvalid(box, "整数を入力してください");
+                    MarkInvalid(box, "Enter an integer");
                 }
             };
             AttachEscapeRevert(box, component, member);
@@ -460,20 +478,22 @@ public partial class MainWindow : Window
 
         if (memberType == typeof(float))
         {
-            var box = new TextBox { Text = FormatMemberValue(component, member) };
+            const string hint = "Enter a number — Press Esc to revert";
+            var box = new TextBox { Text = FormatMemberValue(component, member), PlaceholderText = "0.0" };
             box.Classes.Add("inspectorField");
             box.SetValue(AutomationProperties.NameProperty, automationName);
+            ToolTip.SetTip(box, hint);
             box.TextChanged += (_, _) =>
             {
                 if (float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value)
                     && float.IsFinite(value))
                 {
                     SetMemberValue(component, member, value);
-                    MarkInvalid(box, null);
+                    MarkInvalid(box, null, hint);
                 }
                 else
                 {
-                    MarkInvalid(box, "数値を入力してください");
+                    MarkInvalid(box, "Enter a number");
                 }
             };
             AttachEscapeRevert(box, component, member);
@@ -482,40 +502,49 @@ public partial class MainWindow : Window
 
         if (memberType == typeof(bool))
         {
-            var check = new CheckBox { IsChecked = GetMemberValue(component, member) is true };
+            var initial = GetMemberValue(component, member) is true;
+            var check = new CheckBox { IsChecked = initial, Content = initial ? "True" : "False" };
+            check.Classes.Add("inspectorCheck");
             check.SetValue(AutomationProperties.NameProperty, automationName);
-            check.IsCheckedChanged += (_, _) => SetMemberValue(component, member, check.IsChecked == true);
+            ToolTip.SetTip(check, $"{member.Name} : bool");
+            check.IsCheckedChanged += (_, _) =>
+            {
+                var value = check.IsChecked == true;
+                check.Content = value ? "True" : "False";
+                SetMemberValue(component, member, value);
+            };
             return check;
         }
 
         return new Border
         {
-            Classes = { "kindBadge" },
+            Classes = { "kindBadge", "unsupportedBadge" },
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Child = new TextBlock { Text = memberType.Name, FontSize = 10, Foreground = UnsupportedBadgeBrush },
+            Child = new TextBlock { Text = $"Unsupported: {memberType.Name}", FontSize = 11, Foreground = UnsupportedBadgeBrush },
         };
     }
 
-    private static readonly SolidColorBrush InvalidBrush = new(Color.Parse("#FF5252"));
-    private static readonly SolidColorBrush InvalidFieldBackground = new(Color.Parse("#4A1A1A"));
+    private static readonly SolidColorBrush InvalidBrush = new(Color.Parse("#FF8A80"));
+    private static readonly SolidColorBrush InvalidFieldBackground = new(Color.Parse("#4A1F1F"));
 
     /// <summary>Inspector member labels. Brighter than muted so label/value pairs scan as units.</summary>
-    private static readonly SolidColorBrush MemberLabelBrush = new(Color.Parse("#D5D5D5"));
-    private static readonly SolidColorBrush UnsupportedBadgeBrush = new(Color.Parse("#AAAAAA"));
+    private static readonly SolidColorBrush MemberLabelBrush = new(Color.Parse("#E2E2E2"));
+    private static readonly SolidColorBrush CardTitleBrush = new(Color.Parse("#F2F2F2"));
+    private static readonly SolidColorBrush UnsupportedBadgeBrush = new(Color.Parse("#CCCCCC"));
 
     /// <summary>S/U/D priority label accents. The letter stays the primary cue; color is redundant.</summary>
     private static readonly SolidColorBrush StartAccent = new(Color.Parse("#8AB4F8"));
     private static readonly SolidColorBrush UpdateAccent = new(Color.Parse("#81C995"));
     private static readonly SolidColorBrush DestroyAccent = new(Color.Parse("#F28B82"));
 
-    private void MarkInvalid(TextBox box, string? message)
+    private void MarkInvalid(TextBox box, string? message, string? validTip = null)
     {
         if (message is null)
         {
             box.ClearValue(TextBox.BorderBrushProperty);
             box.ClearValue(TextBox.BackgroundProperty);
-            ToolTip.SetTip(box, null);
+            ToolTip.SetTip(box, validTip);
             _invalidFields.Remove(box);
         }
         else
@@ -535,7 +564,9 @@ public partial class MainWindow : Window
         box.KeyDown += (_, e) =>
         {
             if (e.Key != Key.Escape) return;
-            box.Text = FormatMemberValue(component, member);
+            box.Text = GetMemberType(member) == typeof(string)
+                ? (string?)GetMemberValue(component, member) ?? ""
+                : FormatMemberValue(component, member);
             e.Handled = true;
         };
     }
@@ -585,7 +616,7 @@ public partial class MainWindow : Window
 
     private void OnAddObject(object? sender, RoutedEventArgs e)
     {
-        if (RejectWhenPlaying("追加")) return;
+        if (RejectWhenPlaying("Add")) return;
         var item = _editScene.Current.AddEmpty();
         MarkSceneChanged();
         SceneObjects.SelectedItem = item;
@@ -633,7 +664,7 @@ public partial class MainWindow : Window
 
     private void DeleteSelectedObject()
     {
-        if (RejectWhenPlaying("削除")) return;
+        if (RejectWhenPlaying("Delete")) return;
         if (SceneObjects.SelectedItem is not SceneObject item) return;
         var index = SceneObjects.SelectedIndex;
         _editScene.Current.Remove(item);

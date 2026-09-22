@@ -43,8 +43,8 @@ public partial class MainWindow
         var playBlock = EditorOperationGate.PlayBlockReason(alreadyPlaying: false, _fileBusy, HasInputErrors);
         if (playBlock is not null)
         {
-            var message = _fileBusy ? "ファイル操作中はPlayできません。"
-                : HasInputErrors ? "Playできません。Inspectorの入力エラーを修正してください。"
+            var message = _fileBusy ? "Cannot play during file operations."
+                : HasInputErrors ? "Cannot play. Fix the Inspector input errors."
                 : playBlock;
             SetFileStatus(message, true);
             return;
@@ -61,8 +61,8 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
-            Log.Engine.Error($"Playを開始できません: {error.GetBaseException().Message}", error);
-            SetFileStatus($"Playを開始できません: {error.GetBaseException().Message}", true);
+            Log.Engine.Error($"Cannot start Play: {error.GetBaseException().Message}", error);
+            SetFileStatus($"Cannot start Play: {error.GetBaseException().Message}", true);
             return;
         }
 
@@ -74,13 +74,13 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
-            FinishPlayAfterStartFailure($"Playの開始に失敗しました: {error.GetBaseException().Message}");
+            FinishPlayAfterStartFailure($"Failed to start Play: {error.GetBaseException().Message}");
             return;
         }
 
         if (!_play.Runtime.IsRunning)
         {
-            FinishPlayAfterStartFailure("Playの開始に失敗しました");
+            FinishPlayAfterStartFailure("Failed to start Play.");
             return;
         }
 
@@ -88,8 +88,8 @@ public partial class MainWindow
         _playLast = TimeSpan.Zero;
         _playTimer?.Start();
         UpdatePlayUI();
-        Log.Engine.Info("Playの開始処理が完了しました。");
-        SetFileStatus("Playを開始しました。");
+        Log.Engine.Info("Play started.");
+        SetFileStatus("Play started.");
     }
 
     /// <summary>手動停止。更新を止め、既存APIに従って終了・解放する。二重終了はno-op。</summary>
@@ -129,18 +129,18 @@ public partial class MainWindow
         var errors = session.Runtime.Errors;
         if (stopError is not null)
         {
-            Log.Engine.Error($"Playの停止中にエラー: {stopError.GetBaseException().Message}", stopError);
-            SetFileStatus($"Playの停止中にエラー: {stopError.GetBaseException().Message}{FormatPlayErrors(errors)}", true);
+            Log.Engine.Error($"Error while stopping Play: {stopError.GetBaseException().Message}", stopError);
+            SetFileStatus($"Error while stopping Play: {stopError.GetBaseException().Message}{FormatPlayErrors(errors)}", true);
         }
         else if (errors.Count > 0)
         {
-            Log.Engine.Error($"Playを停止しました（エラー{errors.Count}件）");
-            SetFileStatus($"Playを停止しました（エラー{errors.Count}件）{FormatPlayErrors(errors)}", true);
+            Log.Engine.Error($"Stopped Play ({errors.Count} error(s))");
+            SetFileStatus($"Stopped Play ({errors.Count} error(s)){FormatPlayErrors(errors)}", true);
         }
         else
         {
-            Log.Engine.Info("Playを停止しました。");
-            SetFileStatus("Playを停止しました。");
+            Log.Engine.Info("Stopped Play.");
+            SetFileStatus("Stopped Play.");
         }
         // Play中の変更は保留し、Stop後に反映する。
         FlushPendingUserCodeReload();
@@ -160,7 +160,7 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
-            FinishPlayAfterStepError(session, $"Playの更新に失敗しました: {error.GetBaseException().Message}");
+            FinishPlayAfterStepError(session, $"Play update failed: {error.GetBaseException().Message}");
             return;
         }
 
@@ -204,10 +204,10 @@ public partial class MainWindow
 
         UpdatePlayUI();
         if (session is not null) LogPendingRuntimeErrors(session);
-        if (cleanupError is not null) Log.Engine.Error($"Play開始の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
+        if (cleanupError is not null) Log.Engine.Error($"Failed to clean up after Play start: {cleanupError.GetBaseException().Message}", cleanupError);
         Log.Engine.Error(message);
         var detail = message + FormatPlayErrors(errors);
-        if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
+        if (cleanupError is not null) detail += $" (cleanup: {cleanupError.GetBaseException().Message})";
         SetFileStatus(detail, true);
         FlushPendingUserCodeReload();
     }
@@ -234,10 +234,10 @@ public partial class MainWindow
         }
 
         LogPendingRuntimeErrors(session);
-        if (cleanupError is not null) Log.Engine.Error($"Play更新の後片付けに失敗しました: {cleanupError.GetBaseException().Message}", cleanupError);
+        if (cleanupError is not null) Log.Engine.Error($"Failed to clean up after Play update: {cleanupError.GetBaseException().Message}", cleanupError);
         Log.Engine.Error(message);
         var detail = message + FormatPlayErrors(errors);
-        if (cleanupError is not null) detail += $"（後片付け: {cleanupError.GetBaseException().Message}）";
+        if (cleanupError is not null) detail += $" (cleanup: {cleanupError.GetBaseException().Message})";
         SetFileStatus(detail, true);
         FlushPendingUserCodeReload();
     }
@@ -266,18 +266,18 @@ public partial class MainWindow
         LogPendingRuntimeErrors(session);
         if (cleanupError is not null)
         {
-            Log.Engine.Error($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）", cleanupError);
-            SetFileStatus($"Playが停止しました（後片付け: {cleanupError.GetBaseException().Message}）{FormatPlayErrors(errors)}", true);
+            Log.Engine.Error($"Play stopped (cleanup: {cleanupError.GetBaseException().Message})", cleanupError);
+            SetFileStatus($"Play stopped (cleanup: {cleanupError.GetBaseException().Message}){FormatPlayErrors(errors)}", true);
         }
         else if (errors.Count > 0)
         {
-            Log.Engine.Error($"Playがエラーで停止しました（{errors.Count}件）");
-            SetFileStatus($"Playがエラーで停止しました（{errors.Count}件）{FormatPlayErrors(errors)}", true);
+            Log.Engine.Error($"Play stopped with errors ({errors.Count})");
+            SetFileStatus($"Play stopped with errors ({errors.Count}){FormatPlayErrors(errors)}", true);
         }
         else
         {
-            Log.Engine.Info("Playが停止しました。");
-            SetFileStatus("Playが停止しました。");
+            Log.Engine.Info("Play stopped.");
+            SetFileStatus("Play stopped.");
         }
         FlushPendingUserCodeReload();
     }
@@ -336,7 +336,7 @@ public partial class MainWindow
     private bool RejectWhenPlaying(string action)
     {
         if (!IsPlaying) return false;
-        SetFileStatus($"{action}はPlay中にできません。先にStopしてください。", true);
+        SetFileStatus($"Cannot {action} while playing. Stop first.", true);
         return true;
     }
 }

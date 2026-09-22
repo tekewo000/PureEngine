@@ -7,6 +7,27 @@
     <Style Selector="Button, TextBox, ListBoxItem, MenuItem">
       <Setter Property="CornerRadius" Value="6" />
     </Style>
+    <Style Selector="TextBox">
+      <Setter Property="Background" Value="#454545" />
+      <Setter Property="BorderBrush" Value="#6E6E6E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="#F5F5F5" />
+      <Setter Property="CaretBrush" Value="#FFFFFF" />
+      <Setter Property="SelectionBrush" Value="#B2A0E0" />
+      <Setter Property="SelectionForegroundBrush" Value="#1A1A1A" />
+      <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <Style Selector="TextBox:pointerover">
+      <Setter Property="Background" Value="#4A4A4A" />
+      <Setter Property="BorderBrush" Value="#8A8A8A" />
+    </Style>
+    <Style Selector="TextBox:focus">
+      <Setter Property="Background" Value="#4E4A5E" />
+      <Setter Property="BorderBrush" Value="#B2A0E0" />
+    </Style>
+    <Style Selector="TextBox:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
     <Style Selector="ContextMenu">
       <Setter Property="Padding" Value="8,4" />
     </Style>

@@ -30,13 +30,13 @@ public static class ProjectGameServices
         catch (TargetInvocationException error) when (error.InnerException is not null)
         {
             throw new InvalidOperationException(
-                $"プロジェクトのサービス登録 {registrar.DeclaringType?.FullName}.{registrar.Name} に失敗しました: {error.InnerException.GetBaseException().Message}",
+                $"Failed to apply project service registration {registrar.DeclaringType?.FullName}.{registrar.Name}: {error.InnerException.GetBaseException().Message}",
                 error.InnerException);
         }
         catch (Exception error) when (error is not InvalidOperationException)
         {
             throw new InvalidOperationException(
-                $"プロジェクトのサービス登録 {registrar.DeclaringType?.FullName}.{registrar.Name} に失敗しました: {error.GetBaseException().Message}",
+                $"Failed to apply project service registration {registrar.DeclaringType?.FullName}.{registrar.Name}: {error.GetBaseException().Message}",
                 error);
         }
     }
@@ -49,7 +49,7 @@ public static class ProjectGameServices
     {
         if (userCode is null) return null;
         if (!userCode.Success)
-            throw new InvalidOperationException("失敗したコンパイル結果からサービス登録を適用できません。");
+            throw new InvalidOperationException("Cannot apply service registration from a failed compilation.");
         var assembly = userCode.LoadedAssembly;
         if (assembly is null) return null;
 
@@ -61,7 +61,7 @@ public static class ProjectGameServices
         catch (ReflectionTypeLoadException error)
         {
             throw new InvalidOperationException(
-                $"プロジェクトの型一覧の取得に失敗しました: {error.GetBaseException().Message}", error);
+                $"Failed to get project type list: {error.GetBaseException().Message}", error);
         }
 
         var named = new List<MethodInfo>();
@@ -92,27 +92,27 @@ public static class ProjectGameServices
 
         if (valid.Length > 1)
         {
-            var owners = string.Join("、", valid.Select(m => m.DeclaringType?.FullName ?? "(unknown)"));
+            var owners = string.Join(", ", valid.Select(m => m.DeclaringType?.FullName ?? "(unknown)"));
             throw new InvalidOperationException(
-                $"プロジェクトのサービス登録 {RegistrarName} が複数見つかりました（{owners}）。1つのプロジェクトに1つだけ定義してください。");
+                $"Multiple project service registrations {RegistrarName} found ({owners}). Define only one per project.");
         }
 
         // valid が1つでも同名が複数あれば曖昧として扱う。
         if (valid.Length == 1)
         {
-            var owners = string.Join("、", named.Select(m =>
+            var owners = string.Join(", ", named.Select(m =>
                 $"{m.DeclaringType?.FullName ?? "(unknown)"}{SignatureOf(m)}"));
             throw new InvalidOperationException(
-                $"プロジェクトのサービス登録 {RegistrarName} の定義が曖昧です。正しい定義を1つだけ残してください（{owners}）。" +
-                $"正しい形式: public static void {RegistrarName}(IServiceCollection services)。");
+                $"Ambiguous project service registration {RegistrarName} definition. Keep only one correct definition ({owners}). " +
+                $"Expected: public static void {RegistrarName}(IServiceCollection services).");
         }
 
         // 同名はあるが正しい定義がない。不正として期待形式と実際を報告する。
-        var found = string.Join("、", named.Select(m =>
+        var found = string.Join(", ", named.Select(m =>
             $"{m.DeclaringType?.FullName ?? "(unknown)"}{SignatureOf(m)}"));
         throw new InvalidOperationException(
-            $"プロジェクトのサービス登録 {RegistrarName} の形式が不正です（{found}）。" +
-            $"正しい形式: public static void {RegistrarName}(IServiceCollection services)。");
+            $"Invalid project service registration {RegistrarName} format ({found}). " +
+            $"Expected: public static void {RegistrarName}(IServiceCollection services).");
     }
 
     private static string SignatureOf(MethodInfo method)

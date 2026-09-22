@@ -166,10 +166,10 @@ public partial class MainWindow
                     {
                         // 自作C#はフォルダ構成のまま表示する。専用フォルダへの配置やComponents一覧への集約は要求しない。
                         var types = _components.GetTypesForFile(full);
-                        var detail = types.Count == 0 ? "C#（アタッチ対象なし／未反映）"
+                        var detail = types.Count == 0 ? "C# (no attachable types)"
                             : types.Count == 1 ? $"C# {types[0].Name}"
-                            : $"C# {types.Count}クラス";
-                        var tip = types.Count == 0 ? $"{relative}（アタッチ対象なし）"
+                            : $"C# ({types.Count} classes)";
+                        var tip = types.Count == 0 ? $"{relative} (no attachable types)"
                             : $"{relative}: {string.Join(", ", types.Select(t => t.FullName ?? t.Name))}";
                         entries.Add(new ProjectExplorerEntry(
                             ProjectExplorerKind.File, file, detail, tip, relative, full, null, false));
@@ -184,7 +184,7 @@ public partial class MainWindow
             }
         }
         ProjectFiles.ItemsSource = entries;
-        ProjectFilesCount.Text = entries.Count == 0 ? "空のフォルダ" : $"{entries.Count} 件";
+        ProjectFilesCount.Text = entries.Count == 0 ? "Empty folder" : $"{entries.Count} item(s)";
         ProjectFiles.SelectedItem = entries.FirstOrDefault(entry =>
             entry.FullPath is not null && string.Equals(entry.FullPath, _explorerSelectedFile, PathComparison()));
         var editPath = _editScene.Path;
@@ -290,7 +290,7 @@ public partial class MainWindow
     {
         if (IsPlaying)
         {
-            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
         if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
@@ -331,7 +331,7 @@ public partial class MainWindow
         var folder = ExplorerTargetFolder("Scenes");
         if (!_project.IsUnderScenes(folder))
         {
-            SetFileStatus("シーンはScenesフォルダ内に作成してください。", true);
+            SetFileStatus("Create scenes inside the Scenes folder.", true);
             return;
         }
         var name = _project.NextSceneName(folder);
@@ -341,24 +341,24 @@ public partial class MainWindow
         _explorerSelectedFile = path;
         SelectExplorerNode(folder);
         RefreshProjectExplorer();
-        SetFileStatus($"シーンを作成しました: {folder}/{name}");
+        SetFileStatus($"Created scene: {folder}/{name}");
     });
 
     private async void OnExplorerCreateFolder(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
         if (_project is null) return;
         var folder = ExplorerTargetFolder("");
-        var name = await AskExplorerName("Create Folder", "新しいフォルダ名", "New Folder");
+        var name = await AskExplorerName("Create Folder", "New folder name", "New Folder");
         if (name is null) return;
         ValidateExplorerFolderName(name);
         var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
-        if (Directory.Exists(path) || File.Exists(path)) throw new IOException("同名のフォルダまたはファイルが既にあります。");
+        if (Directory.Exists(path) || File.Exists(path)) throw new IOException("A folder or file with the same name already exists.");
         Directory.CreateDirectory(path);
         var relative = string.IsNullOrEmpty(folder) ? name : $"{folder}/{name}";
         _explorerFolder = relative;
         _explorerSelectedFile = null;
         RefreshProjectExplorer();
-        SetFileStatus($"フォルダを作成しました: {relative}");
+        SetFileStatus($"Created folder: {relative}");
     });
 
     private async void OnExplorerCreateCSharp(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
@@ -367,23 +367,23 @@ public partial class MainWindow
         var folder = ExplorerTargetFolder("");
         if (ReferenceEquals(sender, TreeCreateCSharpMenu))
             ExplorerSelectionIsFolder(out folder, out _);
-        var name = await AskExplorerName("Create C#", "ファイル名（クラス名。.csは省略可）", "NewScript");
+        var name = await AskExplorerName("Create C#", "File name (class name, .cs optional)", "NewScript");
         if (name is null) return;
         var className = name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ? name[..^3] : name;
         if (!SyntaxFacts.IsValidIdentifier(className)
             || SyntaxFacts.GetKeywordKind(className) != SyntaxKind.None
             || className.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("C#のクラス名として使える名前を入力してください（空白・記号・予約語は使用できません）。");
+            throw new ArgumentException("Enter a valid C# class name (no spaces, symbols, or reserved words).");
         var path = Path.Combine(_project.ResolveDirectoryPath(folder), className + ".cs");
         if (File.Exists(path) || Directory.Exists(path))
-            throw new IOException("同名のフォルダまたはファイルが既にあります。");
+            throw new IOException("A folder or file with the same name already exists.");
         using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         using (var writer = new StreamWriter(stream))
             writer.Write($"public sealed class {className}{Environment.NewLine}{{{Environment.NewLine}{Environment.NewLine}}}{Environment.NewLine}");
         _explorerFolder = folder;
         _explorerSelectedFile = path;
         RefreshProjectExplorer();
-        SetFileStatus($"C#を作成しました: {className}.cs");
+        SetFileStatus($"Created C#: {className}.cs");
     });
 
     private async void OnExplorerRename(object? sender, RoutedEventArgs e) => await RenameSelectedExplorerEntry();
@@ -391,7 +391,7 @@ public partial class MainWindow
     private async void OnExplorerRefresh(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
         RefreshProjectExplorer();
-        SetFileStatus(_project is null ? "Projectが開かれていません。" : $"更新しました: {_project.Document.Name}");
+        SetFileStatus(_project is null ? "No project is open." : $"Refreshed: {_project.Document.Name}");
         await Task.CompletedTask;
     });
 
@@ -400,7 +400,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(name) || name != name.Trim() || name is "." or ".."
             || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.EndsWith('.')
             || name.Contains('/') || name.Contains('\\'))
-            throw new ArgumentException("フォルダ名には有効な名前を指定してください。");
+            throw new ArgumentException("Specify a valid folder name.");
     }
 
     private async Task RenameSelectedExplorerEntry()
@@ -428,21 +428,21 @@ public partial class MainWindow
             var oldRelative = Path.GetRelativePath(_project.RootDirectory, oldFull).Replace('\\', '/');
             if (!isScene && isDirectory && IsStructuralFolder(oldRelative))
             {
-                SetFileStatus("Scenesフォルダ自体の名前は変更できません。", true);
+                SetFileStatus("Cannot rename the Scenes folder itself.", true);
                 return;
             }
-            var name = await AskExplorerName("Rename", $"新しい名前（{oldName}）", oldName);
+            var name = await AskExplorerName("Rename", $"New name ({oldName})", oldName);
             if (name is null) return;
             if (isScene && !name.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
                 name += ".pure.scene.yaml";
             if (name == oldName) return;
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-                throw new ArgumentException("有効な名前を指定してください。");
+                throw new ArgumentException("Specify a valid name.");
             newFull = Path.Combine(Path.GetDirectoryName(oldFull!)!, name);
             if (isScene) _project.ValidateScenePath(newFull);
             else if (isDirectory) _project.ValidateFolderPath(newFull);
             else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
-            if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("同名のフォルダまたはファイルが既にあります。");
+            if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
             RemapSceneReferences(oldFull!, newFull, isDirectory);
@@ -456,7 +456,7 @@ public partial class MainWindow
                 _explorerSelectedFile = newFull;
             }
             RefreshProjectExplorer();
-            SetFileStatus($"名前を変更しました: {name}");
+            SetFileStatus($"Renamed to: {name}");
         });
     }
 
@@ -484,14 +484,14 @@ public partial class MainWindow
             var targetRelative = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))
             {
-                SetFileStatus("Scenesフォルダ自体は削除できません。", true);
+                SetFileStatus("Cannot delete the Scenes folder itself.", true);
                 return;
             }
             var containsStartup = string.Equals(target, startup, PathComparison())
                 || (isDirectory && (startup + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison()));
             if (containsStartup)
             {
-                SetFileStatus("起動シーンを含むため削除できません。先に起動シーンを変更してください。", true);
+                SetFileStatus("Cannot delete because it contains the startup scene. Change the startup scene first.", true);
                 return;
             }
             var editPath = _editScene.Path;
@@ -499,7 +499,7 @@ public partial class MainWindow
                 || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison())));
             if (containsOpen)
             {
-                SetFileStatus("編集中のシーンを含むため削除できません。先に別のシーンを開いてください。", true);
+                SetFileStatus("Cannot delete because it contains the open scene. Open another scene first.", true);
                 return;
             }
             var display = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
@@ -516,7 +516,7 @@ public partial class MainWindow
                 _explorerSelectedFile = null;
             }
             RefreshProjectExplorer();
-            SetFileStatus($"削除しました: {display}");
+            SetFileStatus($"Deleted: {display}");
         });
     }
 
@@ -590,7 +590,7 @@ public partial class MainWindow
             {
                 new TextBlock
                 {
-                    Text = $"{(isDirectory ? "フォルダ" : "ファイル")}「{display}」を削除しますか？",
+                    Text = $"Delete {(isDirectory ? "folder" : "file")} \"{display}\"?",
                     TextWrapping = TextWrapping.Wrap,
                 },
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8,

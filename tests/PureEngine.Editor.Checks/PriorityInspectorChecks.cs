@@ -133,7 +133,7 @@ static class PriorityInspectorChecks
         var saveTask = (Task<bool>)saveMethod.Invoke(editor, [false])!;
         saveTask.GetAwaiter().GetResult();
         Dispatcher.UIThread.RunJobs();
-        Check(fileStatus.Text?.Contains("保存できません") == true, "Save must be refused during priority input errors.");
+        Check(fileStatus.Text?.Contains("Cannot save") == true, "Save must be refused during priority input errors.");
 
         // Esc restores the last valid value and clears the error.
         startBox.RaiseEvent(new KeyEventArgs

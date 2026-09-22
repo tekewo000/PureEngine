@@ -37,7 +37,7 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <TextBlock x:Name="EmptyHistory" Text="最近開いたProjectはありません。" Classes="muted"
+            <TextBlock x:Name="EmptyHistory" Text="No recent projects." Classes="muted"
                        Margin="12" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
                        IsHitTestVisible="False" />
           </Grid>

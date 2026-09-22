@@ -38,7 +38,7 @@ public partial class LauncherWindow : Window
         var location = ProjectLocation.Text?.Trim() ?? "";
         var name = ProjectName.Text?.Trim() ?? "";
         ProjectDestination.Text = string.IsNullOrEmpty(location) || string.IsNullOrEmpty(name)
-            ? "Project名と作成先を指定してください。" : $"作成先: {Path.Combine(location, name)}";
+            ? "Specify a project name and location." : $"Destination: {Path.Combine(location, name)}";
     }
 
     private void RefreshHistory()
@@ -62,7 +62,7 @@ public partial class LauncherWindow : Window
         SetError(null);
         try { await operation(); }
         catch (OperationCanceledException) when (_closed) { }
-        catch (Exception error) { if (!_closed) SetError($"Projectを開けませんでした: {error.GetBaseException().Message}"); }
+        catch (Exception error) { if (!_closed) SetError($"Could not open project: {error.GetBaseException().Message}"); }
         finally { _busy = false; if (!_closed) LauncherSurface.IsEnabled = true; }
     }
 
@@ -70,12 +70,12 @@ public partial class LauncherWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Projectを作成する親フォルダ", AllowMultiple = false,
+            Title = "Select parent folder for new project", AllowMultiple = false,
             SuggestedStartLocation = Directory.Exists(ProjectLocation.Text)
                 ? await StorageProvider.TryGetFolderFromPathAsync(ProjectLocation.Text!) : null,
         });
         if (folders.Count == 0) return;
-        ProjectLocation.Text = folders[0].TryGetLocalPath() ?? throw new IOException("ローカルのフォルダを選択してください。");
+        ProjectLocation.Text = folders[0].TryGetLocalPath() ?? throw new IOException("Select a local folder.");
     });
 
     private async void OnCreateProject(object? sender, RoutedEventArgs e) => await RunOperation(() =>
@@ -90,7 +90,7 @@ public partial class LauncherWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             { Title = "Open Project", AllowMultiple = false, FileTypeFilter = [ProjectType] });
         if (files.Count == 0) return;
-        var path = files[0].TryGetLocalPath() ?? throw new IOException("ローカルのProjectを選択してください。");
+        var path = files[0].TryGetLocalPath() ?? throw new IOException("Select a local project.");
         using var session = await ProjectSession.OpenAsync(path, _lifetime.Token);
         OpenEditor(session);
     });

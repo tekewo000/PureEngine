@@ -223,7 +223,7 @@ static class ConsoleChecks
                 $"History drops must be 305, got {Field<int>(editor, "_consoleHistoryDropped")}.");
             Check(capped[^1].Message == $"history-cap-{MainWindow.ConsoleMaxHistory + 49}", "History must keep newest.");
             var droppedText = Control<TextBlock>(editor, "ConsoleDropped").Text ?? "";
-            Check(droppedText.Contains("履歴") && droppedText.Contains("キュー"), "Dropped counts for queue/history must be shown.");
+            Check(droppedText.Contains("history") && droppedText.Contains("queue"), "Dropped counts for queue/history must be shown.");
             CloseEditor(editor);
         }
         finally
@@ -418,7 +418,7 @@ static class ConsoleChecks
             Drain(editor);
             var afterStart = Field<List<LogEntry>>(editor, "_consoleHistory");
             Check(afterStart.Count == 1 && afterStart[0].Source == LogSource.Engine
-                && afterStart[0].Message.Contains("Playの開始処理が完了"), $"Clear on Play must clear before Start and keep the engine start log, got {afterStart.Count}.");
+                && afterStart[0].Message.Contains("Play started"), $"Clear on Play must clear before Start and keep the engine start log, got {afterStart.Count}.");
             Call(editor, "StopPlay");
             Drain(editor);
             // OFF keeps old logs across Play.
@@ -541,7 +541,7 @@ static class ConsoleChecks
             var history = Field<List<LogEntry>>(auto, "_consoleHistory");
             var updateLogs = history.Where(entry => entry.Message.Contains("ConsoleFailUpdate")).ToArray();
             Check(updateLogs.Length == 1, $"Update error must appear once, got {updateLogs.Length}.");
-            Check(history.Any(entry => entry.Message.Contains("更新に失敗") || entry.Message.Contains("エラーで停止")),
+            Check(history.Any(entry => entry.Message.Contains("Play update failed") || entry.Message.Contains("Play stopped")),
                 "Update/auto-stop summary must be in Console.");
             var frozen = history.Count;
             Call(auto, "StopPlay");

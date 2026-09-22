@@ -24,7 +24,7 @@ public sealed class RecentProjects(string path)
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
             Entries = [];
-            Warning = "最近開いたProjectの履歴を読み込めませんでした。Open Projectから開けます。";
+            Warning = "Could not load the recent projects history. Use Open Project instead.";
         }
     }
 
@@ -41,7 +41,7 @@ public sealed class RecentProjects(string path)
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Warning = "Projectは開けましたが、最近開いたProjectの履歴を保存できませんでした。";
+            Warning = "The project was opened, but the recent projects history could not be saved.";
         }
     }
 

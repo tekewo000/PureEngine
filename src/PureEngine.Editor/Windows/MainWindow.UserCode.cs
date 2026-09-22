@@ -22,7 +22,7 @@ public partial class MainWindow
         }
         catch (Exception error)
         {
-            Log.Engine.Error("ユーザーコードの監視を開始できません。", error);
+            Log.Engine.Error("Cannot start watching user code.", error);
             SetFileStatus(error.Message, true);
         }
     }
@@ -39,7 +39,7 @@ public partial class MainWindow
 
     private void OnUserCodeReloadRequested()
     {
-        if (IsPlaying) SetFileStatus("C#の変更を検知しました。Stop後に反映します。");
+        if (IsPlaying) SetFileStatus("C# changes detected. They will be applied after Stop.");
         _ = ReloadUserCode();
     }
 
@@ -69,7 +69,7 @@ public partial class MainWindow
         {
             if (ReferenceEquals(tracker, _compileTracker) && tracker.IsCurrent(ticket))
             {
-                Log.Engine.Error("C#を反映できません。直前の状態を保持します。", error);
+                Log.Engine.Error("Cannot apply C# changes. Keeping the previous state.", error);
                 SetFileStatus(error.GetBaseException().Message, true);
             }
         }
@@ -108,17 +108,17 @@ public partial class MainWindow
         }
         if (outcome.Error is not null)
         {
-            var message = outcome.Adopted ? "旧コードの解放に失敗しました。" : "C#を反映できません。直前の状態を保持します。";
+            var message = outcome.Adopted ? "Failed to unload the previous code." : "Cannot apply C# changes. Keeping the previous state.";
             Log.Engine.Error(message, outcome.Error);
             SetFileStatus(message + " " + outcome.Error.GetBaseException().Message, true);
         }
         else if (outcome.Adopted)
         {
-            var message = $"C#を反映しました：{_components.UserTypes.Count}クラス。";
+            var message = $"Applied C# changes: {_components.UserTypes.Count} class(es).";
             Log.Engine.Info(message);
             SetFileStatus(message);
         }
-        else SetFileStatus("C#のコンパイルに失敗しました。直前の状態を保持します。修正して保存してください。", true);
+        else SetFileStatus("C# compilation failed. Keeping the previous state. Fix the errors and save.", true);
         RefreshProjectExplorer();
         DrainConsole();
     }

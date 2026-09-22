@@ -247,23 +247,89 @@
       <Setter Property="Margin" Value="0,2" />
     </Style>
     <Style Selector="Border.componentCard">
-      <Setter Property="Background" Value="#333333" />
-      <Setter Property="BorderBrush" Value="#555555" />
+      <Setter Property="Background" Value="#2F2F2F" />
+      <Setter Property="BorderBrush" Value="#5A5A5A" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="6" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="BoxShadow" Value="0 2 8 0 #40000000" />
+    </Style>
+    <Style Selector="Border.componentCard:pointerover">
+      <Setter Property="BorderBrush" Value="#6E6E6E" />
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#8A8A8A" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.memberType">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Foreground" Value="#9A9A9A" />
+    </Style>
+    <Style Selector="TextBlock.cardMeta">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Foreground" Value="#9A9A9A" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="#9A9A9A" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.errorBadge">
+      <Setter Property="Background" Value="#4A1F1F" />
+      <Setter Property="Foreground" Value="#FF9E99" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBox.inspectorField">
       <Setter Property="MinHeight" Value="26" />
       <Setter Property="Padding" Value="6,3" />
       <Setter Property="FontSize" Value="12" />
+      <Setter Property="Background" Value="#454545" />
+      <Setter Property="BorderBrush" Value="#6E6E6E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Foreground" Value="#F5F5F5" />
+      <Setter Property="CaretBrush" Value="#FFFFFF" />
+      <Setter Property="SelectionBrush" Value="#B2A0E0" />
+      <Setter Property="SelectionForegroundBrush" Value="#1A1A1A" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.inspectorField:pointerover">
+      <Setter Property="Background" Value="#4A4A4A" />
+      <Setter Property="BorderBrush" Value="#8A8A8A" />
     </Style>
     <Style Selector="TextBox.inspectorField:focus">
       <Setter Property="BorderBrush" Value="#B2A0E0" />
+      <Setter Property="Background" Value="#4E4A5E" />
+    </Style>
+    <Style Selector="TextBox.inspectorField:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Grid.inspectorRow">
+      <Setter Property="Margin" Value="0,1" />
     </Style>
     <Style Selector="Grid.inspectorRow:pointerover">
       <Setter Property="Background" Value="#3A3A3A" />
+    </Style>
+    <Style Selector="Grid.inspectorRow:focus-within">
+      <Setter Property="Background" Value="#3E3E4A" />
+    </Style>
+    <Style Selector="CheckBox.inspectorCheck">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#E6E6E6" />
+    </Style>
+    <Style Selector="Border.unsupportedBadge">
+      <Setter Property="Background" Value="#3A3A3A" />
+      <Setter Property="BorderBrush" Value="#666666" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="8,5" />
     </Style>
     <Style Selector="Border.pane">
       <Setter Property="Background" Value="Transparent" />
@@ -488,12 +554,12 @@
                   </CheckBox>
                   <CheckBox x:Name="ConsoleEngineFilter" Classes="consoleToggle engine" IsChecked="True"
                             AutomationProperties.Name="Console engine filter" VerticalAlignment="Center" Margin="0,0,8,4"
-                            ToolTip.Tip="エンジンのログを表示（Info / Warning / Error）">
+                            ToolTip.Tip="Show engine logs (Info / Warning / Error)">
                     <TextBlock Text="Engine" VerticalAlignment="Center" />
                   </CheckBox>
-                  <TextBox x:Name="ConsoleSearch" Width="160" Margin="0,0,8,4" PlaceholderText="検索…" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
+                  <TextBox x:Name="ConsoleSearch" Width="160" Margin="0,0,8,4" PlaceholderText="Search…" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
                   <Button x:Name="ConsoleClear" Content="✕ Clear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" Margin="0,0,8,4" Padding="10,4" />
-                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" Margin="0,0,8,4" ToolTip.Tip="Play開始時に履歴を消去します" />
+                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" Margin="0,0,8,4" ToolTip.Tip="Clear history when Play starts" />
                   <Border Classes="metaPill" Margin="0,0,0,4">
                     <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" FontSize="11" />
                   </Border>
@@ -528,16 +594,16 @@
                 </ListBox>
                 <Grid Grid.Row="3" ColumnDefinitions="*,Auto" RowDefinitions="Auto,80">
                   <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,0,2">
-                    <TextBlock Text="詳細" Classes="columnHeader" />
-                    <TextBlock Text="選択中のログ" Classes="muted" FontSize="10" />
+                    <TextBlock Text="Details" Classes="columnHeader" />
+                    <TextBlock Text="Selected log" Classes="muted" FontSize="10" />
                   </StackPanel>
                   <Border Grid.Row="1" Classes="consoleCard" Padding="0" Margin="0,0,8,0">
                     <TextBox x:Name="ConsoleDetail" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                             Background="Transparent" BorderThickness="0" PlaceholderText="ログを選択すると詳細を表示します"
+                             Background="Transparent" BorderThickness="0" PlaceholderText="Select a log to show details"
                              AutomationProperties.Name="Console detail" />
                   </Border>
                   <Button Grid.Row="1" Grid.Column="1" x:Name="ConsoleCopy" Content="Copy" Click="OnConsoleCopy"
-                          VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.Name="Console copy" ToolTip.Tip="詳細をクリップボードにコピー" />
+                          VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.Name="Console copy" ToolTip.Tip="Copy details to clipboard" />
                 </Grid>
               </Grid>
             </TabItem>
@@ -552,21 +618,28 @@
                     PointerPressed="OnPanePointerPressed" DragDrop.AllowDrop="True">
           <TabItem Classes="first" Header="Inspector" AutomationProperties.Name="Inspector">
             <ScrollViewer Margin="8">
-              <StackPanel x:Name="ObjectInspector" IsVisible="False" Spacing="4">
-                <TextBox x:Name="ObjectName" Classes="inspectorField" AutomationProperties.Name="Object name" />
-                <TextBlock x:Name="NameError" Text="名前を入力してください。" Foreground="#FF5252"
+              <StackPanel x:Name="ObjectInspector" IsVisible="False" Spacing="6">
+                <TextBlock Text="NAME" Classes="caption" Margin="0,0,0,-2" />
+                <TextBox x:Name="ObjectName" Classes="inspectorField" PlaceholderText="Object name…" AutomationProperties.Name="Object name" />
+                <TextBlock x:Name="NameError" Text="Enter a name." Foreground="#FF9E99"
                            TextWrapping="Wrap" IsVisible="False" />
-                <TextBlock x:Name="ObjectId" Classes="objectId" MaxLines="1"
-                           HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
-                <StackPanel x:Name="AttachedClasses" IsVisible="False" Spacing="6" Margin="0,4,0,0">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
+                  <TextBlock Text="ID" Classes="caption" />
+                  <TextBlock x:Name="ObjectId" Classes="objectId" MaxLines="1" Grid.Column="1"
+                             HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
+                </Grid>
+                <StackPanel x:Name="AttachedClasses" IsVisible="False" Spacing="8" Margin="0,4,0,0">
                   <Separator Classes="divider" />
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock x:Name="ComponentsHeader" Text="Components" Classes="sectionHeader" />
-                    <TextBlock x:Name="ComponentsError" Classes="sectionHeader" Foreground="#FF5252" IsVisible="False" />
-                  </StackPanel>
-                  <StackPanel x:Name="ComponentEditors" Spacing="6" />
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBlock x:Name="ComponentsHeader" Text="Components" Classes="sectionHeader"
+                               VerticalAlignment="Center" />
+                    <TextBlock x:Name="ComponentsError" Classes="errorBadge" Grid.Column="1" IsVisible="False" />
+                  </Grid>
+                  <StackPanel x:Name="ComponentEditors" Spacing="8" />
                 </StackPanel>
-                <TextBlock x:Name="AttachError" Foreground="#FF5252" TextWrapping="Wrap" IsVisible="False" />
+                <TextBlock x:Name="NoComponentsHint" Classes="hint" IsVisible="False"
+                           Text="No components — drag a .cs file from Project to attach." />
+                <TextBlock x:Name="AttachError" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="False" />
               </StackPanel>
             </ScrollViewer>
           </TabItem>

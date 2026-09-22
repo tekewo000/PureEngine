@@ -12,32 +12,32 @@ public static class EditorOperationGate
     /// <summary>再読み込みを保留すべき理由。直ちに実行できる場合はnull。</summary>
     public static string? ReloadBlockReason(bool isPlaying, bool fileBusy, bool hasInputErrors)
     {
-        if (isPlaying) return "Play中は再読み込みを保留します。";
-        if (fileBusy) return "ファイル操作中は再読み込みを保留します。";
-        if (hasInputErrors) return "入力エラー中は再読み込みを保留します。";
+        if (isPlaying) return "Reload deferred while playing.";
+        if (fileBusy) return "Reload deferred during file operations.";
+        if (hasInputErrors) return "Reload deferred while there are input errors.";
         return null;
     }
 
     /// <summary>Play開始を拒否すべき理由。開始できる場合はnull。</summary>
     public static string? PlayBlockReason(bool alreadyPlaying, bool fileBusy, bool hasInputErrors)
     {
-        if (alreadyPlaying) return "既にPlay中です。";
-        if (fileBusy) return "ファイル操作中はPlayできません。";
-        if (hasInputErrors) return "Inspectorの入力エラーを修正してください。";
+        if (alreadyPlaying) return "Already playing.";
+        if (fileBusy) return "Cannot play during file operations.";
+        if (hasInputErrors) return "Fix the Inspector input errors.";
         return null;
     }
 
     /// <summary>シーンのファイル操作（開く・保存・新規・Explorer操作）を拒否すべき理由。実行できる場合はnull。</summary>
     public static string? FileOperationBlockReason(bool isPlaying, bool fileBusy)
     {
-        if (isPlaying) return "Play中はシーン操作できません。先にStopしてください。";
-        if (fileBusy) return "ファイル操作中です。";
+        if (isPlaying) return "Cannot operate on scenes while playing. Stop first.";
+        if (fileBusy) return "A file operation is in progress.";
         return null;
     }
 
     /// <summary>保存を拒否すべき理由。保存できる場合はnull。</summary>
     public static string? SaveBlockReason(bool hasInputErrors) =>
-        hasInputErrors ? "Inspectorの入力エラーを修正してください。" : null;
+        hasInputErrors ? "Fix the Inspector input errors." : null;
 
     /// <summary>未保存確認ダイアログが必要かどうか。入力エラー中の破棄も確認対象にする。</summary>
     public static bool NeedsUnsavedConfirmation(bool isDirty, bool hasInputErrors) =>

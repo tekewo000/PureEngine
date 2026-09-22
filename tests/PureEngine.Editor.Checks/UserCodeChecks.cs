@@ -144,7 +144,7 @@ static class UserCodeChecks
 
             var good = Player(editor);
             File.WriteAllText(file, Source(5) + "\nthis is broken;");
-            PumpUntil(() => editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("コンパイルに失敗"),
+            PumpUntil(() => editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("C# compilation failed"),
                 "Compiler errors must be reported.");
             Check(ReferenceEquals(good, Player(editor)), "Compile failure must keep the exact old instances.");
             Check(Field<List<LogEntry>>(editor, "_consoleHistory").Any(entry =>
@@ -176,7 +176,7 @@ static class UserCodeChecks
             file = Path.Combine(moved, "Player.cs");
             PumpUntil(() => owner.GetTypesForFile(file).Count == 1, "Folder moves must update source mapping.");
             File.Move(file, file + ".disabled");
-            PumpUntil(() => editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("反映できません"),
+            PumpUntil(() => editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("Cannot apply"),
                 "Renaming away the .cs extension must be detected.");
             Check(Version(editor) == 6, "Deleting an attached class must preserve the old scene.");
             File.Move(file + ".disabled", file);
@@ -310,12 +310,12 @@ static class UserCodeChecks
             var original = File.ReadAllText(path);
             Create("FilesCreateCSharpMenu", "CreatedFromTree");
             Check(File.ReadAllText(path) == original
-                && editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("既にあります"),
+                && editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("already exists"),
                 "Duplicate names must not overwrite existing files.");
             foreach (var invalid in new[] { "class", "123Bad", "../Escape", "Bad Name" })
             {
                 Create("FilesCreateCSharpMenu", invalid);
-                Check(editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("クラス名"), "Invalid class names must be rejected.");
+                Check(editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("class name"), "Invalid class names must be rejected.");
             }
             Create("FilesCreateCSharpMenu", null);
             Check(Directory.GetFiles(session.Project.ScenesDirectory, "*.cs").Length == 2,

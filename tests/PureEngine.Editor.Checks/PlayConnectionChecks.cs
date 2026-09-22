@@ -107,7 +107,7 @@ static class PlayConnectionChecks
             Check(!playButton.IsEnabled && stopButton.IsEnabled, "Playing must enable Stop and disable Play.");
             Check(!Control<ListBox>(editor, "SceneObjects").IsEnabled, "Playing must disable scene editing.");
             Check(!Control<TreeView>(editor, "ProjectTree").IsEnabled, "Playing must disable scene switching.");
-            Check(status.Text?.Contains("Playを開始") == true, "Play start must report status.");
+            Check(status.Text?.Contains("Play started") == true, "Play start must report status.");
             var timer = Field<DispatcherTimer?>(editor, "_playTimer");
             Check(timer is not null && timer.IsEnabled, "Play must drive Step on a timer.");
             StopTimer(editor);
@@ -127,7 +127,7 @@ static class PlayConnectionChecks
             Check(PlayCounter.Destroys == 1, $"Stop must destroy once, got {PlayCounter.Destroys}.");
             Check(playButton.IsEnabled && !stopButton.IsEnabled, "Stop must restore Play/Stop buttons.");
             Check(Control<ListBox>(editor, "SceneObjects").IsEnabled, "Stop must restore scene editing.");
-            Check(status.Text?.Contains("Playを停止") == true, "Stop must report status.");
+            Check(status.Text?.Contains("Stopped Play") == true, "Stop must report status.");
             var frozen = PlayCounter.Updates;
             Dispatcher.UIThread.RunJobs();
             Check(PlayCounter.Updates == frozen, "Update must stop after Stop.");
@@ -244,7 +244,7 @@ static class PlayConnectionChecks
             Dispatcher.UIThread.RunJobs();
             Check(!(bool)Call(editor, "get_IsPlaying")!, "Failed start must not stay playing.");
             Check(Field<PlaySession?>(editor, "_play") is null, "Failed start must release the session.");
-            Check(status.Text?.Contains("Playを開始できません") == true, "Failed start must report the reason.");
+            Check(status.Text?.Contains("Cannot start Play") == true, "Failed start must report the reason.");
             Check(Control<Button>(editor, "PlayButton").IsEnabled, "Failed start must restore buttons.");
             Check(Control<ListBox>(editor, "SceneObjects").IsEnabled, "Failed start must restore editing.");
             Check(PlayCounter.Starts == 0, "Failed start must not run other components.");

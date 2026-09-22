@@ -49,7 +49,7 @@ public partial class MainWindow
         _fileBusy = true;
         EditorSurface.IsEnabled = false;
         try { await operation(); }
-        catch (Exception error) { SetFileStatus($"操作に失敗しました: {error.GetBaseException().Message}", true); }
+        catch (Exception error) { SetFileStatus($"Operation failed: {error.GetBaseException().Message}", true); }
         finally { EditorSurface.IsEnabled = true; _fileBusy = false; FlushPendingUserCodeReload(); }
     }
 
@@ -58,7 +58,7 @@ public partial class MainWindow
         var saveBlock = EditorOperationGate.SaveBlockReason(HasInputErrors);
         if (saveBlock is not null)
         {
-            SetFileStatus($"保存できません。{saveBlock}", true);
+            SetFileStatus($"Cannot save. {saveBlock}", true);
             return false;
         }
         // Validation happens before picking or touching a destination file.
@@ -76,7 +76,7 @@ public partial class MainWindow
                 SuggestedStartLocation = await ExplorerSaveDirectory(),
             });
             if (file is null) return false;
-            path = file.TryGetLocalPath() ?? throw new IOException("ローカルの保存先を選択してください。");
+            path = file.TryGetLocalPath() ?? throw new IOException("Select a local save destination.");
         }
         _project?.ValidateScenePath(path);
         SceneFile.Write(path, yaml);
@@ -84,7 +84,7 @@ public partial class MainWindow
         _explorerSelectedFile = path;
         UpdateSceneTitle();
         RefreshProjectExplorer();
-        SetFileStatus($"保存しました: {path}");
+        SetFileStatus($"Saved: {path}");
         return true;
     }
 
@@ -96,7 +96,7 @@ public partial class MainWindow
             SuggestedStartLocation = await ScenePickerDirectory(),
         });
         if (files.Count == 0) return;
-        var path = files[0].TryGetLocalPath() ?? throw new IOException("ローカルのシーンを選択してください。");
+        var path = files[0].TryGetLocalPath() ?? throw new IOException("Select a local scene.");
         await OpenScenePathAsync(path);
     }
 
@@ -104,7 +104,7 @@ public partial class MainWindow
     {
         if (IsPlaying)
         {
-            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
         _project?.ValidateScenePath(path);
@@ -117,14 +117,14 @@ public partial class MainWindow
         // Saving the old scene during confirmation may overwrite the file just selected.
         restored = _sceneSerializer.Deserialize(File.ReadAllText(path), _editSession.Factory);
         SetCurrentScene(restored, path);
-        SetFileStatus($"読み込みました: {path}");
+        SetFileStatus($"Loaded: {path}");
     }
 
     private void SetCurrentScene(Scene restored, string? path)
     {
         if (IsPlaying)
         {
-            SetFileStatus("Play中はシーンを切り替えできません。先にStopしてください。", true);
+            SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
         var previous = _editScene.Replace(restored, path, dirty: false);
@@ -200,7 +200,7 @@ public partial class MainWindow
         dialog.Content = new StackPanel
         {
             Margin = new Thickness(20), Spacing = 20,
-            Children = { new TextBlock { Text = "シーンに未保存の変更があります。保存しますか？", TextWrapping = TextWrapping.Wrap }, buttons },
+            Children = { new TextBlock { Text = "The scene has unsaved changes. Save?", TextWrapping = TextWrapping.Wrap }, buttons },
         };
         var answer = await dialog.ShowDialog<string?>(this);
         return answer == "discard" || (answer == "save" && await SaveSceneAsync(false));

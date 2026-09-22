@@ -64,7 +64,7 @@ public sealed class ConsoleRow
             var first = lineEnd < 0 ? message : message[..lineEnd];
             first = first.Trim();
             if (first.Length == 0 && !string.IsNullOrEmpty(Entry.ExceptionDetail))
-                first = "(例外あり)";
+                first = "(exception)";
             const int max = 120;
             return first.Length > max ? first[..max] + "…" : first;
         }
@@ -77,12 +77,12 @@ public sealed class ConsoleRow
         {
             var entry = Entry;
             var location = string.IsNullOrEmpty(entry.FilePath)
-                ? "(場所不明)"
+                ? "(unknown location)"
                 : $"{entry.FilePath}:{entry.LineNumber} ({entry.MemberName})";
-            var body = string.IsNullOrEmpty(entry.Message) ? "(本文なし)" : entry.Message;
+            var body = string.IsNullOrEmpty(entry.Message) ? "(no message)" : entry.Message;
             if (string.IsNullOrEmpty(entry.ExceptionDetail))
-                return $"[{entry.Source}][{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}本文:{Environment.NewLine}{body}{Environment.NewLine}記録箇所:{Environment.NewLine}{location}";
-            return $"[{entry.Source}][{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}本文:{Environment.NewLine}{body}{Environment.NewLine}記録箇所:{Environment.NewLine}{location}{Environment.NewLine}例外詳細:{Environment.NewLine}{entry.ExceptionDetail}";
+                return $"[{entry.Source}][{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}Message:{Environment.NewLine}{body}{Environment.NewLine}Location:{Environment.NewLine}{location}";
+            return $"[{entry.Source}][{entry.Level}] {entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}{Environment.NewLine}Message:{Environment.NewLine}{body}{Environment.NewLine}Location:{Environment.NewLine}{location}{Environment.NewLine}Exception:{Environment.NewLine}{entry.ExceptionDetail}";
         }
     }
 }
