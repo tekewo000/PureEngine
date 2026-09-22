@@ -1,6 +1,6 @@
-using System.Runtime.CompilerServices;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -37,10 +37,9 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                 foreach (var member in Members(type))
                 {
                     var value = member is FieldInfo field ? field.GetValue(component) : ((PropertyInfo)member).GetValue(component);
-                    ValidateType(MemberType(member));
-                    if (value is float number && !float.IsFinite(number))
-                        throw new InvalidDataException($"{type.Name}.{member.Name}: a finite number is required.");
-                    values.Add(member.Name, value);
+                    var memberType = MemberType(member);
+                    InspectorValueTypes.ValidateType(memberType);
+                    values.Add(member.Name, InspectorValueTypes.ToStorable(value, memberType));
                 }
                 saved.Components.Add(new ComponentDocument
                 {
@@ -99,10 +98,10 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                     created.Add(component);
                     foreach (var member in members.Values)
                     {
-                        ValidateType(MemberType(member));
+                        InspectorValueTypes.ValidateType(MemberType(member));
                         // A newly added member keeps its class initializer when absent from older scenes.
                         if (!data.Values.TryGetValue(member.Name, out var raw)) continue;
-                        var value = ReadValue(raw, MemberType(member), $"{data.TypeId}.{member.Name}");
+                        var value = InspectorValueTypes.FromStorable(raw, MemberType(member), $"{data.TypeId}.{member.Name}");
                         if (member is FieldInfo field) field.SetValue(component, value);
                         else ((PropertyInfo)member).SetValue(component, value);
                     }
@@ -168,32 +167,6 @@ public sealed class SceneSerializer(ComponentRegistry registry)
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field
         ? field.FieldType : ((PropertyInfo)member).PropertyType;
-
-    private static void ValidateType(Type type)
-    {
-        if (type != typeof(string) && type != typeof(int) && type != typeof(float) && type != typeof(bool))
-            throw new InvalidDataException($"Unsupported Inspector value type: {type.FullName}");
-    }
-
-    private static object? ReadValue(object? raw, Type type, string path)
-    {
-        // Capture supplies typed scalars; the YAML reader supplies strings.
-        if (raw is not null && raw.GetType() == type && type != typeof(string))
-        {
-            if (raw is float number && !float.IsFinite(number))
-                throw new InvalidDataException($"{path}: a finite number is required.");
-            return raw;
-        }
-        // Untyped YAML scalars are strings; collections are never coerced into a scalar.
-        if (type == typeof(string) && (raw is null || raw is string)) return raw;
-        if (raw is string text)
-        {
-            if (type == typeof(int) && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer)) return integer;
-            if (type == typeof(float) && float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && float.IsFinite(number)) return number;
-            if (type == typeof(bool) && bool.TryParse(text, out var boolean)) return boolean;
-        }
-        throw new InvalidDataException($"{path}: invalid {type.Name} value.");
-    }
 
     private static (int Start, int Update, int Destroy) ReadPriorities(ComponentDocument data, Type type)
     {

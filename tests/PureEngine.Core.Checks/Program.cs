@@ -111,6 +111,7 @@ Check(projectOwner.TryAttach(dropTarget, typeof(PureEngine.Editor.Samples.RoundS
     && dropTarget.Components.Count == 2, "Different classes must coexist on the drop target.");
 
 ScenePersistenceChecks.Run();
+InspectorValueChecks.Run();
 ProjectPersistenceChecks.Run();
 ParentChecks.Run();
 TransformChecks.Run();

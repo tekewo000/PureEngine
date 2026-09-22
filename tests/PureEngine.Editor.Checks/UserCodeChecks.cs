@@ -66,6 +66,7 @@ static class UserCodeChecks
     public static void Run(string parent)
     {
         CheckLifecycleDiagnostics(parent);
+        CheckEnumReload(parent);
         using var created = ProjectSession.Create(parent, "UserCode");
         var project = created.Project;
         created.Dispose();
@@ -307,6 +308,74 @@ static class UserCodeChecks
         File.WriteAllText(sourcePath, source.Replace("[OnFrame] ", ""));
         Check(IsUnused(Build(), "Tick"), "Removing the lifecycle attribute must restore IDE0051.");
         Console.WriteLine("PASS: lifecycle IDE0051 suppression, aliases, unrelated attributes, ordinary methods, and attribute removal.");
+    }
+
+    private static void CheckEnumReload(string parent)
+    {
+        var file = Path.Combine(parent, "EnumReload.cs");
+        const string code = """
+            using System;
+            using System.Collections.Generic;
+            using PureEngine.Core;
+            public enum Mode : int { None = 0, Easy = 1, Hard = 2 }
+            public sealed class EnumComponent
+            {
+                [Inspector] public Mode Value = Mode.Hard;
+                [Inspector] public Mode? Maybe = Mode.Hard;
+                [Inspector] public Mode? Missing = null;
+                [Inspector] public Mode[] Array = [Mode.Hard];
+                [Inspector] public List<Mode?> List = [Mode.Hard, null];
+                [Inspector] public Dictionary<string, Mode?> Map = new() { ["key"] = Mode.Hard, ["null"] = null };
+            }
+            """;
+        File.WriteAllText(file, code);
+        using var original = new ProjectComponents();
+        var first = UserCodeCompiler.CompileFiles([file]);
+        Check(first.Success, "Enum fixture must compile.");
+        original.Adopt(first);
+        var scene = new Scene();
+        var item = scene.AddEmpty();
+        Check(original.TryAttach(item, first.AttachableTypes.Single()), "Enum fixture must attach.");
+        var serializer = new SceneSerializer(original.Registry);
+        var expected = serializer.Serialize(scene);
+        // Different initializers ensure migration restores edited data, not freshly constructed defaults.
+        var changed = code.Replace("Mode.Hard", "Mode.Easy");
+        foreach (var source in new[] { changed, changed.Replace("Hard = 2", "Hard = 2, Expert = 3") })
+        {
+            File.WriteAllText(file, source);
+            using var candidate = new ProjectComponents();
+            var compiled = UserCodeCompiler.CompileFiles([file]);
+            Check(compiled.Success, "Compatible enum fixture must compile.");
+            candidate.Adopt(compiled);
+            Check(compiled.AttachableTypes.Single() != first.AttachableTypes.Single(), "Reload must use a new assembly.");
+            var migrated = SceneCodeMigrator.Migrate(scene, original.Registry, candidate.Registry);
+            Check(new SceneSerializer(candidate.Registry).Serialize(migrated) == expected,
+                "Recompiled enum, nullable, array, list and dictionary values must survive migration.");
+        }
+        foreach (var source in new[]
+        {
+            changed.Replace("Mode", "OtherMode"),
+            changed.Replace("Mode : int", "Mode : long"),
+            changed.Replace("Hard = 2", "Hard = 3"),
+            changed.Replace("Hard = 2", "Renamed = 2"),
+            changed.Replace("public enum Mode", "[Flags] public enum Mode"),
+            changed.Replace("public Mode Value = Mode.Easy", "public int Value = 1"),
+        })
+        {
+            File.WriteAllText(file, source);
+            using var candidate = new ProjectComponents();
+            var compiled = UserCodeCompiler.CompileFiles([file]);
+            Check(compiled.Success, "Incompatible enum fixture must still compile.");
+            candidate.Adopt(compiled);
+            try
+            {
+                SceneCodeMigrator.Migrate(scene, original.Registry, candidate.Registry);
+                throw new Exception("Incompatible enum change was accepted.");
+            }
+            catch (InvalidDataException) { }
+            Check(serializer.Serialize(scene) == expected, "Failed enum migration must preserve the original scene.");
+        }
+        Console.WriteLine("PASS: recompiled Inspector enums and collections preserve values; incompatible definitions preserve the old scene.");
     }
 
     private static void CheckIdentitySafety(string parent)

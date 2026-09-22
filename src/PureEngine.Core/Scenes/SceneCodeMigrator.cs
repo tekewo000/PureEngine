@@ -20,7 +20,7 @@ public static class SceneCodeMigrator
             foreach (var oldMember in ComponentSchema.GetInspectorMembers(oldType))
             {
                 if (!members.TryGetValue(oldMember.Name, out var member)
-                    || MemberType(oldMember) != MemberType(member))
+                    || !CompatibleType(MemberType(oldMember), MemberType(member)))
                     throw new InvalidDataException(
                         $"{item.Name}/{id}.{oldMember.Name}: 削除・型変更により値を引き継げません。元の定義を戻して再保存してください。編集データは保持しています。");
             }
@@ -34,4 +34,22 @@ public static class SceneCodeMigrator
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field
         ? field.FieldType : ((PropertyInfo)member).PropertyType;
+
+    private static bool CompatibleType(Type before, Type after)
+    {
+        if (before == after) return true;
+        if (!InspectorValueTypes.IsSupportedType(before) || !InspectorValueTypes.IsSupportedType(after)) return false;
+        // Recompiled enums have new Type identities. Preserve existing names and numeric meanings.
+        if (before.IsEnum && after.IsEnum)
+            return before.FullName == after.FullName
+                && Enum.GetUnderlyingType(before) == Enum.GetUnderlyingType(after)
+                && before.IsDefined(typeof(FlagsAttribute), false) == after.IsDefined(typeof(FlagsAttribute), false)
+                && before.GetFields(BindingFlags.Public | BindingFlags.Static).All(field =>
+                    Equals(field.GetRawConstantValue(), after.GetField(field.Name)?.GetRawConstantValue()));
+        if (before.IsArray && after.IsArray)
+            return before.IsSZArray == after.IsSZArray && CompatibleType(before.GetElementType()!, after.GetElementType()!);
+        return before.IsGenericType && after.IsGenericType
+            && before.GetGenericTypeDefinition() == after.GetGenericTypeDefinition()
+            && before.GetGenericArguments().Zip(after.GetGenericArguments()).All(pair => CompatibleType(pair.First, pair.Second));
+    }
 }

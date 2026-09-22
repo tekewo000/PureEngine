@@ -68,7 +68,19 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - 属性のないメンバーはInspectorにも制作データの保存対象にも含めない。
 - 別の `[Serialize]` 属性は設けない。
 - 実行中に変化した値を、制作データへ自動で書き戻さない。
-- 非publicメンバー、readonly、読み取り専用プロパティ、対応する値の型の範囲は未決定。
+- 非publicメンバー、readonly、読み取り専用プロパティは対象外。対応する値の型は下記の範囲とする。
+
+対応する値の型（Coreの `InspectorValueTypes` で検証・変換し、Editorは同じ範囲を表示する）：
+
+- scalar：string・int・float・double・bool、対応する `Nullable<T>`（空欄＝null）
+- enum：通常のenumと `[Flags]` enum、対応する `Nullable<T>`。通常はドロップダウン、`[Flags]` はチェックボックス群とNoneクリアで編集する
+- `[Flags]` は複合値・符号付きの負値・`ulong` の最上位ビットにも対応する。チェック状態の同期は表示のみを更新し、ユーザー操作として値へ書き戻さない。
+- ベクトル：`Vector2`・`Vector3`・`Vector4`・`Quaternion`（各成分は有限のfloat、対応する `Nullable<T>` を含む）
+- `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
+- 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種と `Nullable<int/float/double/bool/enum>`、null可）
+- 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）
+
+`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。詳細なYAML形式は下記のYAML節を参照。
 
 ライフサイクルのPriorityはエンジン側のアタッチ設定として表示・保存するもので、ゲーム側メンバーの `[Inspector]` 指定とは別に扱う。
 
@@ -184,9 +196,9 @@ Update Priority    0
 ### YAML保存の構成（実装済み）
 
 - `SceneDocument` はversionとobjects、各オブジェクトはid・name・componentsを持つ保存用データ。
-- 各componentはtypeIdとvaluesを持つ。valuesは `[Inspector]` が付いたstring・int・有限のfloat・boolのみ。stringのnullにも対応する。
-- `ComponentRegistry` で固定文字列IDとC#型を明示登録する。Assetsと読み込みは同じ登録表を使う。C#のクラス名・名前空間を変更しても固定IDは維持する。
-- `SceneSerializer` はCoreに置き、Sceneと保存用データの変換・検証・YamlDotNetによるYAML処理を行う。Avaloniaに依存しない。
+- 各componentはtypeIdとvaluesを持つ。valuesは `[Inspector]` が付いた対応型（上記のInspector節）のみ。string・コレクション・`Transform`・`Nullable` のnullにも対応する。有限でないfloat／double（NaN・Infinity）は保存・読み込みとも拒否する。
+- `ComponentRegistry` で固定文字列IDとC#型を明示登録する。Assetsと読み込みは同じ登録表を使う。C#のクラス名・名前空間を変更しても固定IDは維持する。組み込みの `Transform` は `core.transform` で登録する。
+- `SceneSerializer` はCoreに置き、Sceneと保存用データの変換・検証・YamlDotNetによるYAML処理を行う。Avaloniaに依存しない。`Clone`（Play時の複製を含む）では配列・リスト・辞書・`Transform` を深く複製し、編集用と実行用の共有を残さない。
 - ファイル選択、保存先、未保存状態、確認・エラー表示、ファイルの置き換えはEditorが担当する。
 - 読み込みでは保存時のオブジェクトIDを復元する。全体の復元に成功してから編集中のSceneを入れ替え、ライフサイクルは実行しない。
 - 未対応のversion、未知のtypeId・メンバー、重複キー・ID・同型component、不正な値を拒否する。未知のデータを黙って破棄しない。
@@ -194,6 +206,48 @@ Update Priority    0
 - オブジェクト・componentの順番を維持し、valuesはメンバー名順で出力する。必要な文字列は引用し、独自タグ・アンカーは生成しない。コメントの保持は行わない。
 - 保存は同じフォルダの一時ファイルに書き込み、完了後に元ファイルと置き換える。
 - Parent・参照・Editor設定はそれぞれの機能を実装するときに追加する。
+
+#### Inspector拡張値のYAML形式（実装済み）
+
+- ベクトルはマッピング：`Vector2` は `{x, y}`、`Vector3` は `{x, y, z}`、`Vector4`・`Quaternion` は `{x, y, z, w}`。例：
+
+```yaml
+values:
+  Position: {x: 1, y: 2, z: 3}
+  Rotation: {x: 0, y: 0, z: 0, w: 1}
+```
+
+- `Transform` 型のメンバーは `LocalPosition`・`LocalRotation`・`LocalScale` のマッピング。`Transform` コンポーネント自体は同じ3メンバーをvaluesに持つ。例：
+
+```yaml
+values:
+  Target:
+    LocalPosition: {x: 7, y: 8, z: 9}
+    LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+    LocalScale: {x: 1, y: 1, z: 1}
+```
+
+- 配列・`List<T>` はシーケンス、辞書はマッピング。nullは `null`、空は `[]`・`{}`。例：
+
+```yaml
+values:
+  Scores: [10, -20, 30]
+  Tags: [a, b]
+  Counts:
+    alice: 3
+```
+
+- enumは名前で保存する（`[Flags]` の組み合わせは `Read, Write` の形式）。読み込みでは名前（大文字小文字を区別しない）と数値の両方を受け付ける。未知の名前は拒否する。例：
+
+```yaml
+values:
+  Level: Normal
+  Access: Read, Write
+```
+
+- C#再読み込みでは、enumの完全名・基底整数型・Flags属性と既存の全定数名／値が一致すれば、新しいアセンブリの型へ値を移行する。定数の追加は許可する。改名・削除・数値変更・基底型変更・Flags属性変更は拒否し、旧Sceneを保持する。対応するNullable・配列・List・辞書内のenumにも同じ判定を適用し、その他の型変更の拒否は維持する。
+
+- `version` は引き続き `1`。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。未知のキー・欠落・余分なキー・シーケンスとマッピングの取り違え・非有限数は拒否する。
 
 #### Priorityの保存形式と互換性（実装済み）
 

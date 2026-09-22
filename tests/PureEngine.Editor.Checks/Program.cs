@@ -87,6 +87,7 @@ internal static class Program
             Check(editor.IsVisible && !launcher.IsVisible, "Enter must open the selected recent project.");
 
             PriorityInspectorChecks.Run(editor);
+            InspectorValueEditorChecks.Run(editor);
             // Inspector checks leave unsaved objects; discard them so the following flow starts clean.
             editor.Close();
             Dispatcher.UIThread.RunJobs();

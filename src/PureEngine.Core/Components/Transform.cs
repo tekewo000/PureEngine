@@ -4,9 +4,9 @@ namespace PureEngine.Core;
 
 public sealed class Transform
 {
-    public Vector3 LocalPosition { get; set; } = Vector3.Zero;
-    public Quaternion LocalRotation { get; set; } = Quaternion.Identity;
-    public Vector3 LocalScale { get; set; } = Vector3.One;
+    [Inspector] public Vector3 LocalPosition { get; set; } = Vector3.Zero;
+    [Inspector] public Quaternion LocalRotation { get; set; } = Quaternion.Identity;
+    [Inspector] public Vector3 LocalScale { get; set; } = Vector3.One;
 
     public Matrix4x4 LocalMatrix => Matrix4x4.CreateScale(LocalScale)
                                     * Matrix4x4.CreateFromQuaternion(LocalRotation)

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Automation;
@@ -515,13 +516,34 @@ public partial class MainWindow : Window
             return check;
         }
 
-        return new Border
+        if (memberType == typeof(double))
+            return BuildDoubleEditor(component, member, automationName);
+        if (memberType == typeof(Vector2))
+            return BuildVector2Editor(component, member, automationName);
+        if (memberType == typeof(Vector3))
+            return BuildVector3Editor(component, member, automationName);
+        if (memberType == typeof(Vector4))
+            return BuildVector4Editor(component, member, automationName, isQuaternion: false);
+        if (memberType == typeof(Quaternion))
+            return BuildVector4Editor(component, member, automationName, isQuaternion: true);
+        if (memberType == typeof(PureEngine.Core.Transform))
+            return BuildTransformEditor(component, member, automationName);
+        if (memberType.IsEnum)
+            return BuildEnumEditor(component, member, automationName);
+        if (Nullable.GetUnderlyingType(memberType) is not null)
+            return BuildNullableEditor(component, member, automationName);
+        if (memberType.IsArray || (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            Classes = { "kindBadge", "unsupportedBadge" },
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Child = new TextBlock { Text = $"Unsupported: {memberType.Name}", FontSize = 11, Foreground = UnsupportedBadgeBrush },
-        };
+            if (InspectorValueTypes.IsSupportedType(memberType))
+                return BuildSequenceEditor(component, member, automationName);
+        }
+        if (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+        {
+            if (InspectorValueTypes.IsSupportedType(memberType))
+                return BuildDictionaryEditor(component, member, automationName);
+        }
+
+        return UnsupportedBadge(memberType);
     }
 
     private static readonly SolidColorBrush InvalidBrush = new(Color.Parse("#FF8A80"));
@@ -569,7 +591,7 @@ public partial class MainWindow : Window
         };
 
     private static string FormatMemberValue(object component, MemberInfo member) =>
-        GetMemberType(member) == typeof(float)
+        GetMemberType(member) is var type && (type == typeof(float) || type == typeof(double))
             ? Convert.ToString(GetMemberValue(component, member), CultureInfo.InvariantCulture) ?? "0"
             : GetMemberValue(component, member)?.ToString() ?? "0";
 

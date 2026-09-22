@@ -34,7 +34,7 @@
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
-| Inspector | string・int・float・boolの表示と編集、数値の無効表示・エラー数、Escで復元、非有限floatの拒否、存在するライフサイクルのPriority表示と編集 | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
+| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Components/InspectorValueTypes.cs) |
 | シーン保存 | YAML version 1、ID・名前・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
 | ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Project側の登録口（`ConfigureGameServices`）と組み込み登録から、編集・Play別のprovider＋Scopeで生成。登録変更を含む再読み込み・Project読み込みは成功後に採用し、失敗時は旧状態を維持。終了順と失敗時解放を維持 | [ProjectGameServices](../src/PureEngine.Editor/Game/ProjectGameServices.cs)、[GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Runtime/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
@@ -52,7 +52,7 @@
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
-- Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
+- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
 - ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
@@ -118,6 +118,21 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+### Inspector拡張（2026-09-22）
+
+enumレビューで見つかった3件（C#再読み込み時の型判定、複合Flagsの表示同期による値消失、ulong最上位ビットのOverflow）を修正後、`./tools/code-quality.ps1 -Check` がPASS（提案レベルの解析・警告をエラー扱いにしたDebugビルド・Core/Editorチェック、警告・エラー0件）。対応型と再読み込み互換性の正本は [EngineArchitecture.md](EngineArchitecture.md) のInspector節とYAML節。
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release
+dotnet run --project tests/PureEngine.Editor.Checks -c Release
+```
+
+- 追加分（Core・InspectorValueChecks）：double・Vector2／3／4・Quaternion・Transform・enum（Flags含む）・配列・List・Dictionary（stringキー）・NullableのYAML往復とClone分離（編集後の元変更が複製へ漏れない）、fr-FRでの不変書式、null・空の保持、非有限数・未知／欠落／余分キー・型違い・未対応型（独自クラス・入れ子・intキー）の拒否を確認。旧形式（scalarのみ）の読み込み互換を既存チェックで再確認。
+- 追加分（Editor・InspectorValueEditorChecks）：拡張値のUnsupported表示なし、ベクトル・double・enum（ドロップダウン・Flags・Nullable）・リスト要素・辞書値・Transform入れ子（Create／Null）の編集到達と未保存化、数値の無効表示・保存拒否・Esc復元、リスト・辞書のAdd／Remove、Transformコンポーネント（`core.transform`）のLocal編集をHeadlessで確認。
+- enum回帰（Editor・UserCodeChecks）：実際に別アセンブリへ再コンパイルし、enum・Nullable・配列・List・辞書の値保持と定数追加を確認。enum型名・基底型・定数名／値・Flags属性・メンバー型の非互換変更では移行を拒否し、旧Sceneの保存内容が変わらないことを確認。
+- Flags回帰（Editor Headless）：部分的な複合値の初期表示で値を変更しないこと、ReadWriteからWriteだけを外すとReadを保持すること、複合値の選択・None、ulong最上位ビットと符号付き負値の編集、Nullable・List・辞書の共通編集経路を確認。
+- 既存分：前回までの全項目を再確認。実画面の見た目、ネイティブファイルダイアログ、Project Explorerの全操作、タイマーの実測間隔は自動チェックの対象外。
 
 ### 診断対策・再発チェック（2026-09-22）
 

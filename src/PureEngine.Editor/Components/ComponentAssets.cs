@@ -24,6 +24,7 @@ public static class ComponentAssets
     public static void RegisterBuiltins(ComponentRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
+        registry.Register<Transform>("core.transform");
         registry.Register<Samples.PlayerStats>("sample.player-stats");
         registry.Register<Samples.RoundSettings>("sample.round-settings");
         registry.Register<Samples.InjectedPlayer>("sample.injected-player");

@@ -16,7 +16,8 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - Project Explorerの自作C#ファイルをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
-- Inspectorで `[Inspector]` 付きのstring・int・float・boolを編集し、YAMLで保存・読み込みできる。
+- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
+- enumはドロップダウン、`[Flags]` はチェックボックスとNoneボタンで編集する。自作enumを含むC#も保存後に自動反映する。互換性のない定義変更はConsoleに理由を表示し、編集中の値を保持する。
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
@@ -43,9 +44,9 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - 未保存の変更はタイトルの `*` で示す。別シーンを開くときや終了時にSave／Discard／Cancelを選ぶ。
 - Inspectorに入力エラーがある間は保存しない。成否とエラー詳細は画面下部に表示する。
 
-保存対象はオブジェクトのID・名前、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。
+保存対象はオブジェクトのID・名前、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。組み込みの `Transform` は `core.transform` で保存する。
 読み込みは別のSceneへ復元し、成功してから現在のSceneと入れ替える。保存は同じフォルダの一時ファイルへ書き終えてから置き換える。
-YAMLのコメントは再保存で失われる。Parent、オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。
+YAMLのコメントは再保存で失われる。Parent、オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
 
 ## Project
 
