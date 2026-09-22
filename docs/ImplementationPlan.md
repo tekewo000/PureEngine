@@ -30,6 +30,7 @@
 | Editorの配置 | 左がScene View／Game、中央がStuffs、右がInspector、下部がProject／Console。ペインのサイズ変更 | [MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除 | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs) |
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
+| コンポーネントの取り外し | InspectorカードのRemove、編集用Detach、Priority除去、Disposeの単発実行。他カードの入力と選択を保持し、Play中の取り外しを拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | ドラッグ＆ドロップ | Projectの自作C#ファイルからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
@@ -118,6 +119,12 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+### B1コンポーネント削除の統合（2026-09-22）
+
+B1のコンポーネント削除差分を現行mainのプロジェクト単位Registry・Inspectorへ統合。Coreでは同一参照のみのDetach、繰り返しの無操作、Priority除去、null／実行用Sceneの拒否を確認。Editor HeadlessではPlay中の拒否、削除時の単発DisposeとDestroyなし、兄弟カードの入力途中の値・エラー・選択保持、YAMLからの除去、再アタッチ、解放失敗時の報告、最後のカード削除後の空表示を確認。
+
+ローカルの `./tools/code-quality.ps1 -Check` がPASS。提案レベルの解析、警告をエラー扱いにしたDebugビルド（警告・エラー0件）、Core／Editorチェックを確認。GitHub Actionsと実画面での右クリック操作はこの記録時点では未確認。
 
 ### Inspector拡張（2026-09-22）
 

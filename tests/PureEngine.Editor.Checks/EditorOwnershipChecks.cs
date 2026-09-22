@@ -42,7 +42,8 @@ static class EditorOwnershipChecks
         owner.TryAttach(item, typeof(OwnershipProbe), services.Factory);
         var original = item.GetComponent<OwnershipProbe>()!;
         var path = Path.Combine(root, "ownership.pure.scene.yaml");
-        File.WriteAllText(path, new SceneSerializer(owner.Registry).Serialize(scene));
+        var originalYaml = new SceneSerializer(owner.Registry).Serialize(scene);
+        File.WriteAllText(path, originalYaml);
         OwnershipProbe.Created.Clear();
 
         ((Task)Call(editor, "OpenScenePathAsync", path)!).GetAwaiter().GetResult();
@@ -63,9 +64,67 @@ static class EditorOwnershipChecks
             && current.Disposes == 0, "Cancelled read must release its temporary copy and keep the current scene.");
 
         var objects = editor.FindControl<ListBox>("SceneObjects")!;
+        var target = EditScene(editor).Objects[0];
+        var sibling = new PlayerStats();
+        target.Attach(sibling);
         objects.SelectedIndex = 0;
+        Call(editor, "RefreshComponents");
+        Dispatcher.UIThread.RunJobs();
+        var cards = editor.FindControl<StackPanel>("ComponentEditors")!;
+        var removedCard = (Border)cards.Children[0];
+        var remove = removedCard.ContextMenu!.Items.OfType<MenuItem>().Single();
+        Check(Equals(remove.Header, "Remove"), "Component context menu must contain only Remove.");
+        Call(editor, "StartPlay");
+        Check(editor.IsPlaying, "Removal guard check requires Play.");
+        var playCopy = OwnershipProbe.Created[^1];
+        remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Check(target.Components.Count == 2 && current.Disposes == 0, "Remove must be blocked during Play.");
+        Call(editor, "StopPlay");
+        OwnershipProbe.Created.Remove(playCopy);
+        var removedInput = removedCard.GetVisualDescendants().OfType<TextBox>().Single();
+        var siblingInput = cards.Children[1].GetVisualDescendants().OfType<TextBox>()
+            .Single(box => Equals(box.GetValue(Avalonia.Automation.AutomationProperties.NameProperty), "PlayerStats.Hp"));
+        removedInput.Text = "invalid";
+        siblingInput.Text = "unfinished";
+        Dispatcher.UIThread.RunJobs();
+        Dirty(editor, false);
+        remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Check(target.Components.Count == 1 && ReferenceEquals(target.Components[0], sibling)
+            && ReferenceEquals(objects.SelectedItem, target), "Remove must preserve the object, selection, and sibling components.");
+        Check(current.Disposes == 1 && current.Destroys == 0 && current.DisposedWithLiveServices,
+            "Removing an editing component must dispose once without Destroy.");
+        Check(EditStore(editor).IsDirty && cards.Children.Count == 1
+            && editor.FindControl<TextBlock>("ComponentsHeader")!.Text == "Components (1)",
+            "Remove must update the Inspector and dirty state.");
+        Check(siblingInput.Text == "unfinished" && Field<HashSet<TextBox>>(editor, "_invalidFields").SetEquals([siblingInput]),
+            "Remove must clear only its own input errors and preserve sibling edits.");
+        siblingInput.Text = "123";
+        Dispatcher.UIThread.RunJobs();
+        var saved = (Task<bool>)Call(editor, "SaveSceneAsync", false)!;
+        Check(saved.GetAwaiter().GetResult(), "Scene must save after removal and input correction.");
+        var restored = new SceneSerializer(owner.Registry).Deserialize(File.ReadAllText(path));
+        Check(restored.Objects[0].GetComponent<OwnershipProbe>() is null
+            && restored.Objects[0].GetComponent<PlayerStats>()?.Hp == 123, "Saved scenes must exclude removed components.");
+        remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Check(current.Disposes == 1 && !EditStore(editor).IsDirty, "Stale Remove must not dispose twice or dirty the scene.");
+        Check(owner.TryAttach(target, typeof(OwnershipProbe), services.Factory), "Removed types must be attachable again.");
+        var reattached = target.GetComponent<OwnershipProbe>()!;
+        reattached.Failure = new ApplicationException("remove cleanup failed");
+        Call(editor, "RefreshComponents");
+        var failingCard = (Border)cards.Children[1];
+        failingCard.ContextMenu!.Items.OfType<MenuItem>().Single().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Check(reattached.Disposes == 1 && target.GetComponent<OwnershipProbe>() is null
+            && editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("remove cleanup failed"),
+            "Cleanup failure must be reported after detaching without retrying disposal.");
+        ((Border)cards.Children[0]).ContextMenu!.Items.OfType<MenuItem>().Single()
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Check(target.Components.Count == 0 && cards.Children.Count == 0
+            && !editor.FindControl<StackPanel>("AttachedClasses")!.IsVisible
+            && editor.FindControl<TextBlock>("NoComponentsHint")!.IsVisible, "The last component must be removable and show the empty hint.");
         Call(editor, "DeleteSelectedObject");
         Check(current.Disposes == 1 && current.DisposedWithLiveServices, "Deleting an edit object must release it.");
+        File.WriteAllText(path, originalYaml);
         Dirty(editor, false);
         ((Task)Call(editor, "OpenScenePathAsync", path)!).GetAwaiter().GetResult();
         var replaced = OwnershipProbe.Created[^1];
