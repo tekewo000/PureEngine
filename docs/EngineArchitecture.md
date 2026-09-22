@@ -12,7 +12,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 - **Runtime**：GameSession・PlaySessionによるサービス生成と実行接続。CoreとMicrosoft.Extensions.DependencyInjectionに依存し、Editor・Avaloniaには依存しない。
 - **Editor**：Coreのデータを編集する。制作画面には.NET 11とAvaloniaを使う。
 - **Analyzers**：ゲームの外部エディター向け診断を調整する。Roslynに依存する独立DLLをEditorに同梱する。Core・Runtimeからは参照しない。
-- **ゲーム実行部分**：描画・入力・ゲームコードの実行を接続する。具体的な構成は保留。
+- **ゲーム実行部分（設計方針）**：C#15製のVulkan描画・入力と既存Runtimeを接続し、EditorのGameと単体実行で描画処理を共有する。実装・実機検証は未着手。
 - **ゲーム側のコード**：配札・投票・勝敗判定などのルールを、描画やSteamから独立したC#で記述する。
 
 独自のカード表示や投票結果なども、標準部品と同じ仕組みで追加できることを目指す。
@@ -303,17 +303,19 @@ components:
 - 履歴はProject名とmanifestのローカルパスを最大12件保存する。保存先は `%LOCALAPPDATA%/PureEngine/recent-projects.json`。履歴が破損・保存不可でもProjectの作成・読み込みは妨げない。
 - Launcherから新規作成するProjectは空のMainシーンを持つ。Editor内でのProject作成・切り替え操作はLauncherへの復帰に統一する。
 
-## UI・描画・プレビュー：保留
+## UI・描画・プレビュー：設計方針（実装は未着手）
 
-以下は将来の構想であり、現時点では設計・実装を進めない。
+2026-09-22、描画の土台をC#15とVulkanで作る方針を実装計画へ反映した。以下は目標と責務であり、動作確認済みの機能ではない。作業順・候補技術・完了条件は [Vulkan描画の実装計画](VulkanRenderingPlan.md) を参照する。
 
-- 画像・文字・ボタンを配置し、位置・サイズ・色を編集・保存・再読み込みする。
-- ゲーム実行部分の描画をEditorに表示し、見た目と操作をプレビューする。
-- Sprite、アニメーション、2Dカメラへ拡張する。
-- UIレイアウトと、Spriteのゲーム空間での位置・回転・拡大縮小を、それぞれに適した形で扱う。
-- ゲーム制作者がゲーム内UIを自由にデザインできるようにする。
+- 制作者はScene Viewで画像・文字・ボタンを配置し、Inspectorで調整してシーンへ保存する。UnityのCanvas・RectTransformに近い親子・矩形配置の制作体験を目指す。具体的な保存形式・APIは実装前に確定する。
+- 描画本体と資源管理はリポジトリのC#15で実装し、既存バインディングからVulkanを呼ぶ。GPUドライバー等のネイティブ依存は残る。シェーダーはSPIR-Vを使い、HLSL等のソース言語とコンパイラは別途選定する。シェーダーまでC#15で書けるという意味ではない。
+- AvaloniaはEditorの操作画面を担当する。ゲーム内UIはゲーム用の描画処理で表示し、Avaloniaの標準UI部品への変換は行わない。
+- Vulkanで描いたGPU画像をAvaloniaの表示領域へ渡す経路を第一候補とする。既存Avalonia版・GPU・ドライバーでの埋め込み、同期、リサイズ、表示領域の破棄・再作成を最初に実機検証する。
+- Scene Viewは編集用Sceneを編集用の視点で表示し、選択枠・配置ハンドルを加える。ゲームのライフサイクルは実行しない。Gameは既存PlaySessionの実行用Sceneを表示し、ゲーム操作を受け付ける。Play中の編集禁止とStop後の編集データ保持を維持する。
+- 単体実行とEditorで描画・入力規則・Runtimeを共有し、ウィンドウと表示先への接続を分ける。Core／RuntimeはAvalonia・Vulkanに依存させず、GPU資源を保存データに含めない。
+- 最初は画面上の2D UIを対象とし、画像・日本語の文字・ボタン・矩形クリップを実装する。UIの矩形配置とゲーム空間のTransformは役割を区別する。World Space Canvas・3D・高度な演出編集は後続の範囲とする。
 
-描画技術、Editorへの埋め込み方法、実行アプリとの共有方法は保留。
+Windows x64から検証する計画。最低Vulkanバージョン・対応GPU・使用拡張・描画性能は試作後に記録し、現時点で保証しない。
 
 ## マルチプレイ・Steam：将来の構想
 
@@ -391,7 +393,7 @@ ProjectSessionのCreate/Open/OpenAsyncでProjectCodeWorkspace.Ensureを呼び、
 
 global.jsonはEngineビルド時に埋め込んだSDK設定を不足時のみコピーする。ゲームも.NET 11を使用し、Zed等の言語サーバーから同じSDKを解決する。Zed固有のユーザー設定は変更しない。これは編集用メタデータであり、RuntimeのRoslynコンパイルは引き続き独立している。
 
-ゲーム用csprojのLangVersionは、組み込みRoslyn 4.12に合わせて13.0とする。Engine本体のC# 15とは区別する。診断DLLは同じSDKとC# 15でビルドし、外部エディターのRoslynが.NET 10等で動作する場合にも読めるようnetstandard2.0を対象とする。
+ゲーム用csprojのLangVersionは、組み込みRoslyn 5.xに合わせて15.0とする。安定版NuGet（5.9.0）にLanguageVersion.CSharp15がまだ無いため、Editor内コンパイルはPreview設定でC#15相当として扱う。診断DLLは同じSDKとC# 15でビルドし、外部エディターのRoslynが.NET 10等で動作する場合にも読めるようnetstandard2.0を対象とする。
 
 既存のsln/slnxがなければPureEngine.Game.slnxを生成し、Roslynの自動読み込みの入口にする。TestProjectでcsproj単体よりもソリューション経由の読み込みが必要だったため、両方を用意する。
 

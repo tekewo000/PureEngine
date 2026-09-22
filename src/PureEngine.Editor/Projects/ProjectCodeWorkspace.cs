@@ -27,8 +27,8 @@ public static class ProjectCodeWorkspace
             new XElement("Project", new XAttribute("Sdk", "Microsoft.NET.Sdk"),
                 new XElement("PropertyGroup",
                     new XElement("TargetFramework", $"net{framework.Version.Major}.{framework.Version.Minor}"),
-                    // Match the embedded Roslyn compiler rather than the installed SDK's defaults.
-                    new XElement("LangVersion", "13.0"),
+                    // Match the embedded Roslyn 5.x (C#15) compiler rather than the installed SDK's defaults.
+                    new XElement("LangVersion", "15.0"),
                     new XElement("ImplicitUsings", "disable"),
                     new XElement("Nullable", "disable"),
                     new XElement("CheckForOverflowUnderflow", "true"),

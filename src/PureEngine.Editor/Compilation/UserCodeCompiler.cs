@@ -174,6 +174,8 @@ public static class UserCodeCompiler
                 readDiagnostics.Add(new UserCodeDiagnostic(file, 0, 0, "PE-READ", $"Cannot read file: {error.GetBaseException().Message}", true));
                 continue;
             }
+            // Roslyn 5.x の Preview は C#15 のプレビューに相当する。安定版 NuGet (5.9.0) に
+            // LanguageVersion.CSharp15 がまだ無いため、明示値ではなく Preview で最新を追う。
             trees.Add(CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview), file));
         }
         if (readDiagnostics.Any(d => d.IsError))

@@ -6,6 +6,8 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 設計方針・Attribute・Priority・保存データ・将来の構想は [EngineArchitecture.md](docs/EngineArchitecture.md) にまとめています。
 実装済みの範囲・制限・次の作業・検証状況は [実装計画・進捗](docs/ImplementationPlan.md) にまとめています。
 
+C#15＋VulkanによるScene View／Game表示と単体実行は [描画の実装計画](docs/VulkanRenderingPlan.md) を参照してください。現在は計画段階で、描画はまだ利用できません。まずScene Viewへの埋め込みを実機検証し、操作・ビルド手順は各機能の実装後に追加します。
+
 ## 現在できること
 
 - 灰色のダークテーマで、タブの切り替えとペインのサイズ変更ができる。
@@ -33,7 +35,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 | 対象 | ターゲット | C# |
 | --- | --- | --- |
 | Engine・Runtime・Editor・チェック | net11.0 | 15（SDK既定） |
-| 生成するゲーム用csproj | net11.0 | 13（組み込みRoslyn 4.12のコンパイル設定に合わせる） |
+| 生成するゲーム用csproj | net11.0 | 15（組み込みRoslyn 5.xのコンパイル設定に合わせる） |
 | PureEngine.Analyzers | netstandard2.0 | 15（外部エディターの実行環境との互換性を維持） |
 
 ## シーンの保存・読み込み
