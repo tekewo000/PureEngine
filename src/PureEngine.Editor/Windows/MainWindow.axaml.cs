@@ -281,7 +281,30 @@ public partial class MainWindow : Window
         body.Children.Add(new Separator { Classes = { "divider" }, Margin = new Thickness(0, 2) });
         foreach (var member in members)
             body.Children.Add(BuildMemberRow(component, member));
-        return new Border { Classes = { "componentCard" }, Child = body };
+        var remove = new MenuItem { Header = "Remove" };
+        var card = new Border
+        {
+            Classes = { "componentCard" }, Child = body,
+            ContextMenu = new ContextMenu { Items = { remove } },
+        };
+        card.ContextMenu.Opening += (_, _) => remove.IsEnabled = !IsPlaying;
+        remove.Click += (_, _) =>
+        {
+            if (RejectWhenPlaying("Remove") || !ComponentEditors.Children.Contains(card)) return;
+            if (!item.Detach(component)) return;
+            foreach (var box in card.GetVisualDescendants().OfType<TextBox>())
+                _invalidFields.Remove(box);
+            ComponentEditors.Children.Remove(card);
+            ComponentsHeader.Text = $"Components ({item.Components.Count})";
+            AttachedClasses.IsVisible = item.Components.Count > 0;
+            NoComponentsHint.IsVisible = item.Components.Count == 0;
+            UpdateErrorBadge();
+            MarkSceneChanged();
+            try { ComponentAssets.DisposeComponents([component]); }
+            catch (Exception error) { SetFileStatus(error.ToString(), true); }
+            QueuePendingUserCodeReload();
+        };
+        return card;
     }
 
     /// <summary>Attach settings, separate from Inspector members. Only lifecycles present on the class are shown.</summary>
@@ -358,7 +381,7 @@ public partial class MainWindow : Window
         box.SetValue(AutomationProperties.NameProperty, $"{type.Name}.{kind}Priority");
         box.TextChanged += (_, _) =>
         {
-            if (IsPlaying) return;
+            if (IsPlaying || !box.GetVisualAncestors().Contains(ComponentEditors)) return;
             if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
             {
                 if (getter() != value)
@@ -561,6 +584,7 @@ public partial class MainWindow : Window
 
     private void MarkInvalid(TextBox box, string? message, string? validTip = null)
     {
+        if (!box.GetVisualAncestors().Contains(ComponentEditors)) return;
         if (message is null)
         {
             box.ClearValue(TextBox.BorderBrushProperty);

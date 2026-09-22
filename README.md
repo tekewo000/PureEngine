@@ -14,6 +14,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - 自作C#はProject内の任意フォルダから読み込み、元のフォルダ内のファイルをドラッグしてアタッチできる。エンジン側への手動登録は不要。組み込みサンプルのComponents一覧は表示しない。
 - Scene View／Gameは左、Stuffsは中央、Inspectorは右に配置する。
 - Project Explorerの自作C#ファイルをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
+- Inspectorのコンポーネントカードを右クリックして「Remove」で取り外す。削除は未保存の変更になり、保存後のシーンからも除かれる。Play中は取り外せない。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
 - Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
