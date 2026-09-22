@@ -14,6 +14,8 @@
 
 ## 現在の到達点
 
+2026-09-22、診断対策と再発チェックを追加（コミット `d653219`）。namespaceを維持したコード整理、提案レベルを含む一括修正・検査、CI設定、ゲーム用のライフサイクルIDE0051抑制を実装済み。詳細は下記の検証状況を参照。
+
 **LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値とPriorityを編集し、YAMLで保存・復元できる。**
 
 制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene View／Gameの描画はまだ行わない。
@@ -39,14 +41,17 @@
 | 保存時の保護 | 未保存確認、入力エラー中の保存拒否、検証後のシーン切り替え、一時ファイルからの置き換え | [MainWindow.Persistence](../src/PureEngine.Editor/Windows/MainWindow.Persistence.cs)、[SceneFile](../src/PureEngine.Editor/Scenes/SceneFile.cs) |
 | 共通ログとConsole | `Log.Info/Warning/Error` の共有API、呼び出し元・例外詳細の保持、有界キュー。Consoleの一覧・フィルター・検索・詳細・コピー・Clear／Clear on Play、Play開始・停止・失敗とRuntime全件の重複なし取り込み | [Log](../src/PureEngine.Core/Log.cs)、[MainWindow.Console](../src/PureEngine.Editor/Windows/MainWindow.Console.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | ProjectごとのC# | 任意フォルダのC#からアタッチ、保存・移動の監視、Stop後の反映、未保存値・Priority保持、失敗時の旧状態保持とConsole診断 | [UserCodeCompiler](../src/PureEngine.Editor/Compilation/UserCodeCompiler.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs) |
-| 外部C#エディター | 新規作成・既存Projectを開く際にnet11.0のcsproj・slnxと不足分のSDK設定を生成。手動設定は保持 | [ProjectCodeWorkspace](../src/PureEngine.Editor/Projects/ProjectCodeWorkspace.cs) |
-| ソース構成 | srcに実装、testsにチェック、docsに文書、toolsに起動スクリプト | [PureEngine.slnx](../PureEngine.slnx) |
+| 外部C#エディター | 新規作成・既存Projectを開く際にnet11.0のcsproj・slnxと不足分のSDK設定を生成。Core・DI・Analyzer参照を含み、手動設定は保持 | [ProjectCodeWorkspace](../src/PureEngine.Editor/Projects/ProjectCodeWorkspace.cs) |
+| ライフサイクルの未使用診断 | Start・Update・Destroy属性付きメソッドのIDE0051だけを抑制。通常の未使用メソッド・別の同名属性には診断を残す | [LifecycleUsageSuppressor](../src/PureEngine.Analyzers/LifecycleUsageSuppressor.cs)、[UserCodeChecks](../tests/PureEngine.Editor.Checks/UserCodeChecks.cs) |
+| コード品質 | 規約固定、一括修正、提案レベルの再解析、警告をエラー扱いにしたビルド、Core/Editorチェック。push/PR向けCI設定を追加 | [.editorconfig](../.editorconfig)、[code-quality.ps1](../tools/code-quality.ps1)、[CI](../.github/workflows/code-quality.yml) |
+| ソース構成 | srcに実装と診断DLL、testsにチェック、docsに文書、toolsに起動・品質検査スクリプト | [PureEngine.slnx](../PureEngine.slnx) |
 
 ## まだできないこと・制限
 
 - Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。ゲーム画面の描画・プレビューは未実装。
 - Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
+- ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
 - ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
@@ -113,6 +118,19 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+### 診断対策・再発チェック（2026-09-22）
+
+コミット `d653219` の実装で `./tools/code-quality.ps1 -Check` がPASS。Debug構成のビルドは警告・エラー0件、提案レベルの解析に残件なし、Core/Editorチェックもすべて成功した。
+
+- 実際のSDKのIDE0051診断を使い、Suppressorなしでは全対象に診断が出ること、追加後はStart・Update・Destroy属性付きだけ消えることを確認。通常メソッド、別の同名属性、属性の別名・完全修飾名、属性を外した後の診断復帰も確認した。
+- 生成csprojのAnalyzer DLL参照、新規生成・既存Projectへの補完・手動管理設定の保持をEditorチェックで確認した。
+- 一時的なCA1822違反を入れ、`-Check` がソースを変更せず失敗し、修正モードもインスタンスメソッドを勝手にstatic化せず残件を報告することを確認した。
+- 既存namespace宣言の変更がないことを差分で確認。ライフサイクルや異常系テストに必要な例外は理由付きで局所的に抑制した。
+
+GitHub Actionsのワークフローは追加済み。GitHub上での実行結果は未確認。今回のIDE0051検証は実際のRoslynによる生成プロジェクトのビルドで行い、Zed画面を直接確認した結果ではない。
+
+### これまでの機能検証
 
 2026-09-22、A1〜A5の統合後にCore／EditorのReleaseチェックがPASS。実際のEditor経路で非同期結果の採用順、編集中の値保持、Play・ファイル操作・入力エラー中の保留、終了後の結果解放、起動時のキャンセル、プロジェクト登録と共通Runtimeの接続を確認。UI応答とComponent生成スレッドはAvalonia Headlessで確認した。詳細は[改善計画の証跡](ArchitectureImprovements.md)を参照。
 

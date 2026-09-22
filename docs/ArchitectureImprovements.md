@@ -98,3 +98,11 @@ dotnet run --project tests/PureEngine.Editor.Checks -c Release
 追加の統合チェックでは、実際のMainWindow経路で完了順逆転、現在値・選択・Priorityの保持、旧Componentの単発解放、Play／ファイル操作／入力エラーによる保留、終了後の結果解放を確認した。ProjectSession.OpenAsyncではUI応答、UIスレッドでのComponent生成、キャンセル後の解放と別Sessionの保持を確認した。
 
 UI応答の確認はAvalonia Headlessで行った。ネイティブ画面の目視検証や、実ゲームの描画性能測定を行った結果ではない。
+
+## 統合後の診断対策と保守手順
+
+2026-09-22、`d653219` でコードの提案診断を整理し、[code-quality.ps1](../tools/code-quality.ps1) とCI設定を追加した。今後の変更は `./tools/code-quality.ps1 -Check` で提案レベルの解析・ビルド・Core/Editorチェックを実行する。自動修正と例外の扱いは [AGENTS.md](../AGENTS.md) を基準とする。
+
+Editorには外部エディター用の `PureEngine.Analyzers` を同梱する。ゲーム用csprojにAnalyzer参照を追加し、ライフサイクル属性付きメソッドのIDE0051だけを抑制する。CoreとRuntimeは診断DLLに依存せず、A1〜A5の実行・所有権の分離を維持する。
+
+既存チェックと実際のRoslynでの診断抑制チェックはPASS。検証の範囲・CIの確認状況は [実装計画・進捗](ImplementationPlan.md)、ゲーム側への反映手順は [README](../README.md) に記載する。

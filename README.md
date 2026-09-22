@@ -28,6 +28,12 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 - Avalonia 12.1.2 / Fluent ダークテーマ
 - YamlDotNet 18.1.0
 
+| 対象 | ターゲット | C# |
+| --- | --- | --- |
+| Engine・Runtime・Editor・チェック | net11.0 | 15（SDK既定） |
+| 生成するゲーム用csproj | net11.0 | 13（組み込みRoslyn 4.12のコンパイル設定に合わせる） |
+| PureEngine.Analyzers | netstandard2.0 | 15（外部エディターの実行環境との互換性を維持） |
+
 ## シーンの保存・読み込み
 
 - File → Open Scene（Ctrl+O）：シーンを読み込む。
@@ -69,19 +75,12 @@ ProjectごとのC#読み込み・自動反映に対応。素材の取り込み�
 
 ## 自作C#と自動反映
 
-生成するゲーム用csprojには、Zed/Roslyn向けのライフサイクル診断Suppressorを自動登録します。
-PureEngineの `[Start]`・`[Update]`・`[Destroy]` が付いたprivateメソッドは、未使用メソッドの診断IDE0051から除外します。
-通常の未使用メソッドや別の同名属性には診断が残ります。ゲームコードにpragmaを追加する必要はありません。
-既存の生成済みプロジェクトは、更新したEditorで開き直すと参照が更新されます。Zedに古い診断が残る場合は言語サーバーを再起動してください。
-手動管理のcsprojは上書きしないため、Editorに同梱された `PureEngine.Analyzers.dll` をAnalyzer参照として追加してください。
-
 Project内に、例えば `Gameplay/Actors/Player.cs` を作成します。専用のComponentsフォルダは不要です。
 
 Project欄のフォルダまたはファイル一覧を右クリックして **Create C#** を選ぶと、ファイル名を指定してC#を作成できます（.csは省略可）。ひな形は `public sealed class ファイル名` と空の本体です。同名ファイルは上書きしません。作成後は通常の自動コンパイルでアタッチ可能になります。
 
 ```csharp
 using PureEngine.Core;
-using PureEngine.Core.Attributes;
 
 namespace MyGame;
 
@@ -107,11 +106,23 @@ public class Player
 
 ## ZedなどでC#を編集する
 
-新規Projectの作成時、および既存Projectを開くときに、編集用の `PureEngine.Game.csproj`・`PureEngine.Game.slnx` と不足している `global.json` を自動生成します。ゲームのターゲットは **.NET 11（net11.0）**。PureEngine.Core・DIライブラリへの参照と、エンジンが使用するSDKの指定を含みます。
+新規Projectの作成時、および既存Projectを開くときに、編集用の `PureEngine.Game.csproj`・`PureEngine.Game.slnx` と不足している `global.json` を自動生成します。ゲームのターゲットは **.NET 11（net11.0）**。PureEngine.Core・DIライブラリへの参照、ライフサイクル診断用のAnalyzer参照、エンジンが使用するSDKの指定を含みます。
 
 ZedではC#拡張を導入し、Projectのルートフォルダ（csprojがあるフォルダ）を開いてください。Roslynが補完・診断・using追加に必要な型情報を読み込めます。必要な.NET 11 SDKがインストールされ、Zedからdotnetを実行できることが前提です。既にフォルダを開いていた場合は言語サーバーを再起動するか、フォルダを開き直してください。
 
 生成したcsprojの参照先はProjectを開くたびに更新します。手動作成のcsprojが既にある場合は自動生成を避け、既存のソリューション・global.jsonやZedの設定も上書きしません。自動生成ファイルを自分で管理する場合は先頭の生成コメントを外してください。このcsprojは外部エディター向けです。独自のPackageReferenceやビルド設定をエンジン内のコンパイルへ取り込む機能は含みません。
+
+### privateライフサイクルメソッドの未使用診断
+
+PureEngineの `[Start]`・`[Update]`・`[Destroy]` が付いたメソッドは、エンジンがリフレクションで呼び出します。
+同梱の [LifecycleUsageSuppressor](src/PureEngine.Analyzers/LifecycleUsageSuppressor.cs) が、これらのメソッドのIDE0051（未使用privateメソッド）だけを抑制します。ゲームコードにpragmaを追加する必要はありません。
+
+- 通常の未使用メソッドや、別の名前空間にある同名属性のメソッドにはIDE0051が残ります。
+- 属性の別名・完全修飾名にも対応し、属性を外すとIDE0051の対象に戻ります。
+- CA1822（static化）など他の診断や、実行前のライフサイクル宣言の検証は対象外です。
+
+既存の生成済みプロジェクトは、更新したEditorで開き直すとAnalyzer参照が更新されます。Zedに古い診断が残る場合は言語サーバーを再起動してください。
+手動管理のcsprojは上書きしないため、Editorに同梱された `PureEngine.Analyzers.dll` を `<Analyzer Include="DLLのパス" />` としてItemGroupに追加してください。
 
 ## 起動
 
@@ -138,8 +149,11 @@ dotnet run --project src/PureEngine.Editor
 - `src/PureEngine.Core/`：シーン・オブジェクト・属性の定義。
 - `src/PureEngine.Runtime/`：UI非依存のサービス生成とPlay実行接続。
 - `src/PureEngine.Editor/`：Avaloniaによる編集画面。
+- `src/PureEngine.Analyzers/`：ゲーム用のライフサイクル診断Suppressor。Editorから配布する。
 - `tests/PureEngine.Core.Checks/`：Coreの動作チェック。
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
+- `tools/code-quality.ps1`：一括修正・提案診断・ビルド・Core/Editorチェック。
+- `.github/workflows/code-quality.yml`：push/PR時に同じ品質チェックを実行。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
 Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。ゲーム画面の描画、Steam連携、ゲーム内UI配置はまだ実装していません。
@@ -237,7 +251,7 @@ if (play.Runtime.IsRunning) play.Step(1f / 60f);
 `PlaySession.Stop()` と `Dispose()` はどちらもサービスまで終了します。コールバック中の停止は、そのコールバックと Component の終了処理が完了してからサービスを解放します。ライフサイクル例外による自動停止も同じ順序です。停止後も `Runtime.Errors` を確認できます。
 編集用 Component はシーン切替・オブジェクト削除・読み込みキャンセル・ウィンドウ終了で Dispose し、ゲーム用の Destroy は呼びません。ウィンドウ終了では Component を先に、サービスを後に解放します。
 
-## コアの動作確認
+## コード品質と一括チェック
 
 コードの提案をまとめて修正し、残りの診断・ビルド・Core/Editorチェックまで実行します。
 
@@ -246,10 +260,16 @@ if (play.Runtime.IsRunning) play.Step(1f / 60f);
 ```
 
 変更せずに検査する場合は `./tools/code-quality.ps1 -Check`。GitHub Actionsもpush/PRで同じ検査を実行します。
-ルールは `.editorconfig`、SDKは `global.json` で固定します。namespaceの名前・有無・宣言形式は修正対象外です。
+対象は `PureEngine.slnx`。リポジトリの `.editorconfig`、SDKの `global.json`、エージェント向けの [AGENTS.md](AGENTS.md) を共通の基準にします。生成したゲーム用プロジェクトへ、この品質設定一式を自動コピーする機能ではありません。
+namespaceの名前・有無・宣言形式は修正対象外です。
 static化・未使用引数の削除・引数順序の変更は自動適用せず、呼び出し元とリフレクション利用を確認して修正します。
 `[Start]`・`[Update]`・`[Destroy]` はインスタンスメソッドのまま維持し、必要なCA1822の例外はその宣言に理由付きで記載します。
 コールバックで使わない引数は削除せず `_` と命名します。画面バインディングや異常系テストも必要な例外だけ局所的に抑制します。
+
+検査は `dotnet format style/analyzers --severity info` 相当、警告をエラー扱いにしたビルド、Core/Editorチェックの順です。修正できない診断は残件として失敗するため、内容を確認して手動対応してください。
+スクリプトはSDK 11 RC1の `dotnet format` 起動パスの問題を避けるため、選択されたSDK内のformatter DLLを直接実行します。
+
+## 個別の動作確認
 
 追加・名前変更・検証・ID・削除・アタッチ・属性検出に加えて、YAMLの保存と復元、文字列の保持、不正データの拒否、保存失敗時の元ファイル保護を確認します。SDKが使える環境で実行してください。
 

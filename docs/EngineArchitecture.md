@@ -11,6 +11,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 - **Core**：シーン、オブジェクト、アタッチしたクラスとその実行を扱う。AvaloniaやSteamには依存させない。
 - **Runtime**：GameSession・PlaySessionによるサービス生成と実行接続。CoreとMicrosoft.Extensions.DependencyInjectionに依存し、Editor・Avaloniaには依存しない。
 - **Editor**：Coreのデータを編集する。制作画面には.NET 11とAvaloniaを使う。
+- **Analyzers**：ゲームの外部エディター向け診断を調整する。Roslynに依存する独立DLLをEditorに同梱する。Core・Runtimeからは参照しない。
 - **ゲーム実行部分**：描画・入力・ゲームコードの実行を接続する。具体的な構成は保留。
 - **ゲーム側のコード**：配札・投票・勝敗判定などのルールを、描画やSteamから独立したC#で記述する。
 
@@ -45,7 +46,7 @@ UI中心のカードゲーム・ボードゲーム・政治や経営の対戦ゲ
 
 ## Attribute
 
-属性の名前空間は `PureEngine.Core.Attributes`。属性クラス自体は中身を持たないマーカーとする。
+属性の名前空間は `PureEngine.Core`。属性クラス自体は中身を持たないマーカーとする。
 
 | 属性 | 対象 | 意味 |
 | --- | --- | --- |
@@ -308,11 +309,23 @@ Project開始時も候補Registryで起動シーンの読み込みが成功し�
 
 ## 外部エディターのC# Workspace
 
-ProjectSessionのCreate/OpenでProjectCodeWorkspace.Ensureを呼び、net11.0のPureEngine.Game.csprojを生成する。起動中EngineのPureEngine.Core.dllを参照し、再Openで参照パスを更新する。生成コメントがない既存csprojは上書きしない。他名のcsprojがある場合も重複生成しない。
+ProjectSessionのCreate/Open/OpenAsyncでProjectCodeWorkspace.Ensureを呼び、net11.0のPureEngine.Game.csprojを生成する。起動中EngineのPureEngine.Core.dllとDIライブラリを参照し、PureEngine.Analyzers.dllをAnalyzerとして登録する。再Openで参照パスを更新する。生成コメントがない既存csprojは上書きしない。他名のcsprojがある場合も重複生成しない。
 
 global.jsonはEngineビルド時に埋め込んだSDK設定を不足時のみコピーする。ゲームも.NET 11を使用し、Zed等の言語サーバーから同じSDKを解決する。Zed固有のユーザー設定は変更しない。これは編集用メタデータであり、RuntimeのRoslynコンパイルは引き続き独立している。
 
+ゲーム用csprojのLangVersionは、組み込みRoslyn 4.12に合わせて13.0とする。Engine本体のC# 15とは区別する。診断DLLは同じSDKとC# 15でビルドし、外部エディターのRoslynが.NET 10等で動作する場合にも読めるようnetstandard2.0を対象とする。
+
 既存のsln/slnxがなければPureEngine.Game.slnxを生成し、Roslynの自動読み込みの入口にする。TestProjectでcsproj単体よりもソリューション経由の読み込みが必要だったため、両方を用意する。
+
+### ライフサイクルのIDE0051抑制
+
+[LifecycleUsageSuppressor](../src/PureEngine.Analyzers/LifecycleUsageSuppressor.cs) は、メソッドに付いたStartAttribute・UpdateAttribute・DestroyAttributeを型シンボルで識別し、IDE0051だけを抑制する。短い属性名の文字列比較ではないため、別の名前空間の同名属性は対象外で、別名や完全修飾名は同じ属性として扱える。
+
+通常の未使用メソッドの診断は維持する。ゲームコードへの呼び出し追加・書き換え・pragma挿入は行わない。CA1822等の他の診断やComponentSchemaによる不正なライフサイクル宣言の拒否は変更しない。手動管理のcsprojでは利用者がAnalyzer参照を追加する。
+
+### リポジトリのコード品質
+
+規約の正本は [.editorconfig](../.editorconfig)、作業手順は [AGENTS.md](../AGENTS.md)。namespaceの名前・有無・宣言形式は維持する。採用した診断はビルドでも検査し、[code-quality.ps1](../tools/code-quality.ps1) で提案レベルの診断・ビルド・既存チェックを一括実行する。static化や引数変更はリフレクション利用を確認して個別対応する。ゲーム用IDE0051抑制とリポジトリ全体の品質設定は別の適用範囲を持つ。
 
 
 ## クラスの改名と永続ID
