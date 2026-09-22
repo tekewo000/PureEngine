@@ -22,15 +22,27 @@ public sealed class VulkanViewport : Control
     private ICompositionImportedGpuImage? _image;
     private VulkanRenderer? _renderer;
     private DrawList? _drawList;
+    private ImageRenderingSample? _sample;
     private bool _attached, _failed, _closing;
     private Window? _window;
     private string? _failure;
+    private bool _resetAtlas;
     public event Action<string>? RenderingFailed;
     public int FrameCount { get; private set; }
     public string? DeviceName => _renderer?.DeviceName;
     public string? Failure => _failure;
 
+    /// <summary>編集Sceneの描画入口。未設定なら検証用サンプルを描く。例外は投げず、失敗時は描画を止めて通知する。</summary>
+    public Action<DrawList, Vector2>? SceneBuilder { get; set; }
+
     public VulkanViewport() => _timer.Tick += Tick;
+
+    /// <summary>Invalidate on the UI thread; apply inside the next serialized frame after the previous presentation.</summary>
+    public void InvalidateImageCache()
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        _resetAtlas = true;
+    }
 
     public static AppBuilder Configure(AppBuilder builder) => builder.With(new Win32PlatformOptions
     {
@@ -111,7 +123,7 @@ public sealed class VulkanViewport : Control
                     throw new NotSupportedException("Multiple compositor adapters are not supported by this application context.");
                 _renderer = new VulkanRenderer(_applicationDevice);
                 _drawList = new DrawList();
-                RenderingSample.Build(_drawList);
+                _sample = new ImageRenderingSample();
                 _surface = compositor.CreateDrawingSurface();
                 _visual = compositor.CreateSurfaceVisual();
                 _visual.Surface = _surface;
@@ -124,7 +136,15 @@ public sealed class VulkanViewport : Control
                 await RetireImports();
                 _renderer.Resize(size.Width, size.Height);
             }
-            _renderer.Render(_drawList!, new Vector2((float)Bounds.Width, (float)Bounds.Height));
+            var logicalSize = new Vector2((float)Bounds.Width, (float)Bounds.Height);
+            if (_resetAtlas)
+            {
+                _drawList!.ResetAtlas();
+                _resetAtlas = false;
+            }
+            if (SceneBuilder is not null) SceneBuilder(_drawList!, logicalSize);
+            else _sample!.Build(_drawList!, logicalSize);
+            _renderer.Render(_drawList!, logicalSize);
             if (_image is null)
             {
                 using var memory = _renderer.ExportImage();
@@ -170,6 +190,7 @@ public sealed class VulkanViewport : Control
             _surface?.Dispose(); _surface = null;
             _renderer?.Dispose(); _renderer = null;
             _drawList?.Dispose(); _drawList = null;
+            _sample = null;
             _visual = null; _interop = null;
         }
     }

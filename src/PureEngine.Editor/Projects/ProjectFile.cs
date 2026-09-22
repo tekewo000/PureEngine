@@ -91,10 +91,7 @@ public sealed class ProjectFile
         if (!path.StartsWith(ScenesDirectory + Path.DirectorySeparatorChar, PathComparison)
             || !path.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Save inside the project's Scenes folder as .pure.scene.yaml.");
-        // Do not let a linked directory silently redirect a project-relative path outside the project.
-        for (var entry = path; !string.Equals(entry, RootDirectory, PathComparison); entry = Path.GetDirectoryName(entry)!)
-            if (Path.Exists(entry) && (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidDataException("Links to files or folders cannot be used for project scenes.");
+        ValidateProjectPath(RootDirectory, path);
     }
 
     public IReadOnlyList<string> ListScenes() => Directory.EnumerateFiles(ScenesDirectory, "*", new EnumerationOptions
@@ -133,15 +130,26 @@ public sealed class ProjectFile
         return path;
     }
 
-    public void ValidateFolderPath(string path)
+    public void ValidateFolderPath(string path) => ValidateProjectPath(RootDirectory, path);
+
+    /// <summary>Rejects escaping paths and links below the explicitly selected root, including dangling links.</summary>
+    internal static void ValidateProjectPath(string root, string path)
     {
+        root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         path = Path.GetFullPath(path);
-        if (!string.Equals(path, RootDirectory, PathComparison)
-            && !path.StartsWith(RootDirectory + Path.DirectorySeparatorChar, PathComparison))
+        var relative = Path.GetRelativePath(root, path);
+        if (Path.IsPathRooted(relative) || relative == ".."
+            || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             throw new InvalidDataException("Specify a path inside the project folder.");
-        for (var entry = path; !string.Equals(entry, RootDirectory, PathComparison); entry = Path.GetDirectoryName(entry)!)
-            if (Path.Exists(entry) && (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidDataException("Links cannot be used for project folders.");
+        for (var entry = path; !string.Equals(entry, root, PathComparison); entry = Path.GetDirectoryName(entry)!)
+        {
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(entry); }
+            catch (FileNotFoundException) { continue; }
+            catch (DirectoryNotFoundException) { continue; }
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("Links cannot be used for project files or folders.");
+        }
     }
 
     /// <summary>指定フォルダがScenes配下かどうか。シーンファイル作成可否の判定用。</summary>

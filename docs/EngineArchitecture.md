@@ -80,16 +80,17 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - `[Flags]` は複合値・符号付きの負値・`ulong` の最上位ビットにも対応する。チェック状態の同期は表示のみを更新し、ユーザー操作として値へ書き戻さない。
 - ベクトル：`Vector2`・`Vector3`・`Vector4`・`Quaternion`（各成分は有限のfloat、対応する `Nullable<T>` を含む）
 - `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
+- `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する
 - 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種と `Nullable<int/float/double/bool/enum>`、null可）
 - 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）
 
-`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。詳細なYAML形式は下記のYAML節を参照。
+`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
 
 ライフサイクルのPriorityはエンジン側のアタッチ設定として表示・保存するもので、ゲーム側メンバーの `[Inspector]` 指定とは別に扱う。
 
 Inspectorメンバーの改名・削除は追加の属性なしで許可する。保存データのvaluesにだけ存在する項目は無視し、新しい名前のメンバーはコンストラクター／フィールド初期化子の値を使う。同名の対応項目は保持する。読み込み・C#再読み込みで項目の追加・改名・削除を検出したEditorはSceneを未保存にする。次のシーン保存では現在のメンバーだけを書き出し、古い項目をYAMLから削除する。未読込の他シーンは一括で書き換えない。
 
-`[FormerlySerializedAs]` は改名前の値も保持したい場合の任意指定。Coreの共通名解決を通じ、保存シーンの復元とC#再読み込みの両方で旧名を現在のメンバーへ対応付ける。Inspectorの表示と新しい保存データは現在の宣言名を使い、YAMLのversionは1を維持する。使い方はREADMEの「Inspectorメンバーを改名する」を参照。
+`[FormerlySerializedAs]` は改名前の値も保持したい場合の任意指定。Coreの共通名解決を通じ、保存シーンの復元とC#再読み込みの両方で旧名を現在のメンバーへ対応付ける。Inspectorの表示と新しい保存データは現在の宣言名を使い、YAMLのversionは上げない。使い方はREADMEの「Inspectorメンバーを改名する」を参照。
 
 - 名前の比較は大文字小文字を区別する。空名・前後に空白のある旧名、別メンバーの現在名または旧名との衝突は拒否する。
 - 一つの保存データに新旧両方の名前、または同一メンバーを指す複数の旧名がある場合は、優先順位で上書きせず復元を拒否する。
@@ -202,22 +203,23 @@ Update Priority    0
 | ゲームのセーブデータ | プレイヤーの進行、所持品、対戦途中の状態など | 制作データとは別。今は保留 |
 | Editorの設定 | ペイン配置、テーマ、最近開いたプロジェクトなど | シーンとは別。永続化は未実装 |
 
-シーンは1シーン1ファイルのYAML（`.pure.scene.yaml`）で保存する。現在の形式は `version: 1`。
+シーンは1シーン1ファイルのYAML（`.pure.scene.yaml`）で保存する。現在の形式は `version: 2`（`version: 1` は読み込みのみ）。
 制作データをそのままゲーム進行のセーブデータとして扱わない。
 
 ### YAML保存の構成（実装済み）
 
-- `SceneDocument` はversionとobjects、各オブジェクトはid・name・componentsを持つ保存用データ。
-- 各componentはtypeIdとvaluesを持つ。valuesは `[Inspector]` が付いた対応型（上記のInspector節）のみ。string・コレクション・`Transform`・`Nullable` のnullにも対応する。有限でないfloat／double（NaN・Infinity）は保存・読み込みとも拒否する。
-- `ComponentRegistry` で固定文字列IDとC#型を明示登録する。Assetsと読み込みは同じ登録表を使う。C#のクラス名・名前空間を変更しても固定IDは維持する。組み込みの `Transform` は `core.transform` で登録する。
-- `SceneSerializer` はCoreに置き、Sceneと保存用データの変換・検証・YamlDotNetによるYAML処理を行う。Avaloniaに依存しない。`Clone`（Play時の複製を含む）では配列・リスト・辞書・`Transform` を深く複製し、編集用と実行用の共有を残さない。
+- `SceneDocument` はversionとobjects、各オブジェクトはid・name・parentId・siblingIndex・componentsを持つ保存用データ。`version: 2` で保存し、`version: 1` は全てルート・配列順の兄弟として読み込む。次の明示保存で2へ更新し、読み込み時にファイルを書き換えない。
+- 親子は同じScene内だけで結び、欠落Parent・自己参照・循環、欠落・重複・負数・範囲外のsiblingIndexを拒否する。ルートの兄弟順は文書順に従う。親削除はその時点の子孫ごと削除する。実行中は対象子孫を全て削除予約する。
+- 各componentはtypeIdとvaluesを持つ。valuesは `[Inspector]` が付いた対応型（上記のInspector節）のみ。string・コレクション・`Transform`・`Sprite`・`Nullable` のnullにも対応する。有限でないfloat／double（NaN・Infinity）は保存・読み込みとも拒否する。
+- `ComponentRegistry` で固定文字列IDとC#型を明示登録する。Assetsと読み込みは同じ登録表を使う。C#のクラス名・名前空間を変更しても固定IDは維持する。組み込みは `core.transform`・`core.ui-element`・`core.image` で登録する。
+- `SceneSerializer` はCoreに置き、Sceneと保存用データの変換・検証・YamlDotNetによるYAML処理を行う。Avaloniaに依存しない。`Clone`（Play時の複製を含む）では配列・リスト・辞書・`Transform`・`Sprite` を深く複製し、親子はClone先へ解決して編集用と実行用・編集用とClone先の共有を残さない。
 - ファイル選択、保存先、未保存状態、確認・エラー表示、ファイルの置き換えはEditorが担当する。
-- 読み込みでは保存時のオブジェクトIDを復元する。全体の復元に成功してから編集中のSceneを入れ替え、ライフサイクルは実行しない。
-- 未対応のversion、未知のtypeId、重複キー・ID・同型component、既存メンバーの不正な値を拒否する。values内の存在しないInspectorメンバーは読み飛ばし、次の保存時に削除する。文書構造やベクトル・Transform内部の未知キーは引き続き拒否する。
+- 読み込みでは保存時のオブジェクトIDを復元する。全体の復元に成功してから編集中のSceneを入れ替え、ライフサイクルは実行しない。素材欠落はIDを保持したまま警告とし、構造エラーと同じ理由で開けなくしない。
+- 未対応のversion、未知のtypeId、重複キー・ID・同型component、既存メンバーの不正な値を拒否する。values内の存在しないInspectorメンバーは読み飛ばし、次の保存時に削除する。文書構造やベクトル・Transform・Sprite内部の未知キーは引き続き拒否する。
 - 保存値がない新しいメンバーはクラスの初期値を維持する。メンバー名の変更にはデータ移行が必要で、自動移行は未実装。
 - オブジェクト・componentの順番を維持し、valuesはメンバー名順で出力する。必要な文字列は引用し、独自タグ・アンカーは生成しない。コメントの保持は行わない。
 - 保存は同じフォルダの一時ファイルに書き込み、完了後に元ファイルと置き換える。
-- Parent・参照・Editor設定はそれぞれの機能を実装するときに追加する。
+- オブジェクト参照・Editor設定はそれぞれの機能を実装するときに追加する。
 
 #### Inspector拡張値のYAML形式（実装済み）
 
@@ -259,7 +261,17 @@ values:
 
 - C#再読み込みでは、enumの完全名・基底整数型・Flags属性と既存の全定数名／値が一致すれば、新しいアセンブリの型へ値を移行する。定数の追加は許可する。改名・削除・数値変更・基底型変更・Flags属性変更は拒否し、旧Sceneを保持する。対応するNullable・配列・List・辞書内のenumにも同じ判定を適用し、その他の型変更の拒否は維持する。
 
-- `version` は引き続き `1`。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。未知のキー・欠落・余分なキー・シーケンスとマッピングの取り違え・非有限数は拒否する。
+- `version` は `2`。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。未知のキー・欠落・余分なキー・シーケンスとマッピングの取り違え・非有限数は拒否する。
+- `Sprite` は `{imageId, sourceRect?}` のマッピング。`imageId` は画像IDのD形式文字列（空ID不可）、`sourceRect` は省略・nullで全体、`{x, y, width, height}` で部分領域を表す。例：
+
+```yaml
+values:
+  Sprite:
+    imageId: ba6104ce-7234-4673-8bd0-cee380b505de
+  Cropped:
+    imageId: ba6104ce-7234-4673-8bd0-cee380b505de
+    sourceRect: {x: 16, y: 8, width: 32, height: 24}
+```
 
 #### Priorityの保存形式と互換性（実装済み）
 
@@ -279,7 +291,7 @@ components:
 - すべて `0` の場合は `priorities` 自体を省略する。旧形式（`priorities` なし）はすべて `0` として読み込む。新形式の全ゼロも省略されるため、旧ファイルとの差分は生じない。
 - 未知のキー、不正な値（非整数・オーバーフロー・コレクション・null値など）、存在しないライフサイクルへの指定は拒否し、黙って捨てない。重複キー・ID・同型componentの扱いは既存の検証に従う。
 - `SceneSerializer.Clone` でもPriorityを引き継ぎ、実行用Sceneと編集用Sceneの分離に含める。YAML文字列やファイルを経由しない。
-- `version` は引き続き `1`。Priorityの有無でversionは変えない。
+- `version` は `2`。Priorityの有無でversionは変えない。
 
 ## Project（実装済み）
 
@@ -293,7 +305,7 @@ components:
 - 改名・削除では編集中シーンと起動シーンの参照を付け替える。起動シーンと編集中シーン（を含むフォルダ）は削除できず、改名時はScenes外への脱出を拒否する。
 - シーンの保存先はProjectのScenesフォルダ内とする。絶対パスによる参照、フォルダ外への参照、リンクによる外部参照を認めない。
 - Project／シーンを切り替える前に未保存の変更を確認し、読み込み検証が成功するまで現在の編集対象を維持する。
-- 起動シーン指定は編集時に最初に開くシーンとして使う。ProjectごとのC#コンパイル・自動登録・変更監視に対応。素材管理は未実装。
+- 起動シーン指定は編集時に最初に開くシーンとして使う。ProjectごとのC#コンパイル・自動登録・変更監視に対応。画像素材は `Assets/` へ取り込み、索引はProject Open時と明示Refreshで作り直す。詳細は [README](../README.md) のProject節を参照。
 
 ## Launcher（実装済み）
 
@@ -319,7 +331,7 @@ Windows x64の検証構成・残る制限は[実装状況](ImplementationPlan.md
 
 ### V0〜V2の描画経路と資源所有
 
-`PureEngine.Rendering`はEditor／Avalonia／Core／Runtimeに依存しない。`DrawList`が投入順に矩形・画像・文字を三角形へ展開し、`VulkanRenderer`が単一のアトラスと1回のDrawで描く。テクスチャで並べ替えないため、半透明の前後関係を維持する。ゲームデータはまだ読み取らず、`RenderingSample`をEditorと試作Playerで共有する。`PureEngine.Rendering.Avalonia`はGPU画像の取り込みとウィンドウ寿命だけを担当し、PlayerからEditorへの参照はない。
+`PureEngine.Rendering`はCoreの配置・Sprite・Imageデータを参照し、Editor／Avalonia／Runtimeには依存しない。`DrawList`が投入順に矩形・画像・文字を三角形へ展開し、`VulkanRenderer`が単一のアトラスと1回のDrawで描く。テクスチャで並べ替えないため、半透明の前後関係を維持する。V2の`RenderingSample`は固定命令の検証用として残す。試作Playerの表示は`ImageRenderingSample`の検証専用Sceneを使い、EditorのScene Viewは編集中Sceneを `EditSceneRenderer` で描く。PlayのSceneの描画は後続。`PureEngine.Rendering.Avalonia`はGPU画像の取り込みとウィンドウ寿命だけを担当し、PlayerからEditorへの参照はない。
 
 WindowsのAvalonia 12.1.2標準ANGLE/D3D11バックエンドを維持する。LUIDで同じ物理GPUを選び、D3D11が確保したRGBA8 UNORMテクスチャをNT handleでVulkanへ専用割り当てとしてimportする。図形の描画はすべてVulkan。CPUへの毎フレーム読み戻しは行わず、Avaloniaの`CompositionDrawingSurface.UpdateWithKeyedMutexAsync`で表示する。Vulkan 1.1、`VK_KHR_external_memory_win32`、`VK_KHR_win32_keyed_mutex`と互換D3D11共有テクスチャを必要とする。
 
@@ -331,7 +343,7 @@ WindowsのAvalonia 12.1.2標準ANGLE/D3D11バックエンドを維持する。LU
 
 文字は同梱Noto Sans CJK JP RegularをSkiaSharpのCPUフォント機能でラスタライズする。日本語／英数字／句読点を初期対象とし、Unicode text element単位の幅折り返し、改行、文字サイズ、行間、欠落文字の「□」を扱う。複雑な双方向文字・結合スクリプトのシェーピング、禁則処理、IMEは対象外。HarfBuzzを必要とするスクリプトを追加する時にシェーピングを導入する。
 
-文字列行と画像を同じ2048×2048・16 MiBのアトラスに追加し、変更時だけGPUへ転送する。キャッシュは最大4096項目、1テキスト16384 UTF-16単位、1バッチ60000頂点。容量超過は明示的に失敗する。自動退避・無制限拡張をせず、破棄時に全項目を解放する。画像キーはDrawListの寿命中不変の素材を指す。動的な文字の高頻度更新には部分転送や字形単位のキャッシュが今後の改善候補になる。
+文字列行と画像を同じ2048×2048・16 MiBのアトラスに追加し、変更時だけGPUへ転送する。キャッシュは最大4096項目、1テキスト16384 UTF-16単位、1バッチ60000頂点。容量超過は明示的に失敗する。自動退避・無制限拡張をせず、破棄時に全項目を解放する。画像キーの内容が変わった場合はResetAtlasで明示的に無効化する。動的な文字の高頻度更新には部分転送や字形単位のキャッシュが今後の改善候補になる。
 
 | 依存／配布物 | 固定版・ライセンス |
 | --- | --- |
@@ -346,11 +358,11 @@ WindowsのAvalonia 12.1.2標準ANGLE/D3D11バックエンドを維持する。LU
 
 ### V3：親子・素材参照・UI保存の設計案
 
-2026-09-22作成。**設計案であり未実装**。親削除時に子孫も削除する方針はユーザー確認済み。それ以外は以下を実装のたたき台とする。V3の成果はGPU不要で保存・復元・配置計算を検証できる状態。Scene Viewの制作操作はV4、実入力からのクリック発火はV5、保存ゲームのPlayer起動はV6で行う。
+2026-09-22作成。**設計と実装途中の状態を区別する**。親削除時の子孫削除、および既存Transform＋UiElementを組み合わせ、CoreのUiLayoutで配置を計算する方針は合意済み。作業ツリーにはUiElementのデータ定義があり、UiLayout.Calculateの単体配置計算を実装した。組み込み登録・Scene走査・描画／入力接続は未実装で、V3全体の完了を意味しない。参照・素材管理・保存形式など、それ以外の詳細は引き続き設計案。V3の成果はGPU不要で保存・復元・配置計算を検証できる状態。Scene Viewの制作操作はV4、実入力からのクリック発火はV5、保存ゲームのPlayer起動はV6で行う。
 
 #### 既存実装を使う範囲
 
-`SceneObject.Parent`／`Children`／`SetParent`と循環拒否、`Transform.LocalMatrix`／`SceneObject.WorldMatrix`は実装済み。一方、現状のSceneSerializerは親子をCaptureせず、Clone・コード再読み込みで失う。Scene所属の照合、兄弟順、親削除時の子の解放も未対応。新しい保存シーンや第二のライフサイクルは作らず、ここを先に補う。
+`SceneObject.Parent`／`Children`／`SetParent`と循環拒否、`Transform.LocalMatrix`／`SceneObject.WorldMatrix`は実装済み。一方、現状のSceneSerializerは親子をCaptureせず、Clone・コード再読み込みで失う。Scene所属の照合、兄弟順、親削除時の子の解放も未対応。新しい保存シーンや第二のライフサイクルは作らず、保存接続時にここを補う。UiLayoutの単体配置計算とGPU不要チェックを追加済み。Spriteの素材データも追加済み。ImageからSpriteを参照する描画経路を検証用Sceneで接続済み。編集Scene・素材索引・保存への接続は後続とする。
 
 UI用の値・コンポーネント・配置計算・クリック契約は`PureEngine.Core`に置く。Core／RuntimeへVulkan・Avalonia・Skia依存は足さない。組み込みUI型はCoreで共通登録できる入口を設け、既存Editorの`ComponentAssets.RegisterBuiltins`から利用する。ゲームのコンパイル参照は既にCoreを含むため、UIを使うだけのためにRendering DLLをゲーム用csprojへ追加しない。
 
@@ -361,13 +373,13 @@ UI用の値・コンポーネント・配置計算・クリック契約は`PureE
 | 所属 | Scene内のオブジェクトは同じScene内だけで親子にできる。現行テストで使う未所属同士のSetParentは維持し、所属あり／なしの混在は拒否する |
 | 操作 | 既存`SetParent(parent)`を維持し、ローカル値を変えず新しい兄弟の末尾へ移す。同じ親は従来どおりno-op。`SetSiblingIndex(index)`で並べ替える。範囲外・自己参照・循環・別Sceneを変更前に拒否する |
 | 列挙 | `Scene.Objects`のフラットな作成順は維持。`Scene.RootObjects`と`Children`が表示用の兄弟順を持ち、SiblingIndexはその位置。ライフサイクルの走査順と表示順を兼用しない |
-| 付け替え | Transform／RectTransformのローカル値を保持。見た目の位置を保つ付け替えはV4の編集操作として別途座標を計算し、V3 APIへ曖昧な既定値を入れない |
+| 付け替え | Transform／UiElementのローカル値を保持。見た目の位置を保つ付け替えはV4の編集操作として別途座標を計算し、V3 APIへ曖昧な既定値を入れない |
 | 親削除 | 指定オブジェクトと、その時点の子孫をまとめて削除。残したい子は削除前に親を付け替える |
 | 実行中 | Remove受付時に対象子孫を全て削除予約し、以後のStart／Updateから除外。実体の除去は既存のフレーム末尾。予約済みの子を付け替えて救出すること、予約済みの親へ追加することは拒否 |
 | 実行中の付け替え | 単一スレッド上で検証して即時反映する。更新の対象リスト・Priorityは変わらない。Destroy中・Stop要求後・削除予約済みなら拒否し、別の予約キューは作らない |
 | 後始末 | Runtimeは削除対象全体の既存Destroy Priority→Disposeを維持し、各componentを一度だけ終了する。親→子等の新しい終了順は導入しない。Editorは削除前の子孫componentを回収し、編集用Disposeだけを一度実行する |
 
-構造の切断・ID索引の削除は単一オブジェクト用の内部操作に分ける。Runtimeが予約済み集合を後始末するときに、公開の再帰削除をもう一度呼ばない。失敗時は元の構造を維持する。IDの照合と検索には既存のID管理を辞書へ拡張し、重複する別索引を増やさない。
+構造の切断・ID索引の削除は単一オブジェクト用の内部操作RemoveObjectImmediatelyに分ける。Runtimeが予約済み集合を後始末するときに、公開の再帰削除をもう一度呼ばない。SetParent／SetSiblingIndexはScene所属とRuntimeの削除予約・終了状態を検査してから変更する。失敗時は元の構造を維持する。IDの照合と検索には既存のID管理を辞書へ拡張し、重複する別索引を増やさない。
 
 #### ID参照と素材ファイル
 
@@ -383,65 +395,105 @@ UI用の値・コンポーネント・配置計算・クリック契約は`PureE
 
 Project内の素材サービスはEditorが所有する。初期実装はProject Open時と明示Refreshで再走査し、自動ファイル監視はV3の必須範囲にしない。プレイヤー向けパッケージ索引の生成はV6で扱う。取込APIと索引検証はV3、ドラッグ＆ドロップ等の制作UIはV4とする。
 
-ProjectFileの既存のパス検証を共通化して使い、相対パスの正規化後にAssets配下であることを検査する。絶対パス・`..`による脱出・リンク／junction経由の脱出を拒否し、読み込み／コピーの直前にも検査する。外部素材は明示的にコピーして取り込み、外部パスそのものは保存しない。取込は一時領域へ素材とメタデータを準備してから公開し、失敗時は既存素材を上書きしない。ID重複・壊れたメタデータ・種別違いは診断し、任意のパスへのフォールバックはしない。
+ProjectFile.ValidateProjectPathをシーン・フォルダ・素材で共有し、正規化後の相対パスで対象が指定ルート内かを検査する。Assets自身も検査対象とし、取込・メタデータ読込・索引からの画像読込の直前にリンク／junctionを再検証する。絶対パス・`..`による脱出・リンク／junction経由の脱出を拒否し、読み込み／コピーの直前にも検査する。外部素材は明示的にコピーして取り込み、外部パスそのものは保存しない。取込は一時領域へ素材とメタデータを準備してから公開し、失敗時は既存素材を上書きしない。ID重複・壊れたメタデータ・種別違いは診断し、任意のパスへのフォールバックはしない。
 
 素材のライセンスをエンジンが推定することはできない。配布許可の確認と素材のライセンス文書の保持は取り込む側の責任。V3のチェックにはV2の同梱フォントと生成画像を使う。
 
 #### UIコンポーネント
 
-名前・typeIdは以下を提案する。全て普通のC#クラスで、保存対象だけを既存の`[Inspector]`で公開する。色は既存Vector4をRGBAとして使い、新しいColor型は追加しない。
+最初に用意するのは**UiElement・Text・Image・Button**。全て同じSceneObjectへ付けて組み合わせる普通のComponentとし、専用の基底クラスや別のRectTransformは作らない。位置・回転・拡縮は既存Transformを使い、UiElementに二重に持たせない。現在のコード上の表記は`UiElement`に揃える。Imageは既存のグローバル名前空間のクラスをそのまま使う。`UiElement`（`core.ui-element`）・`Image`（`core.image`）は組み込み登録済み。Text／Buttonの実装と登録は後続。
 
-| 型／typeId | 保存する設定と初期値 |
+| Component | 責任・データ |
 | --- | --- |
-| `UiCanvas`／`core.ui.canvas` | `ReferenceSize = (1280,720)` |
-| `RectTransform`／`core.ui.rect` | `AnchorMin = AnchorMax = (0,0)`、`Pivot = (0.5,0.5)`、`Position = (0,0)`、`SizeDelta = (100,100)`、`RotationDegrees = 0`、`Scale = (1,1)`、`Visible = true`、`Opacity = 1`、`ClipChildren = false` |
-| `UiImage`／`core.ui.image` | `Image`（ImageRef、未指定）、`Color = (1,1,1,1)`。初期は矩形へのStretchのみ |
-| `UiText`／`core.ui.text` | `Text = ""`、`Font`（FontRef、同梱フォント）、`FontSize = 24`、`LineSpacing = 1.35`、`Color = (1,1,1,1)`。左上揃え・Rectの幅で折り返し |
-| `UiButton`／`core.ui.button` | `Interactable = true`。ホバー／押下／フォーカス／イベント購読は保存しない。状態別の外観とキーボード操作はV5で接続 |
+| `Transform`（既存） | `LocalPosition`・`LocalRotation`・`LocalScale`。既存のLocalMatrixの意味・計算は変更しない |
+| `UiElement`（データ定義あり） | `SizeDelta = (100,100)`、`AnchorMin = AnchorMax = (0,0)`、`Pivot = (0.5,0.5)` |
+| `Text`（予定） | 文字を領域へ描く。文字列・フォント・サイズ・行間・色等の詳細は後続で定義 |
+| `Image`（描画確認用の接続済み） | `Sprite? Sprite`と`Vector4 Color = Vector4.One`。nullは描画なし、ColorはRGBA乗算。UiElementの領域へStretchする |
+| `Button`（予定） | 領域内のクリック判定と処理の通知。見た目はImage／Textとの組み合わせで作る |
 
-Scene内のCanvasは最初は0または1個、配置できるのはルートのみ。Canvas自身の矩形はReferenceSizeから決まり、RectTransformやTransformは付けない。UI要素はRectTransformを持ち、直接の親はCanvasか別のRectTransformとする。見た目のないグループもRectTransformで表す。ネストCanvas・World Space Canvasは対象外。
+UiElementはTransformと組み合わせる。現時点の「Transformが必要」というコメントだけでは依存関係は強制されないため、登録と依存検証は今後の実装対象。構築途中のAttach順序を妨げず、完成したSceneを検証するときの不足の扱いを揃える。Text／Image／Buttonは同じオブジェクトのUiElementが解決した領域を使う。
 
-UiImage／UiText／UiButtonはRectTransformとCanvas祖先を必要とする。UIノードではTransformとRectTransformの併用を拒否し、既存のWorldMatrixへUI変換を混ぜない。UIではないオブジェクトのTransformと親子の計算は維持する。
+InputField・DropDown・Slider、Toggle／Checkbox・ScrollView・ProgressBarは後続候補。最初の4Componentを作るために専用Canvas Componentを必須にしない。以前のUiCanvas必須・TransformとRectTransformの併用禁止という案は採用しない。
 
-構築途中のAttach順序を妨げないよう、依存componentの不足は即時の自動追加ではなく編集診断とする。Save／Clone／Loadの完成Scene検証では不足や不正な配置を拒否する。UIコンポーネントが全くない既存SceneはCanvasを要求しない。数値は有限、Anchorは各軸0〜1かつMin≦Max、Pivotは0〜1、ReferenceSize／FontSize／LineSpacingは正、Opacity／色は0〜1。Scaleは負値と0を許し、0で非可逆となった要素は描画・ヒット対象から外す。
+Visible・Opacity・ClipChildrenや画面全体の解像度設定は引き続き設計対象だが、現在のUiElementのメンバーとして存在するものではない。どこへ持たせるかは使用する機能の実装時に確定する。色には既存Vector4を使う案を維持する。
 
-#### 配置計算と画面サイズ
+#### Spriteの素材データ
 
-最初のCanvas拡縮方式は**基準解像度全体を収める等倍比率のFit**だけとする。物理ビューポート寸法をW,H、基準をRw,Rhとしたとき、`scale = min(W/Rw, H/Rh)`、余白は中央のレターボックス。DPIは物理サイズを求める入口で一度だけ適用する。配置計算は基準解像度の論理座標で行う。ポインターは余白を引いてscaleで割り、余白領域はCanvas外として扱う。幅または高さ0なら描画／入力対象なし。
+`PureEngine.Core/Assets/Sprite.cs`の`Sprite`はComponentではなく、Imageから参照する変更不可の素材データ。元画像のProjectローカルID（`Guid ImageId`）と、任意の切り出し矩形（`SourceRect`）を持つ。元の画像データ・ファイルパス・GPUハンドル・表示位置・UIのPivotは保持しない。
 
-RectTransformは左上原点、X右・Y下。親の未変形の矩形サイズをPとし、各軸で次を計算する。
+`new Sprite(imageId)`は画像全体、`new Sprite(imageId, (x, y, width, height))`は部分領域を表す。矩形は左上原点・X右・Y下の整数ピクセルで、範囲は右端／下端を含まない。空ID、負の原点、0以下の幅・高さは生成時に拒否する。画像をデコードした側が`ResolveSourceRect(imageWidth, imageHeight)`を呼ぶと、全体指定を実寸へ解決し、画像外の切り出しや不正な画像寸法を拒否する。切り詰めやサイズのキャッシュはせず、同じSpriteを複数のImageから共有できる。
+
+切り出しサイズは元画像のピクセル数であり、UIの表示サイズはUiElement／UiLayoutが決める。Image ComponentからSpriteを読む経路と、切り出しをGPUアトラスへ転送する経路は接続済み。画像IDをファイルへ解決する素材索引、Sprite自身の素材ID、Inspector／YAML保存は未実装。前節のImageRefは引き続き保存形式の案で、現在のSpriteが保持するのはGuidのImageIdのみ。Spriteの追加に合わせて汎用参照型やGPU資源管理を新設しない。
+
+#### Image Componentから描画への接続
+
+`PureEngine.Rendering.UiImageRenderer.Draw`は、同じSceneObjectのTransformとUiElementを読み、UiLayoutでサイズと配置行列を計算する。ImageがありSpriteが非nullなら、呼び出し側のID→画像バイト列の辞書から素材を取得し、DrawListへ渡す。Imageなし／Sprite=nullのオブジェクトも配置結果を返すので、画像のない親グループに使える。子にはこの戻り値を渡す。走査順・親子の所属・素材データの所有は呼び出し側の責任で、描画アダプターはSceneを書き換えたりライフサイクルを呼んだりしない。
+
+現在の2D描画は配置行列のXYへの正投影。Quaternionによる変換はUiLayoutで適用した後にXYを取り出し、Z値での奥行き並べ替えはしない。透視変換は明示的に拒否する。描画順は呼び出し順、画像の表示は矩形いっぱいへのStretch。0サイズ・退化したXY変換は描画を省略する。Transform／UiElement不足、画像ID欠落、壊れた画像、切り出し範囲外は例外とし、現在のViewportは既存の停止・診断経路で通知する。
+
+DrawListのSprite用Imageオーバーロードは、元画像を初回だけデコードし、Spriteの領域を独立したアトラス領域へコピーする。キーは画像ID＋切り出し矩形（全体指定は別キー）なので、同じ画像の異なる切り出しを混同せず、線形補間でも隣のSprite領域を直接参照しない。画像IDのバイト列を変更する呼び出し側はキャッシュを無効化する。EditorのRefreshはVulkanViewportへ無効化を予約し、前回の表示処理を待った次の直列フレーム内でDrawList.ResetAtlasを適用する。CPUアトラスの項目と配置をクリアしRevisionを進めることで、同じIDでも新しい画素をGPUへ再転送する。明示Refreshではアトラス全体を再構築し、GPUデバイスや描画先を作り直さない。元画像サイズはV2と同じく各軸2046ピクセル以下、アトラスは2048×2048に制限する。
+
+`ImageRenderingSample`は検証専用Sceneに通常のTransform・UiElement・Imageを付けて親子を作る。Viewportは表示寸法で毎フレーム配置を再計算する。全体画像・部分切り出し・Color／Alpha・親子回転・右下固定・横Stretch・null Spriteを確認する。背景と説明文字は既存DrawListで描き、Text Component実装とは区別する。
+
+Imageの `Sprite`・`Color` はInspector・YAML・Cloneで扱う。`Sprite` の選択肢はProjectの `Assets/` 索引から作り、None解除と欠落IDの保持に対応する。検証用の画像辞書を制作データの保存先にしない。
+
+#### 配置計算の置き場所と入出力
+
+計算は`PureEngine.Core/Components/UiLayout.cs`にまとめる。**UiLayoutはComponentではなく、通常の計算用クラス**。描画API・Avalonia・GPU資源には依存しない。TransformとUiElementはデータを持ち、UiLayoutが両方と親の配置から結果を求める。
+
+最初は1要素の計算を入口にする。入力は「親の未変形の矩形サイズ・親のUI配置行列・自分のTransform・自分のUiElement」、出力は「実際の矩形サイズ・UI配置行列」。Scene全体の走査、素材解決、イベント処理を最初から同じメソッドへ詰め込まない。描画・Buttonのクリック判定・Editorの選択枠は、共通の計算結果を使う。
+
+UiElementは左上原点、X右・Y下の矩形を定義する。親サイズをPとし、各軸で次を計算する。
 
 ```text
-a = P * AnchorMin
-b = P * AnchorMax
-size = (b - a) + SizeDelta
-pivotPosition = a + (b - a) * Pivot + Position
-local = Translate(-Pivot * size) * Scale(Scale)
-        * Rotate(RotationDegrees) * Translate(pivotPosition)
-world = local * parentWorld
+a = P * UiElement.AnchorMin
+b = P * UiElement.AnchorMax
+size = (b - a) + UiElement.SizeDelta
+anchorPoint = a + (b - a) * UiElement.Pivot
+local = Translate(-UiElement.Pivot * size, z=0)
+        * Transform.LocalMatrix
+        * Translate(anchorPoint, z=0)
+world = local * parentUiWorld
 ```
 
-行ベクトルのSystem.Numerics規約に揃える。正の回転はY下向き画面で時計回り。AnchorMin=AnchorMaxなら固定サイズ、異なれば親サイズに合わせて伸びる。SizeDeltaは負値を許すが、解決後のsizeが負なら不正、0なら描画しない。親の回転・拡縮は子のAnchor計算後に適用する。例えば親(400,200)、両Anchor=(0.5,0.5)、Pivot=(0.5,0.5)、SizeDelta=(100,40)、Position=0なら左上は(150,80)。Anchor=(0,0)〜(1,1)、SizeDelta=(-20,-20)、Pivot=(0.5,0.5)なら左上(10,10)、size=(380,180)。
+System.Numericsの行ベクトル規約で合成する。Transform.LocalPositionはAnchorの基準点からのオフセットとなり、Pivotを中心にTransformの回転・拡縮を適用する。Transform.LocalMatrix自体を書き換えたり、計算後の位置をLocalPositionへ書き戻したりしない。既存のSceneObject.WorldMatrixはUIのAnchor／Pivotを含まないので、そのままUIの完成行列として使わず、親の変換の二重適用もしない。
 
-この方式ではウィンドウの縦横比変更はレターボックスで吸収し、Canvasの論理寸法は変わらない。親矩形やReferenceSizeを変えるとStretchが再計算される。画面全体への伸張・幅高さMatchスライダー・自動レイアウトは追加しない。
+AnchorMin=AnchorMaxなら固定サイズ、異なれば親サイズに合わせてStretchする。例えば親(400,200)、両Anchor=(0.5,0.5)、Pivot=(0.5,0.5)、SizeDelta=(100,40)、Transformが単位変換なら左上は(150,80)。Anchor=(0,0)〜(1,1)、SizeDelta=(-20,-20)、Pivot=(0.5,0.5)なら左上(10,10)、size=(380,180)。親の回転・拡縮は子のAnchor計算後に適用する。
 
-Coreの`UiLayout`（提案）はScene＋表示寸法から結果を毎回計算する。結果にはObject ID、ローカルサイズ、変換／逆変換、実効Visible／Opacity、クリップ矩形の変換情報、表示順を持たせ、元Scene・ユーザーcomponentをGPU側のキャッシュへ保持しない。初期はO(n)の再計算とし、変更通知や差分キャッシュは測定で必要になってから追加する。
+UiLayout.Calculateはnull、非有限値、負の親サイズ、逆転したAnchor、負の解決後サイズ、計算のオーバーフローを例外で拒否する。Anchor／Pivotは0〜1の外側も許し、クランプしない。SizeDeltaは負値可。0サイズ・0Scaleは計算結果として返し、描画／ヒット対象から除く判断は呼び出し側で行う。負Scaleもそのまま合成する。行列にはTransformのZ位置とQuaternion全体を保持し、2D描画での投影・制限は後続の接続時に決める。
+
+#### 表示領域と直近の実装順
+
+親にUiElementがある場合は、親の解決済みサイズとUI配置行列を使う。親にUiElementがない場合は表示領域を基準にする案から始める。この場合の非UI祖先Transformの扱いは、Scene走査を接続するときに確定する。UiLayout単体は呼び出し側から渡された親領域を計算に使い、画面サイズを自分で取得しない。
+
+まずは表示領域を論理座標で渡す。物理ピクセルとの変換・ポインター座標の変換ではDPI倍率を一度だけ適用する。基準解像度へのFit／レターボックスは将来の画面設定の候補であり、現段階の必須Componentや確定済みの画面拡縮方式にしない。幅または高さ0の表示領域では描画／入力対象を作らない。
+
+次に着手する順番は[実装計画](ImplementationPlan.md#次に着手する作業)を参照する。InspectorのComponent検索・追加から、素材選択・編集Scene描画・保存へ進む。以下は配置計算と描画試作までの進め方を記録したもの。
+
+1. UiLayoutでTransform＋UiElementから矩形サイズと配置行列を求める。
+2. GPU不要のチェックで、中央固定・右下固定・横Stretch・全面Stretch・Pivot中心の回転／拡縮・親子追従を確認する。
+3. 最小のSpriteデータをImageから参照し、結果をScene Viewで目視する（検証用Sceneで接続済み）。これは配置確認の小さな接続で、素材管理・保存・V4全体の完了とは区別する。
+4. 親子保存・ID参照・素材・共通Inspectorを揃え、TextとButtonを接続する。
+
+自動整列、内容に合わせたサイズ変更、スクロール等は別の機能として後続で扱う。UiElementのデータだけでUnityのUI全機能が揃うとは扱わない。
 
 #### 重なり・クリップ・入力との境界
 
+以下は後続機能の設計案。Visible／Opacity／ClipChildrenの格納先やAPIは未確定で、最初のUiLayout計算には持ち込まない。
+
 親を先に描き、Childrenを兄弟順に深さ優先で辿る。後の兄弟の部分木が手前になる。同じオブジェクトにImageとTextがあればImage→Textの順。Buttonは独立した絵を持たず、V5で入力を受ける。Visible=falseの部分木は全体を非表示にし、Opacityは祖先との積。これらは描画／入力の設定であり、非表示を理由に既存のUpdateを停止しない。透明でもVisible=true・Interactable=trueならButtonの入力対象になり得る。
 
-ClipChildrenは親のローカル矩形で子孫を切る。UiImageは自身の矩形に収まり、UiTextは自身の矩形でもクリップする。回転／拡縮した親のクリップは変換された矩形のまま扱い、画面上のAABBへの拡大で代用しない。入れ子は全祖先のクリップの共通部分になる。
+ClipChildrenは親のローカル矩形で子孫を切る。Imageは自身の矩形に収まり、Textは自身の矩形でもクリップする。回転／拡縮した親のクリップは変換された矩形のまま扱い、画面上のAABBへの拡大で代用しない。入れ子は全祖先のクリップの共通部分になる。
 
 **V2との接続上の注意：** 現在のDrawListは画面軸に平行なクリップ矩形のみを扱う。V3ではCoreに変換付き矩形のクリップ列を持たせ、点の包含をGPUなしで検証する。V4の描画接続では、描画三角形をこれらの凸矩形でCPUクリップし、UVを補間して既存の頂点バッチへ渡す処理を追加する。軸平行の場合は従来の矩形クリップを利用できる。Stencil／Render Graph／別バックエンドは不要。正確な親クリップが通るまでUI描画の接続完了とはしない。 またV2のDrawListはフォントが同梱Notoに固定されているため、FontRefの保存だけで外部フォントが表示可能になったとは扱わない。V4では素材索引から画像・フォントを解決する接続、フォントID／サイズを含むキャッシュキー、素材変更時のキャッシュ退役も必要になる。V3ではこれらをGPU非依存の参照検証までとする。
 
-V3は共通の座標変換・矩形包含・クリップ包含を用意し、実際の選択と逆順ヒット検索はV4／V5が同じ結果を使う。非可逆変換、Canvas外、Visible=false、クリップ外はヒットしない。ButtonのInteractable=falseはそのButtonを対象外にし、親のButtonを無効にしても別の子Buttonを自動で無効化しない。
+V3は共通の座標変換・矩形包含・クリップ包含を用意し、実際の選択と逆順ヒット検索はV4／V5が同じ結果を使う。非可逆変換、表示領域外、Visible=false、クリップ外はヒットしない。ButtonのInteractable=falseはそのButtonを対象外にし、親のButtonを無効にしても別の子Buttonを自動で無効化しない。
 
 #### ボタンとゲームコードの接続
 
-提案する契約は`IUiButtonHandler.OnClick(UiClickContext context)`。UiButtonと同じSceneObjectに、この契約を実装したゲームcomponentを付ける。基底クラスは不要。1つのButtonに対応するhandlerは最大1個とし、複数なら完成Scene検証で拒否する。0個は操作しても処理のないボタンとして有効。保存するのは既存のcomponent typeIdとInspector値のみで、メソッド名やデリゲートは保存しない。
+提案する契約は`IUiButtonHandler.OnClick(UiClickContext context)`。Buttonと同じSceneObjectに、この契約を実装したゲームcomponentを付ける。基底クラスは不要。1つのButtonに対応するhandlerは最大1個とし、複数なら完成Scene検証で拒否する。0個は操作しても処理のないボタンとして有効。保存するのは既存のcomponent typeIdとInspector値のみで、メソッド名やデリゲートは保存しない。
 
-contextは実行用SceneとButtonのSceneObjectを持つ一時的な呼出情報。handlerはInspectorで設定したObjectRefをcontext.Sceneで解決し、得点ラベルのUiText等へアクセスする。例えば得点用handlerをButtonへ付け、そのObjectRefにラベルのIDを設定する。クリック時にC#メソッド内で得点を増やし、解決したラベルのTextを変更する。これなら新しいScene注入サービスやStartの別経路を作らず、対象を明示してゲームコードを呼べる。
+contextは実行用SceneとButtonのSceneObjectを持つ一時的な呼出情報。handlerはInspectorで設定したObjectRefをcontext.Sceneで解決し、得点ラベルのText等へアクセスする。例えば得点用handlerをButtonへ付け、そのObjectRefにラベルのIDを設定する。クリック時にC#メソッド内で得点を増やし、解決したラベルのTextを変更する。これなら新しいScene注入サービスやStartの別経路を作らず、対象を明示してゲームコードを呼べる。
 
 V3では参照と型契約の保存・復元・Clone分離まで扱う。V5で実行用Sceneのhandlerだけを入力処理の境界で呼び、例外は既存Playのエラー停止へつなぐ。編集中に呼ばず、クリック中の削除予約・Stop後に残りの入力を発火しない。イベント一覧やInspectorのメソッド選択UIは初期範囲に含めない。
 
@@ -457,12 +509,14 @@ ObjectRef／ImageRef／FontRefはInspectorValueTypesの共通の対応型へ追�
 
 #### 実装順と受入チェック
 
+V3-a〜eは作業単位の識別子。直近はV3-dの配置計算部分を先行し、Imageで確認してからV3-a〜cの保存基盤へ接続する。V3-d全体が完成したという意味ではない。
+
 | 順序 | 実装単位 | GPU不要の確認 |
 | --- | --- | --- |
 | V3-a | Scene所属・ルート／兄弟順・子孫削除 | 別Scene／混在／循環拒否、失敗時不変、予約削除の重複と付け替え拒否、既存Priority順と単一Dispose |
 | V3-b | version 2と参照値型 | v1→v2往復、親が後ろにある文書、同じIDでもClone先へ解決、順序保持、不正構造拒否、コード再読み込み失敗時の旧Scene保持 |
 | V3-c | 素材取込・サイドカー・索引 | ファイル対の移動、Project移動、重複／欠落／種別違い、取込失敗、パス脱出／リンク拒否、読取だけで書換しないこと |
-| V3-d | UIコンポーネント・UiLayout | 固定／Stretch／Pivotの数値例、親の回転と拡縮、レターボックス／DPI、0寸法、非表示／Opacity、入れ子・回転クリップの包含 |
+| V3-d | Transform＋UiElementとUiLayout、Image／Text／Button | 固定／Stretch／Pivotの数値例、親の回転と拡縮、表示領域／DPI、0寸法。後続の表示・クリップ規則は仕様確定後に追加 |
 | V3-e | 共通Inspector・クリック契約 | 参照の設定／解除と保存、組み込み型の再登録、handler複数拒否、Cloneしたボタンの対象が編集用ラベルへ解決されないこと |
 
 Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Checksは参照編集・未保存表示・再読み込みを確認する。C#実装時は既存`tools/code-quality.ps1 -Check`を実行する。設計文書を追加しただけでは、上記の実装・検証を完了扱いにしない。

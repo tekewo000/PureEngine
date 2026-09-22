@@ -20,14 +20,37 @@ public static class ComponentAssets
     /// <summary>
     /// 組み込み型の登録方針（A4）：各プロジェクトの所有者（ProjectComponents）が生成時に
     /// 自分のRegistryへ登録する。共有のstatic登録は持たない。user.* の差し替えでは維持される。
+    /// Transform・UiElement・Imageは普通のComponentとして同じ経路で検索・追加・保存する。
     /// </summary>
     public static void RegisterBuiltins(ComponentRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
         registry.Register<Transform>("core.transform");
+        registry.Register<UiElement>("core.ui-element");
+        registry.Register<global::Image>("core.image");
         registry.Register<Samples.PlayerStats>("sample.player-stats");
         registry.Register<Samples.RoundSettings>("sample.round-settings");
         registry.Register<Samples.InjectedPlayer>("sample.injected-player");
+    }
+
+    /// <summary>Inspectorの追加候補を型名・完全名・typeIdの部分一致で絞り込む。大文字小文字を区別しない。</summary>
+    public static IReadOnlyList<(Type Type, string TypeId)> SearchCandidates(ComponentRegistry registry, string? query)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        var text = (query ?? "").Trim();
+        List<(Type Type, string TypeId)> found = [];
+        foreach (var id in registry.Ids.Order(StringComparer.Ordinal))
+        {
+            var type = registry.GetType(id);
+            var name = type.Name ?? "";
+            var fullName = type.FullName ?? name;
+            if (text.Length == 0
+                || name.Contains(text, StringComparison.OrdinalIgnoreCase)
+                || fullName.Contains(text, StringComparison.OrdinalIgnoreCase)
+                || id.Contains(text, StringComparison.OrdinalIgnoreCase))
+                found.Add((type, id));
+        }
+        return found;
     }
 
     /// <summary>

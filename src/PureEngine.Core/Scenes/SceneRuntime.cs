@@ -167,6 +167,13 @@ public sealed class SceneRuntime : IDisposable
         _objects.Add(item, new RuntimeObject(item));
     }
 
+    internal void EnsureHierarchyMutationAllowed(SceneObject item)
+    {
+        EnsureMutationAllowed();
+        if (!_objects.TryGetValue(item, out var owner) || owner.Removed)
+            throw new InvalidOperationException("Cannot change the hierarchy of a removed object.");
+    }
+
     internal void RegisterComponent(SceneObject item, object component)
     {
         EnsureMutationAllowed();
@@ -236,8 +243,17 @@ public sealed class SceneRuntime : IDisposable
     {
         EnsureMutationAllowed();
         if (!_objects.TryGetValue(item, out var owner) || owner.Removed) return false;
-        owner.Removed = true;
-        _removals.Add(owner);
+        List<SceneObject> subtree = [item];
+        for (var i = 0; i < subtree.Count; i++)
+            subtree.AddRange(subtree[i].Children);
+        foreach (var target in subtree)
+        {
+            if (_objects.TryGetValue(target, out var targetOwner) && !targetOwner.Removed)
+            {
+                targetOwner.Removed = true;
+                _removals.Add(targetOwner);
+            }
+        }
         return true;
     }
 
@@ -316,7 +332,7 @@ public sealed class SceneRuntime : IDisposable
         DisposeTargets(targets);
         foreach (var owner in _removals)
         {
-            Scene.RemoveImmediately(owner.Item);
+            Scene.RemoveObjectImmediately(owner.Item);
             _objects.Remove(owner.Item);
         }
     }
@@ -335,7 +351,7 @@ public sealed class SceneRuntime : IDisposable
         // Future constructor injection keeps this point; only the creation point changes.
         DisposeTargets(targets);
         foreach (var owner in _objects.Values)
-            Scene.RemoveImmediately(owner.Item);
+            Scene.RemoveObjectImmediately(owner.Item);
     }
 
     private void DestroyTargets(List<Invocation> targets)

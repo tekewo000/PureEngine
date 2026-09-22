@@ -20,7 +20,7 @@ public sealed class ProbeApp : Application
         {
             var viewport = new VulkanViewport();
             viewport.RenderingFailed += Console.Error.WriteLine;
-            desktop.MainWindow = new Window { Title = "PureEngine — Vulkan V2 rendering probe", Width = 800, Height = 450, Content = viewport };
+            desktop.MainWindow = new Window { Title = "PureEngine — Image component rendering probe", Width = 800, Height = 450, Content = viewport };
         }
         base.OnFrameworkInitializationCompleted();
     }

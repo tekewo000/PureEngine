@@ -2,7 +2,7 @@
 
 作成日：2026-09-22
 
-**状態：V0〜V2の固定サンプル描画を実装し、Windows／RTX 4070・DPI 1.0でローカル／実機検証済み。CI・高DPIモニター間移動・性能測定は未検証。V3〜V6は未実装。**
+**状態：V0〜V2の固定サンプル描画を実装し、Windows／RTX 4070・DPI 1.0でローカル／実機検証済み。CI・高DPIモニター間移動・性能測定は未検証。V3はUiLayout・Sprite・Image描画を検証用Sceneで部分実装。実Projectへの編集・保存接続とV4〜V6全体は未完了。**
 
 この文書は作業順と各段階の完了条件を管理する。描画の設計方針と適用範囲の正本は [EngineArchitecture.md](EngineArchitecture.md#ui描画プレビュー)、全体の進捗・検証証跡は [ImplementationPlan.md](ImplementationPlan.md) とする。V0〜V2の採用技術と実装APIは設計書の「V0〜V2の描画経路と資源所有」に記録した。後続工程の名前は引き続き実装案。
 
@@ -46,7 +46,7 @@ EditorとPlayerが共有するのは描画コード・ゲームデータ・入�
 
 既存の接続先は次を優先する。
 
-- `MainWindow.axaml` の `SceneViewport`／`GameViewport`：Scene ViewはV2固定サンプル、Gameは空の表示領域。
+- `MainWindow.axaml` の `SceneViewport`／`GameViewport`：Scene ViewはImage／Sprite／UiLayoutの検証用サンプル、Gameは空の表示領域。
 - `EditSceneStore`、`MainWindow.Persistence`、`SceneSerializer`：編集・未保存・保存・シーン差し替え。
 - `MainWindow.Play`、`PlaySession`：Playの準備・更新・自動停止・手動停止・終了処理。
 - `UserCodeReloadCoordinator`、`ProjectComponents`：再コンパイル時のScene移行・型登録・古いコードの解放。
@@ -98,12 +98,14 @@ EditorとPlayerが共有するのは描画コード・ゲームデータ・入�
 
 ### V3：親子・素材参照・UIデータを保存できるようにする
 
-2026-09-22：[設計案](EngineArchitecture.md#v3親子素材参照ui保存の設計案)を作成。親削除時の子孫削除はユーザー確認済み。実装は未着手で、以下のチェックは実装・検証が済んだ時点で更新する。
+**次に着手：InspectorのComponent検索・追加。** 続く依存確認・素材取込／Sprite選択・編集Scene描画・保存往復の順番と完成条件は、[実装計画の次の作業](ImplementationPlan.md#次に着手する作業)を正本とする。V3とV4の必要部分をこの順で接続する。
+
+2026-09-22：[設計案](EngineArchitecture.md#v3親子素材参照ui保存の設計案)を作成。親削除時の子孫削除と、Transform＋UiElement＋CoreのUiLayoutという構成は合意済み。UiElementはデータ定義あり、UiLayout.Calculateの単体配置計算とGPU不要チェックを追加した。Image／Spriteでの表示確認も検証用Sceneで接続済み。実ProjectのSceneへの接続・保存・V3全体は未完了。以下のチェックは実装・検証が済んだ時点で更新する。
 
 - [ ] Parent、兄弟順、循環の拒否、親削除と付け替え時の子の扱いを設計し、Sceneの操作・実行時予約・YAML・Cloneへ一貫して反映する。
 - [ ] オブジェクト・画像・フォントをIDで参照する最小の仕組みを作る。Project内の素材位置への対応、改名・移動、欠落時の表示、Project外参照の拒否を扱う。
-- [ ] Canvas相当の画面設定と、RectTransform相当のAnchor・Pivot・位置・サイズ・回転・拡縮を定義する。既存TransformとUI矩形の役割を区別する。
-- [ ] 基準解像度と画面サイズ変更時のルール、親のクリップ・子の配置・非表示・描画順を確定する。初期対応は画面上の2D UIとし、World Space Canvasは含めない。
+- [ ] UiElementのSizeDelta・AnchorMin／AnchorMax・Pivotと、既存Transformの位置・回転・拡縮を組み合わせる。専用RectTransformは作らず、CoreのUiLayoutで親領域から矩形サイズ・配置行列を計算する。描画・入力・選択枠は同じ結果を使う。
+- [ ] 表示領域を基準にした配置と画面サイズ変更時のルール、親のクリップ・子の配置・非表示・描画順を確定する。Canvas Componentは初期構成の必須にせず、基準解像度へのFitは後続の検討事項とする。初期対応は画面上の2D UIとし、World Space Canvasは含めない。
 - [ ] Image・Text・Button相当を普通のC#コンポーネントとして扱う。描画・操作と保存する設定を分け、GPUハンドル・イベント購読・一時状態を保存しない。
 - [ ] ボタンからゲームコードへの接続方法と対象の参照方法を決める。文字列のメソッド名だけで曖昧に呼び出す接続は避ける。
 - [ ] Inspector対応型の追加が必要なら保存・Clone・コード再読み込みも一緒に対応する。描画型だけの特別な保存経路を増やさない。

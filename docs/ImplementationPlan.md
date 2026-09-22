@@ -1,10 +1,28 @@
 # PureEngine 実装計画・進捗
 
-最終更新：2026-09-22
+最終更新：2026-09-23
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済みと動作確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。
+実装済み・自動検証済み・実画面確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。2026-09-23、下記のUI5項目（Component検索・追加から保存・Cloneまで）を実装し、自動検証を通過した。
+
+## 次に着手する作業
+
+2026-09-22にユーザー指定した以下の5項目は、2026-09-23に実装・自動検証済み。実画面の目視とCIは未確認として区別する。初回レビューで見つかった不具合は修正し、実際の追加ダイアログ経由の回帰テストを追加した。詳細は[レビュー修正](#ui実装レビューの修正)と[初回検証状況](#ui5項目の検証2026-09-23)を参照。
+
+| 順番 | 作業 | 状態 |
+| --- | --- | --- |
+| 1 | **InspectorのComponent検索・追加** | 実装・自動検証済み。InspectorのAdd Componentから当該Projectの登録型を検索し、既存のアタッチ処理・factoryで付ける。重複防止・削除・未保存・Play禁止を維持 |
+| 2 | **必要な組み合わせの確認** | 実装・自動検証済み。Image不足のTransform／UiElementを通知し、揃うと解除する。自動追加はしない |
+| 3 | **画像素材の取り込み・Sprite選択** | 実装・自動検証済み。`Assets/` へ取り込み、Sprite欄で選択・None解除。正式IDで参照し、欠落はID保持で診断する |
+| 4 | **編集中Sceneの描画とInspector反映** | 実装・自動検証済み。Scene Viewを編集用Sceneへ接続し、追加・削除・配置・Sprite・色を反映する。Start／Updateは呼ばない |
+| 5 | **保存・再Open・Clone** | 実装・自動検証済み。Sprite・値・親子・兄弟順を共通保存経路（`version: 2`）で保持し、Clone先を分離する |
+
+**一連の完成目標：Emptyを作る → Componentを検索して付ける → Spriteを選ぶ → Inspectorで配置・色を変える → 保存 → 開き直して同じ表示になる。** 親を含む例も保存往復とClone・描画一致まで自動検証済み。
+
+次の作業はScene View上のドラッグ操作・ハンドル、Button操作、InputField等の追加。V3／V4全体の完了とは区別する。
+
+検証は既存Core／Editor Checksへ追加し、`./tools/code-quality.ps1 -Check` がPASS。描画反映の実画面目視とCI実行は未確認。
 
 ## 機能追加前のアーキテクチャ改善（完了）
 
@@ -18,7 +36,7 @@
 
 **LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値とPriorityを編集し、YAMLで保存・復元できる。**
 
-制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene ViewにはV2の固定描画サンプルを表示する。Gameと実行用Sceneの描画接続はV5。
+制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene Viewには編集中SceneをImage／Sprite／UiLayoutで描く（Start／Updateなし）。Gameと実行用Sceneの描画接続はV5。
 
 ## 実装済み
 
@@ -35,8 +53,12 @@
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
-| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Components/InspectorValueTypes.cs) |
-| シーン保存 | YAML version 1、ID・名前・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
+| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・Sprite・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Components/InspectorValueTypes.cs) |
+| UI部品の追加 | InspectorのAdd Componentから当該Projectの登録型を検索し、既存のアタッチ処理・factoryで追加。重複防止・削除・未保存・Play禁止を維持。`Transform`・`UiElement`・`Image` は組み込み登録 | [ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.ComponentAdd](../src/PureEngine.Editor/Windows/MainWindow.ComponentAdd.cs) |
+| UI組み合わせ診断 | `Image` に必要な `Transform`／`UiElement` の不足を通知し、揃うと解除する。自動追加はしない | [UiComponentRequirements](../src/PureEngine.Core/Components/UiComponentRequirements.cs)、[MainWindow.UiDiagnostics](../src/PureEngine.Editor/Windows/MainWindow.UiDiagnostics.cs) |
+| 画像素材 | `Assets/` への取り込み、隣接登録情報、Project Open・Refreshでの索引再走査、Sprite欄の選択・None解除、欠落IDの保持と診断 | [ProjectAssets](../src/PureEngine.Editor/Assets/ProjectAssets.cs)、[Sprite](../src/PureEngine.Core/Assets/Sprite.cs) |
+| 編集Sceneの描画 | Scene Viewを編集用Sceneへ接続し、親子・兄弟順の走査で追加・削除・配置・Sprite・色を反映する。`UiLayout`／`UiImageRenderer` を再利用し、Start／Updateは呼ばない | [EditSceneRenderer](../src/PureEngine.Rendering/EditSceneRenderer.cs)、[VulkanViewport](../src/PureEngine.Rendering.Avalonia/VulkanViewport.cs)、[MainWindow.Preview](../src/PureEngine.Editor/Windows/MainWindow.Preview.cs) |
+| シーン保存 | YAML version 2、ID・名前・parentId・siblingIndex・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表。`version: 1` は読み込みのみ | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | Inspectorメンバー改名 | 属性なしで改名・削除可能。新名は初期値、同名の値は維持し、保存時に古いYAML項目を削除。値を引き継ぐ旧名属性は任意。仕様は [EngineArchitecture.md](EngineArchitecture.md) のInspector節 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
 | ゲーム用コンストラクタ注入 | 普通のC#コンストラクタで依存を受け取る。Project側の登録口（`ConfigureGameServices`）と組み込み登録から、編集・Play別のprovider＋Scopeで生成。登録変更を含む再読み込み・Project読み込みは成功後に採用し、失敗時は旧状態を維持。終了順と失敗時解放を維持 | [ProjectGameServices](../src/PureEngine.Editor/Game/ProjectGameServices.cs)、[GameServices](../src/PureEngine.Editor/Game/GameServices.cs)、[GameSession・PlaySession](../src/PureEngine.Runtime/GameSession.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.UserCode](../src/PureEngine.Editor/Windows/MainWindow.UserCode.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
@@ -50,16 +72,18 @@
 
 ## まだできないこと・制限
 
-- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。ゲーム画面の描画・プレビューは未実装。
-- Parent、親子ツリー、オブジェクト・素材への参照の保存は未実装。
+- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。Game表示・入力・Play描画接続、単体実行・配布は未実装。
+- 親子関係・兄弟順・Sprite参照の保存は実装済み。オブジェクト参照（ObjectRef）・フォント素材・Text／Button、ルートの並べ替えUIは未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
-- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
+- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
-- ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
+- ゲーム内UIのButton操作・InputField等の追加、Scene View上のドラッグ操作・ハンドル、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
 ## 仕様整理と次の実装順
+
+直近の着手順は冒頭の[次に着手する作業](#次に着手する作業)を優先する。以下は既存工程の進捗と全体の段階を示す。
 
 ### 1. ライフサイクルの実行条件を確定する（完了）
 
@@ -116,8 +140,8 @@
 | V0 | 依存関係・シェーダー・GPU共有経路の選定 | 実装・ローカル確認済み |
 | V1 | Scene View埋め込みと単体ウィンドウの表示検証 | 実装・実機確認済み（DPI 1.0） |
 | V2 | 2D画像・日本語の文字・クリップ・GPU資源管理 | 実装・ローカル／実機確認済み |
-| V3 | 親子・素材参照・UIデータの保存 | 設計案作成済み・実装未着手 |
-| V4 | Scene Viewでの配置・Inspector連動 | 未着手 |
+| V3 | 親子・素材参照・UIデータの保存 | Image向けの素材・Inspector・version 2保存／Cloneを実装。Text／Button等は未完了 |
+| V4 | Scene Viewでの配置・Inspector連動 | 編集SceneとInspectorの反映を接続。ドラッグ操作・ハンドル等は未実装 |
 | V5 | Game表示・入力・Play／Stop接続 | 未着手 |
 | V6 | 同じプロジェクトの単体実行・配布確認 | 未着手 |
 
@@ -133,13 +157,72 @@ V1が成立する前にUI本実装へ進まない。最終目標は、カード�
 | ローカル複数実行・通信 | ホストとクライアント、状態同期、テスト用起動方式 |
 | Steam | ロビー・招待・参加、接続検証 |
 
-Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。描画の実装範囲はV2の固定サンプルまで。
+Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。描画はV2基盤に加え、Image／Sprite／UiLayoutの検証用Sceneまで接続済み。実Projectの編集・保存・Play接続は後続。
 
 ## 検証状況
 
+### UI実装レビューの修正
+
+初回レビューで再現した5件を修正した。以前の自動チェック通過だけでは追加ダイアログの操作経路を検証できていなかったため、回帰チェックを補った。
+
+| 問題 | 修正・確認 |
+| --- | --- |
+| Add Componentの選択変更で再帰してクラッシュ | 候補一覧の再構築とAddボタンの有効状態更新を分離。実ダイアログを開き、非先頭行の選択・検索・追加・重複防止・結果なし・CloseをHeadless Editorで確認 |
+| Empty／最後のComponent削除後に追加ボタンが消える | 選択中なら追加入口を表示。祖先パネルを含むIsEffectivelyVisibleと、最後のカードのRemove後に再追加できることを確認 |
+| 削除予約後の親変更でSceneから消えた対象がUpdateされる | Scene所属とRuntime予約／終了状態を変更前に検証し、Runtimeは予約集合だけを単体除去。子の救出・予約親への新規追加・兄弟並べ替え・Destroy／Stop後の変更を拒否し、Destroy／Dispose一度だけを確認 |
+| AssetsのjunctionからProject外へ読書きする | 共通パス検証を取込・走査・読込へ適用。Assets自体のjunction、索引作成後のリンク差し替え、取込途中失敗のロールバックを確認。外部フォルダへ書き込まない |
+| 同じ画像IDをRefreshしても旧画像が残る | 次の直列フレームでアトラスを再構築しRevisionを更新。CPU画素の変更に加え、実GPUの完了フレームをまたいだ赤→青の差し替えを確認 |
+
+- `./tools/code-quality.ps1 -Check`：終了コード0。提案レベルの解析、警告／エラー0のビルド、Core／EditorチェックPASS。
+- `./tools/vulkan-check.ps1 -ValidationLayerPath tools/.cache/validation`：終了コード0。Validation Layers＋同期検証エラー0。20回再作成のプロセスハンドル数は1135〜1137、最後1137。同じ画像IDのキャッシュ更新後にも描画フレーム完了を確認。
+- 実GPUテストは従来と同じRTX 4070／Windows構成。画素比較はCPUアトラスで行い、GPUの画面読み戻し比較とは区別する。
+- 新しい回帰テストはHierarchyLifetimeChecks、UiImageEditorChecks、ProjectAssetChecks、EditPreviewChecks、VulkanCheckAppへ追加。既存のDispose検査・例外系テスト・namespace・診断設定は維持。
+- CIと、一連の制作操作を人が実ウィンドウで行う目視確認は未実施。今回の検証は自動チェックと実GPUテストとして記録する。
+
+### UI5項目の検証（2026-09-23）
+
+Emptyを作る → Componentを検索して付ける → Spriteを選ぶ → Inspectorで配置・色を変える → 保存 → 開き直して同じ表示になる一連を、共通保存経路（`version: 2`）と編集Scene描画へ接続した。別のRectTransform、専用基底クラス、第二の保存経路は作っていない。namespaceは変更していない。
+
+- ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェック通過。
+- Core追加（`UiComponentChecks`）：SpriteのYAML往復・Clone分離・拒否、UI組み合わせの不足と解除、親子・兄弟順の保存往復・Clone分離・子孫削除、 sibling並べ替え、不正構造の拒否を確認。
+- Editor追加：`ComponentSearchChecks`（組み込み登録・検索・factory追加・重複防止）、`ProjectAssetChecks`（取り込み・索引・重複／欠落／破損の診断・バイト列読み込み）、`EditPreviewChecks`（追加・削除・配置・Sprite・色の反映、不足診断、Start／Update不呼び出し）、`UiImageEditorChecks`（Add入口・不足警告の表示／解除・Sprite選択／None／欠落・Play中禁止）、`UiEndToEndChecks`（実Projectの作成・取り込み・追加・配置・保存・再Open・Cloneで表示一致）を確認。
+- 実画面確認：未実施。Headless EditorでのInspector・Scene View相当の描画一致は自動検証済みだが、可視ウィンドウでの操作・GPU表示の目視は今回行っていない。
+- CI：未実行。GitHub Actionsの結果確認は未実施。
+
+### Image・Sprite・UiLayoutの描画接続（2026-09-22）
+
+既存Image Componentを変更せず、RenderingへCore参照とUiImageRendererを追加した。Spriteの切り出しを個別のアトラス領域へ登録し、UiLayoutの結果とImage.Colorで描画する。Scene View／試作Playerは、普通のComponentを付けた検証用Sceneを表示する。実Projectの編集Sceneや保存シーンの描画ではない。
+
+- ローカル品質：`./tools/code-quality.ps1 -Check`は終了コード0、警告・エラー0でPASS。Componentからの頂点生成、切り出しUV、Color／Alpha、null／0Scale、素材欠落／不正領域、リサイズ後のアトラス再利用を検査した。
+- 実GPU：`./tools/vulkan-check.ps1 -ValidationLayerPath tools/.cache/validation`は終了コード0でPASS。既存の20回再作成・連続リサイズ・0寸法・タブ切替・最小化／復元・終了処理を新サンプルで再確認した。Validation Layers 1.4.341.1＋同期検証でエラー0件。
+- 環境：Windows 11／RTX 4070／ドライバー616.92／Avalonia 12.1.2 ANGLE、DPI 1.0。20回再作成時のハンドル数は1172〜1177で推移（最後1175）、退役後のrenderer数は0。
+- 目視：全体と部分切り出し、色と半透明の重なり、親の回転と子の配置を確認。単体ウィンドウの拡大／復元で横Stretchと右下Anchorの追従も確認。[通常表示](evidence/image-component-player.png)、[拡大後](evidence/image-component-resized.png)、[Editor内の表示](evidence/image-component-editor.png)。
+
+CI・別GPU・高DPI・性能測定は今回未実施。素材の正式なID解決、SpriteのInspector値変換、Imageの組み込み登録、実ProjectのScene描画と保存は未実装。Namespaceは既存宣言を維持し、Vulkan側のImage型はエイリアスで区別した。
+
+### Spriteの素材データ（2026-09-22）
+
+Core/AssetsのSpriteへ元画像IDと省略可能な切り出し矩形を追加。変更不可のデータとし、画像全体の指定とデコード後の寸法による範囲検証を扱う。仕様は[設計書](EngineArchitecture.md#spriteの素材データ)、使用例は[README](../README.md#spriteの素材データ)を参照。
+
+Core.Checksへ、画像全体・部分領域・端の1ピクセル・解決時の不変性・空ID・負値／0・画像外・整数オーバーフローを回避する境界検証を追加。`./tools/code-quality.ps1 -Check`は終了コード0でPASS（提案レベル診断、警告／エラー0のビルド、Core／Editorチェック）。Imageへの組み込み・素材のID解決・Inspector／保存・描画は未接続で、CI／GPU実画面確認は今回未実施。
+
+### UiLayoutの単体配置計算（2026-09-22）
+
+`UiLayout.Calculate(parentSize, parentWorld, transform, uiElement)`を実装。既存Transform.LocalMatrixを使い、実際のサイズと左上基準の配置行列を返す。Componentの値は変更しない。数値検証の仕様は[設計書](EngineArchitecture.md#配置計算の置き場所と入出力)を参照。
+
+Core.Checksへ、中央／右下固定、横／全面Stretch、Pivot中心の回転と拡縮、親のUiLayout結果を使う子の追従、Z位置保持、入力不変、範囲外Anchor／Pivot、0サイズ／0Scale、不正値とオーバーフロー拒否のチェックを追加。`./tools/code-quality.ps1 -Check`は終了コード0でPASS（提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェック通過）。Scene走査・登録・描画／入力接続・CI／実画面確認はこの変更の対象外。
+
+### V3のUI構成の更新（2026-09-22）
+
+会話で合意したTransform＋UiElementの構成へ[設計書](EngineArchitecture.md#uiコンポーネント)を更新した。位置・回転・拡縮は既存Transform、SizeDelta・AnchorMin／AnchorMax・PivotはUiElementが持つ。計算はCoreの`Components/UiLayout.cs`へ置き、Componentではない共通の計算用クラスとする。以前の専用RectTransform・必須UiCanvasの案は取り下げた。
+
+設計更新時点では作業ツリーにUiElementのデータ定義と作成途中のUiLayout.csがあった（現在の実装・検証状況は上の「UiLayoutの単体配置計算」を参照）。UiLayout計算の完成・検証済みや、組み込み登録・依存検証・描画／入力接続の実装済みとは扱わない。次は配置計算→中央／右下固定・Stretch・Pivot・親子追従のGPU不要チェック→Imageでの表示確認。その後、保存・参照・素材・Text／Buttonへ進む。Z軸／X/Y軸回転、非UI親の扱い、画面拡縮や非表示等の詳細は未確定と明記した。
+
+今回の変更はMarkdownのみ。既存のC#作業ファイルは変更せず、code-quality.ps1 -Checkは文書のみの変更のため未実行。
+
 ### V3の設計（2026-09-22）
 
-[設計案の正本](EngineArchitecture.md#v3親子素材参照ui保存の設計案)を追加。既存Parent／Transform／SceneSerializer／SceneRuntime／素材パス検証を調べ、親子保存の不足を確認した。親削除時に子孫も削除する方針はユーザー確認済み。参照値型、素材サイドカー、UI配置、ボタンの型付き契約、version 2への移行とV3-a〜eの実装順は提案として記載した。
+[設計案の正本](EngineArchitecture.md#v3親子素材参照ui保存の設計案)を追加。既存Parent／Transform／SceneSerializer／SceneRuntime／素材パス検証を調べ、親子保存の不足を確認した。親削除時に子孫も削除する方針はユーザー確認済み。参照値型、素材サイドカー、UI配置、ボタンの型付き契約、version 2への移行とV3-a〜eの実装単位は提案として記載した。UI構成と直近の着手順は上記の更新で見直している。
 
 この変更は文書のみ。V3のコード実装・自動チェック・GPU確認は行っておらず、code-quality.ps1 -CheckはAGENTS.mdに従い未実行。V0〜V2の過去の検証記録とは区別する。
 

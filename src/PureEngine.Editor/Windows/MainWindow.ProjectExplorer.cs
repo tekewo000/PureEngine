@@ -162,6 +162,7 @@ public partial class MainWindow
                 var startup = (project.Document.StartupScene ?? "").Replace('\\', '/');
                 foreach (var file in project.ListFiles(folder))
                 {
+                    if (file.EndsWith(".pureasset.yaml", StringComparison.OrdinalIgnoreCase)) continue;
                     var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
                     var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
                     var isStartup = isScene && string.Equals(relative, startup, StringComparison.Ordinal);
@@ -394,7 +395,9 @@ public partial class MainWindow
     private async void OnExplorerDelete(object? sender, RoutedEventArgs e) => await DeleteSelectedExplorerEntry();
     private async void OnExplorerRefresh(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
+        RefreshProjectAssets();
         RefreshProjectExplorer();
+        RefreshComponents();
         SetFileStatus(_project is null ? "No project is open." : $"Refreshed: {_project.Document.Name}");
         await Task.CompletedTask;
     });

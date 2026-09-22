@@ -5,6 +5,7 @@ using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Buffer = Silk.NET.Vulkan.Buffer;
+using VulkanImage = Silk.NET.Vulkan.Image;
 
 
 namespace PureEngine.Rendering;
@@ -31,10 +32,10 @@ public sealed unsafe class VulkanRenderer : IDisposable
     private Sampler _sampler;
     private Buffer _vertices, _staging;
     private DeviceMemory _vertexMemory, _stagingMemory;
-    private Image _atlas;
+    private VulkanImage _atlas;
     private DeviceMemory _atlasMemory;
     private ImageView _atlasView;
-    private Image _image;
+    private VulkanImage _image;
     private ImageView _view;
     private DeviceMemory _memory;
     private Framebuffer _framebuffer;
@@ -100,7 +101,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
         Check(_vk.BindBufferMemory(_device, buffer, memory, 0));
     }
 
-    private void CreateImage(int width, int height, bool shared, out Image image, out DeviceMemory memory, out ImageView view, out ulong memorySize)
+    private void CreateImage(int width, int height, bool shared, out VulkanImage image, out DeviceMemory memory, out ImageView view, out ulong memorySize)
     {
         memory = default; view = default;
         var external = new ExternalMemoryImageCreateInfo { SType = StructureType.ExternalMemoryImageCreateInfo, HandleTypes = ExternalMemoryHandleTypeFlags.D3D11TextureBit };
@@ -240,7 +241,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
         Check(_vk.BeginCommandBuffer(_command, in begin));
     }
 
-    private void Barrier(Image image, ImageLayout from, ImageLayout to, AccessFlags source, AccessFlags destination, uint sourceFamily = Vk.QueueFamilyIgnored, uint destinationFamily = Vk.QueueFamilyIgnored)
+    private void Barrier(VulkanImage image, ImageLayout from, ImageLayout to, AccessFlags source, AccessFlags destination, uint sourceFamily = Vk.QueueFamilyIgnored, uint destinationFamily = Vk.QueueFamilyIgnored)
     {
         var barrier = new ImageMemoryBarrier { SType = StructureType.ImageMemoryBarrier, Image = image, OldLayout = from, NewLayout = to,
             SrcAccessMask = source, DstAccessMask = destination, SrcQueueFamilyIndex = sourceFamily, DstQueueFamilyIndex = destinationFamily,

@@ -6,7 +6,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace PureEngine.Core;
 
-/// <summary>Version 1 YAML scenes. Restoring never mutates the caller's current scene.</summary>
+/// <summary>Version 1 reads as roots, version 2 saves parentId and siblingIndex. Restoring never mutates the caller's current scene.</summary>
 public sealed class SceneSerializer(ComponentRegistry registry)
 {
     private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = [];
@@ -26,10 +26,38 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     private SceneDocument Capture(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var document = new SceneDocument { Version = 1, Objects = [] };
+        var document = new SceneDocument { Version = 2, Objects = [] };
+        var roots = scene.RootObjects;
+        var rootIndex = new Dictionary<Guid, int>();
+        for (var i = 0; i < roots.Count; i++)
+            rootIndex.Add(roots[i].Id, i);
         foreach (var item in scene.Objects)
         {
-            var saved = new SceneObjectDocument { Id = item.Id, Name = item.Name, Components = [] };
+            var parent = item.Parent;
+            if (parent is not null && !scene.Objects.Contains(parent))
+                throw new InvalidDataException($"{item.Name}: parent is outside the scene.");
+            int siblingIndex;
+            Guid? parentId;
+            if (parent is null)
+            {
+                parentId = null;
+                siblingIndex = rootIndex[item.Id];
+            }
+            else
+            {
+                parentId = parent.Id;
+                siblingIndex = parent.Children.ToList().FindIndex(candidate => ReferenceEquals(candidate, item));
+                if (siblingIndex < 0)
+                    throw new InvalidDataException($"{item.Name}: sibling order is broken.");
+            }
+            var saved = new SceneObjectDocument
+            {
+                Id = item.Id,
+                Name = item.Name,
+                ParentId = parentId,
+                SiblingIndex = siblingIndex,
+                Components = [],
+            };
             foreach (var component in item.Components)
             {
                 var type = component.GetType();
@@ -74,7 +102,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     private Scene Restore(SceneDocument document, Func<Type, object>? factory, out bool membersChanged)
     {
         membersChanged = false;
-        if (document.Version != 1)
+        if (document.Version is not (1 or 2))
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
 
@@ -88,7 +116,18 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             {
                 if (saved is null || saved.Id == Guid.Empty || string.IsNullOrWhiteSpace(saved.Name) || saved.Components is null)
                     throw new InvalidDataException("Each object requires a non-empty id, name and components list.");
-                var item = scene.RestoreObject(saved.Id, saved.Name);
+                if (document.Version == 1 && (saved.ParentId is not null || saved.SiblingIndex is not null))
+                    throw new InvalidDataException($"{saved.Name}: version 1 must not contain parentId or siblingIndex.");
+                if (document.Version == 2 && saved.SiblingIndex is null)
+                    throw new InvalidDataException($"{saved.Name}: version 2 requires siblingIndex.");
+                _ = scene.RestoreObject(saved.Id, saved.Name);
+            }
+            RestoreParentLinks(document, scene);
+            foreach (var saved in document.Objects)
+            {
+                if (saved is null || saved.Components is null)
+                    throw new InvalidDataException("Each object requires a non-empty id, name and components list.");
+                var item = scene.Objects.First(candidate => candidate.Id == saved.Id);
                 foreach (var data in saved.Components)
                 {
                     if (data is null || string.IsNullOrWhiteSpace(data.TypeId) || data.Values is null)
@@ -108,7 +147,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                             throw new InvalidDataException($"{data.TypeId}.{member.Name}: multiple saved names refer to the same Inspector member.");
                     }
                     var (start, update, destroy) = ReadPriorities(data, type);
-                    var component = CreateComponent(type, factory, data.TypeId, saved.Name);
+                    var component = CreateComponent(type, factory, data.TypeId, saved.Name!);
                     created.Add(component);
                     foreach (var member in Members(type))
                     {
@@ -144,6 +183,56 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             throw;
         }
         return scene;
+    }
+
+    private static void RestoreParentLinks(SceneDocument document, Scene scene)
+    {
+        if (document.Version == 1) return;
+        var byId = document.Objects!.ToDictionary(saved => saved!.Id);
+        foreach (var saved in document.Objects!)
+        {
+            if (saved!.ParentId is { } parentId)
+            {
+                if (parentId == Guid.Empty)
+                    throw new InvalidDataException($"{saved.Name}: parentId must not be empty.");
+                if (parentId == saved.Id)
+                    throw new InvalidDataException($"{saved.Name}: an object cannot be its own parent.");
+                if (!byId.ContainsKey(parentId))
+                    throw new InvalidDataException($"{saved.Name}: parent {parentId:D} is missing.");
+            }
+            if (saved.SiblingIndex is not { } sibling || sibling < 0)
+                throw new InvalidDataException($"{saved.Name}: siblingIndex must be a non-negative integer.");
+        }
+        foreach (var saved in document.Objects!)
+        {
+            var chain = new HashSet<Guid> { saved!.Id };
+            for (var current = saved; current?.ParentId is { } parentId; current = byId[parentId])
+            {
+                if (!chain.Add(parentId))
+                    throw new InvalidDataException($"{saved.Name}: parent cycle is not allowed.");
+            }
+        }
+        foreach (var group in document.Objects!.GroupBy(saved => saved!.ParentId?.ToString("D") ?? string.Empty))
+        {
+            var members = group.ToList();
+            var indexes = members.Select(member => member!.SiblingIndex!.Value).ToList();
+            if (indexes.Distinct().Count() != members.Count
+                || indexes.Min() != 0 || indexes.Max() != members.Count - 1)
+                throw new InvalidDataException("Sibling indexes must be unique continuous values from 0.");
+        }
+        var rootsInArrayOrder = document.Objects!.Where(saved => saved!.ParentId is null).ToList();
+        for (var i = 0; i < rootsInArrayOrder.Count; i++)
+        {
+            if (rootsInArrayOrder[i]!.SiblingIndex != i)
+                throw new InvalidDataException("Root sibling order must follow the document order.");
+        }
+        var items = scene.Objects.ToDictionary(item => item.Id);
+        foreach (var group in document.Objects!.GroupBy(saved => saved!.ParentId?.ToString("D") ?? string.Empty))
+        {
+            foreach (var saved in group.OrderBy(member => member!.SiblingIndex!.Value))
+                if (saved!.ParentId is { } parentId)
+                    items[saved.Id].SetParent(items[parentId]);
+        }
     }
 
     /// <summary>

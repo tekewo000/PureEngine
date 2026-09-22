@@ -48,6 +48,8 @@ internal static class Program
             return;
         }
         RenderingChecks.Run();
+        ComponentSearchChecks.Run();
+        EditPreviewChecks.Run();
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PureEngine-LauncherChecks-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(root);
         try
@@ -70,6 +72,8 @@ internal static class Program
             ProjectServiceRegistrationChecks.Run(root);
             UserCodeBackgroundChecks.Run(root);
             IntegratedArchitectureChecks.Run(root);
+            ProjectAssetChecks.Run(root);
+            UiEndToEndChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";
             Click(Control<Button>(launcher, "CreateProjectButton"));
@@ -94,6 +98,7 @@ internal static class Program
 
             PriorityInspectorChecks.Run(editor);
             InspectorValueEditorChecks.Run(editor);
+            UiImageEditorChecks.Run(editor);
             // Inspector checks leave unsaved objects; discard them so the following flow starts clean.
             editor.Close();
             Dispatcher.UIThread.RunJobs();

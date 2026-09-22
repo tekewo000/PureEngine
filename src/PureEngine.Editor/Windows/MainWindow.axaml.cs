@@ -58,6 +58,7 @@ public partial class MainWindow : Window
             _sceneSerializer = new SceneSerializer(_components.Registry);
             _project = session.Project;
             SetCurrentScene(session.Scene, session.Project.StartupScenePath);
+            RefreshProjectAssets();
             if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
             StartUserCodeWatching();
@@ -101,6 +102,8 @@ public partial class MainWindow : Window
         InitConsole();
         var viewport = new PureEngine.Rendering.Avalonia.VulkanViewport();
         viewport.RenderingFailed += error => Log.Engine.Error(error);
+        ConnectPreviewViewport(viewport);
+        RefreshProjectAssets();
         SceneViewport.Children.Add(viewport);
     }
 
@@ -231,7 +234,7 @@ public partial class MainWindow : Window
         _invalidFields.Clear();
         var item = SceneObjects.SelectedItem as SceneObject;
         var components = item?.Components.ToArray() ?? [];
-        AttachedClasses.IsVisible = components.Length > 0;
+        AttachedClasses.IsVisible = item is not null;
         NoComponentsHint.IsVisible = item is not null && components.Length == 0;
         AttachError.IsVisible = false;
         ComponentsHeader.Text = $"Components ({components.Length})";
@@ -332,11 +335,12 @@ public partial class MainWindow : Window
         Grid.SetColumn(priorities, 1);
         header.Children.Add(priorities);
         body.Children.Add(header);
+        body.Children.Add(BuildUiWarning(item, component));
         body.Children.Add(content);
         var remove = new MenuItem { Header = "Remove" };
         var card = new Border
         {
-            Classes = { "componentCard" }, Child = body,
+            Classes = { "componentCard" }, Child = body, Tag = component,
             ContextMenu = new ContextMenu { Items = { remove } },
         };
         card.ContextMenu.Opening += (_, _) => remove.IsEnabled = !IsPlaying;
@@ -348,10 +352,10 @@ public partial class MainWindow : Window
                 _invalidFields.Remove(box);
             ComponentEditors.Children.Remove(card);
             ComponentsHeader.Text = $"Components ({item.Components.Count})";
-            AttachedClasses.IsVisible = item.Components.Count > 0;
             NoComponentsHint.IsVisible = item.Components.Count == 0;
             UpdateErrorBadge();
             MarkSceneChanged();
+            RefreshUiWarnings(item);
             try { ComponentAssets.DisposeComponents([component]); }
             catch (Exception error) { SetFileStatus(error.ToString(), true); }
             QueuePendingUserCodeReload();
@@ -622,6 +626,8 @@ public partial class MainWindow : Window
             return BuildVector4Editor(component, member, automationName, isQuaternion: true);
         if (memberType == typeof(PureEngine.Core.Transform))
             return BuildTransformEditor(component, member, automationName);
+        if (memberType == typeof(Sprite))
+            return BuildSpriteEditor(component, member, automationName);
         if (memberType.IsEnum)
             return BuildEnumEditor(component, member, automationName);
         if (Nullable.GetUnderlyingType(memberType) is not null)
@@ -807,11 +813,20 @@ public partial class MainWindow : Window
         if (RejectWhenPlaying("Delete")) return;
         if (SceneObjects.SelectedItem is not SceneObject item) return;
         var index = SceneObjects.SelectedIndex;
+        List<object> doomed = [.. item.Components];
+        var stack = new Stack<SceneObject>(item.Children);
+        while (stack.Count > 0)
+        {
+            var descendant = stack.Pop();
+            doomed.AddRange(descendant.Components);
+            foreach (var child in descendant.Children)
+                stack.Push(child);
+        }
         _editScene.Current.Remove(item);
         MarkSceneChanged();
         SceneObjects.SelectedIndex = Math.Min(index, _editScene.Current.Objects.Count - 1);
         SceneObjects.Focus();
-        try { ComponentAssets.DisposeComponents(item.Components); }
+        try { ComponentAssets.DisposeComponents(doomed); }
         catch (Exception error) { SetFileStatus(error.ToString(), true); }
     }
 

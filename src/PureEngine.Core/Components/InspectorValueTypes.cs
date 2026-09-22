@@ -18,6 +18,8 @@ public static class InspectorValueTypes
             return true;
         if (type == typeof(Transform))
             return true;
+        if (type == typeof(Sprite))
+            return true;
         if (type.IsEnum)
             return true;
         var underlying = Nullable.GetUnderlyingType(type);
@@ -51,6 +53,8 @@ public static class InspectorValueTypes
         if (type == typeof(int) || type == typeof(float) || type == typeof(double) || type == typeof(bool))
             return true;
         if (type == typeof(Vector2) || type == typeof(Vector3) || type == typeof(Vector4) || type == typeof(Quaternion))
+            return true;
+        if (type == typeof(Sprite))
             return true;
         if (type.IsEnum)
             return true;
@@ -159,6 +163,24 @@ public static class InspectorValueTypes
                 ["LocalRotation"] = ToStorable(transform.LocalRotation, typeof(Quaternion)),
                 ["LocalScale"] = ToStorable(transform.LocalScale, typeof(Vector3)),
             };
+        }
+        if (type == typeof(Sprite))
+        {
+            if (value is not Sprite sprite)
+                throw new InvalidDataException($"Invalid Sprite value: {value.GetType().FullName}.");
+            var storable = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["imageId"] = sprite.ImageId.ToString("D"),
+            };
+            if (sprite.SourceRect is { } rect)
+                storable.Add("sourceRect", new Dictionary<string, object?>
+                {
+                    ["x"] = rect.X,
+                    ["y"] = rect.Y,
+                    ["width"] = rect.Width,
+                    ["height"] = rect.Height,
+                });
+            return storable;
         }
         if (type.IsArray)
         {
@@ -284,6 +306,36 @@ public static class InspectorValueTypes
                 LocalRotation = (Quaternion)FromStorable(mapping["LocalRotation"], typeof(Quaternion), $"{path}.LocalRotation")!,
                 LocalScale = (Vector3)FromStorable(mapping["LocalScale"], typeof(Vector3), $"{path}.LocalScale")!,
             };
+        }
+        if (type == typeof(Sprite))
+        {
+            if (raw is Sprite existingSprite)
+                return new Sprite(existingSprite.ImageId, existingSprite.SourceRect);
+            var spriteMapping = ToStringKeyedMapping(raw, path);
+            if (!spriteMapping.TryGetValue("imageId", out var imageRaw) || spriteMapping.Count is not (1 or 2))
+                throw new InvalidDataException($"{path}: requires imageId and optional sourceRect.");
+            if (spriteMapping.Count == 2 && !spriteMapping.ContainsKey("sourceRect"))
+                throw new InvalidDataException($"{path}: requires imageId and optional sourceRect.");
+            if (imageRaw is not string imageText || !Guid.TryParse(imageText, out var imageId) || imageId == Guid.Empty)
+                throw new InvalidDataException($"{path}.imageId: a non-empty image ID is required.");
+            (int X, int Y, int Width, int Height)? sourceRect = null;
+            if (spriteMapping.TryGetValue("sourceRect", out var rectRaw) && rectRaw is not null)
+            {
+                var rectMapping = ToStringKeyedMapping(rectRaw, $"{path}.sourceRect");
+                RequireKeys(rectMapping, ["x", "y", "width", "height"], $"{path}.sourceRect");
+                sourceRect = (ReadInt(rectMapping["x"], $"{path}.sourceRect.x"),
+                    ReadInt(rectMapping["y"], $"{path}.sourceRect.y"),
+                    ReadInt(rectMapping["width"], $"{path}.sourceRect.width"),
+                    ReadInt(rectMapping["height"], $"{path}.sourceRect.height"));
+            }
+            try
+            {
+                return new Sprite(imageId, sourceRect);
+            }
+            catch (Exception error) when (error is ArgumentException or ArgumentOutOfRangeException)
+            {
+                throw new InvalidDataException($"{path}: invalid Sprite region.", error);
+            }
         }
         if (type.IsArray)
         {

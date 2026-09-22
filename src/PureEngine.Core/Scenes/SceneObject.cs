@@ -21,6 +21,7 @@ public sealed class SceneObject : INotifyPropertyChanged
     private readonly List<object> _components = [];
     private readonly Dictionary<object, Priorities> _priorities = [with(ReferenceEqualityComparer.Instance)];
     internal SceneRuntime? Runtime { get; set; }
+    internal Scene? OwnerScene { get; set; }
 
     private sealed class Priorities
     {
@@ -227,6 +228,13 @@ public sealed class SceneObject : INotifyPropertyChanged
 
     public void SetParent(SceneObject? parent)
     {
+        Runtime?.EnsureHierarchyMutationAllowed(this);
+        if (parent is not null)
+        {
+            if (!ReferenceEquals(OwnerScene, parent.OwnerScene) || !ReferenceEquals(Runtime, parent.Runtime))
+                throw new InvalidOperationException("Parent and child must belong to the same scene.");
+            parent.Runtime?.EnsureHierarchyMutationAllowed(parent);
+        }
         if (parent == Parent) return;
 
         for (var ancestor = parent; ancestor != null; ancestor = ancestor.Parent)
@@ -238,5 +246,25 @@ public sealed class SceneObject : INotifyPropertyChanged
         Parent?._children.Remove(this);
         Parent = parent;
         Parent?._children.Add(this);
+    }
+
+    /// <summary>Moves within the same siblings without changing local values. Appended order is the sibling order.</summary>
+    public void SetSiblingIndex(int index)
+    {
+        Runtime?.EnsureHierarchyMutationAllowed(this);
+        var siblings = (Parent?._children) ?? throw new InvalidOperationException("Root sibling order is owned by the Scene.");
+        if (index < 0 || index >= siblings.Count)
+            throw new ArgumentOutOfRangeException(nameof(index), "Sibling index is out of range.");
+        var current = siblings.IndexOf(this);
+        if (current < 0) throw new InvalidOperationException("Object is not a child of its parent.");
+        if (current == index) return;
+        siblings.RemoveAt(current);
+        siblings.Insert(index, this);
+    }
+
+    internal void DetachParentLink()
+    {
+        Parent?._children.Remove(this);
+        Parent = null;
     }
 }

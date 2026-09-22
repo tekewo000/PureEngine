@@ -11,6 +11,8 @@ public sealed class SceneObjectDocument
 {
     public Guid Id { get; set; }
     public string? Name { get; set; }
+    public Guid? ParentId { get; set; }
+    public int? SiblingIndex { get; set; }
     public List<ComponentDocument>? Components { get; set; }
 }
 

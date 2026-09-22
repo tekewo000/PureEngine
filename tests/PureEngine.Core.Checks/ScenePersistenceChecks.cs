@@ -56,7 +56,10 @@ static class ScenePersistenceChecks
         sample.Title = "001";
         CheckFormerNames(scene, registry, yaml);
         Check(serializer.Deserialize(serializer.Serialize(new Scene())).Objects.Count == 0, "Empty scene failed.");
-        Reject(() => serializer.Deserialize(yaml.Replace("version: 1", "version: 99")), "Future version accepted.");
+        Reject(() => serializer.Deserialize(yaml.Replace("version: 2", "version: 99")), "Future version accepted.");
+        Check(serializer.Deserialize(yaml.Replace("version: 2", "version: 1")
+            .Replace("parentId: null", "# parentId omitted").Replace("siblingIndex", "# siblingIndex omitted")) is not null,
+            "Version 1 scenes must remain readable.");
         Reject(() => serializer.Deserialize(yaml.Replace("checks.probe", "missing.type")), "Unknown component accepted.");
         var renamed = serializer.Deserialize(yaml.Replace("Count:", "Missing:"), out var membersChanged);
         Check(membersChanged && renamed.Objects[0].GetComponent<PersistenceProbe>()!.Count == 10

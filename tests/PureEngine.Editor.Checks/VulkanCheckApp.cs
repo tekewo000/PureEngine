@@ -8,6 +8,9 @@ using Avalonia.VisualTree;
 using PureEngine.Editor;
 using PureEngine.Rendering;
 using PureEngine.Rendering.Avalonia;
+using PureEngine.Core;
+using System.Numerics;
+using SkiaSharp;
 
 internal sealed class VulkanCheckApp : App
 {
@@ -75,6 +78,7 @@ internal sealed class VulkanCheckApp : App
                     }
                     Console.WriteLine($"20 recreate cycles: handles={string.Join(',', handles)}; active={VulkanRenderer.ActiveInstances}");
                     if (handles[^1] > handles[5] + 10) throw new Exception("Native handle count grows across recreate cycles.");
+                    await CheckAtlasRefresh(viewport);
                     if (Environment.GetEnvironmentVariable("PUREENGINE_VISUAL_CHECK") == "1")
                     {
                         Console.WriteLine("Visual inspection ready; close the window to finish.");
@@ -104,6 +108,45 @@ internal sealed class VulkanCheckApp : App
             if (viewport.Failure is { } error) throw new InvalidOperationException(error);
             if (watch.Elapsed.TotalSeconds > 15) throw new TimeoutException("GPU frames did not complete.");
             await Task.Delay(20);
+        }
+    }
+
+    private static async Task CheckAtlasRefresh(VulkanViewport viewport)
+    {
+        var scene = new Scene();
+        var item = scene.AddEmpty();
+        var id = Guid.NewGuid();
+        item.Attach(new PureEngine.Core.Transform());
+        item.Attach(new UiElement { Pivot = Vector2.Zero });
+        item.Attach(new global::Image { Sprite = new Sprite(id) });
+        var images = new Dictionary<Guid, byte[]> { [id] = Encode(SKColors.Red) };
+        DrawList? observed = null;
+        var previousBuilder = viewport.SceneBuilder;
+        viewport.SceneBuilder = (draw, size) =>
+        {
+            observed = draw;
+            EditSceneRenderer.Build(draw, scene, images, size);
+        };
+        try
+        {
+            await Frames(viewport);
+            if (EditPreviewChecks.ReadFirstPixel(observed!) != SKColors.Red) throw new Exception("Initial atlas image was not red.");
+            var previousRevision = observed!.Revision;
+            images[id] = Encode(SKColors.Blue);
+            viewport.InvalidateImageCache();
+            await Frames(viewport);
+            if (observed.Revision <= previousRevision || EditPreviewChecks.ReadFirstPixel(observed) != SKColors.Blue)
+                throw new Exception("Viewport did not replace the atlas after image invalidation.");
+            Console.WriteLine("GPU viewport atlas refresh: same image ID changed from red to blue across completed frames.");
+        }
+        finally { viewport.SceneBuilder = previousBuilder; }
+
+        static byte[] Encode(SKColor color)
+        {
+            using var bitmap = new SKBitmap(4, 4);
+            bitmap.Erase(color);
+            using var data = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+            return data.ToArray();
         }
     }
 }

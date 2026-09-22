@@ -5,6 +5,7 @@ internal static class RenderingChecks
 {
     public static void Run()
     {
+        ImageRenderingChecks.Run();
         using var draw = new DrawList();
         var clip = new Vector4(0, 0, 640, 360);
         draw.Rectangle(new(10, 20), Matrix3x2.CreateRotation(MathF.PI / 2) * Matrix3x2.CreateTranslation(30, 40), new(1, 0, 0, .5f), clip);

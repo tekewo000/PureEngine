@@ -6,20 +6,24 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 設計方針・Attribute・Priority・保存データ・将来の構想は [EngineArchitecture.md](docs/EngineArchitecture.md) にまとめています。
 実装済みの範囲・制限・次の作業・検証状況は [実装計画・進捗](docs/ImplementationPlan.md) にまとめています。
 
-C#15＋VulkanのV0〜V2を実装しました。Scene Viewに矩形・画像・日本語の固定サンプルを表示します。シーンの配置編集・Game／Play接続・保存プロジェクトの単体実行はV3以降です。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
+C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のSceneをImage・Sprite・UiLayoutで描きます（Start／Updateは呼びません）。Game／Play接続・保存プロジェクトの単体実行はV3以降です。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
 
 ## 現在できること
 
 - 灰色のダークテーマで、タブの切り替えとペインのサイズ変更ができる。
 - 起動時にLauncherを表示し、Projectの新規作成・既存Projectの選択・最近開いたProjectからの再開ができる。
-- 下部のProject Explorerは左にフォルダツリー、右にファイル一覧を表示する。プロジェクトに存在するフォルダとファイルだけを表示し、組み込みサンプルの一覧は追加しない。
+- 下部のProject Explorerは左にフォルダツリー、右にファイル一覧を表示する。プロジェクトに存在するフォルダとファイルだけを表示し、組み込みサンプルの一覧は追加しない。素材の登録情報（`.pureasset.yaml`）は表示しない。
 - 自作C#はProject内の任意フォルダから読み込み、元のフォルダ内のファイルをドラッグしてアタッチできる。エンジン側への手動登録は不要。組み込みサンプルのComponents一覧は表示しない。
 - Scene View／Gameは左、Stuffsは中央、Inspectorは右に配置する。
 - Project Explorerの自作C#ファイルをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
-- Inspectorのコンポーネントカードを右クリックして「Remove」で取り外す。削除は未保存の変更になり、保存後のシーンからも除かれる。Play中は取り外せない。
+- Inspectorの「Add Component」で選択中オブジェクトへEngineのComponentを検索して追加できる。候補は当該Projectの登録型（`Transform`・`UiElement`・`Image`・自作型）から探し、既存のアタッチ処理・factoryを使う。重複追加は付けない。Play中は追加できない。
+- Inspectorのコンポーネントカードを右クリックして「Remove」で取り外す。削除は未保存の変更になり、保存後のシーンからも除かれる。Play中は取り外せない。親の削除はその時点の子孫ごと削除する。
 - Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
-- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
+- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
+- `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える。`Sprite`がNoneのときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
+- ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
+- Scene Viewは編集中のSceneを親子・兄弟順に辿って描く。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Spriteの変更を反映する。
 - enumはドロップダウン、`[Flags]` はチェックボックスとNoneボタンで編集する。自作enumを含むC#も保存後に自動反映する。互換性のない定義変更はConsoleに理由を表示し、編集中の値を保持する。
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
@@ -47,9 +51,9 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewに矩形・画像・�
 - 未保存の変更はタイトルの `*` で示す。別シーンを開くときや終了時にSave／Discard／Cancelを選ぶ。
 - Inspectorに入力エラーがある間は保存しない。成否とエラー詳細は画面下部に表示する。
 
-保存対象はオブジェクトのID・名前、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。組み込みの `Transform` は `core.transform` で保存する。
+保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。組み込みは `core.transform`・`core.ui-element`・`core.image` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。
 読み込みは別のSceneへ復元し、成功してから現在のSceneと入れ替える。保存は同じフォルダの一時ファイルへ書き終えてから置き換える。
-YAMLのコメントは再保存で失われる。Parent、オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
+現在の形式は `version: 2`。旧形式（`version: 1`）は全てルート・配列順の兄弟として読み込み、次の明示保存で2へ更新する。YAMLのコメントは再保存で失われる。オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
 
 ## Project
 
@@ -74,7 +78,22 @@ MyGame/
 
 [サンプルProject](Examples/SampleProject/Project.pure.project.yaml)にはMainとMenuの2シーンが入っている。
 既存の単体シーンを利用する場合は、新しいProjectのScenesフォルダに `.pure.scene.yaml` ファイルをコピーし、Project ExplorerをRefreshして開く。
-ProjectごとのC#読み込み・自動反映に対応。素材の取り込みは未実装。
+ProjectごとのC#読み込み・自動反映に対応。画像素材は `Assets/` へ取り込んで使う。
+
+```text
+MyGame/
+  Project.pure.project.yaml
+  Assets/
+    Cards/ace.png
+    Cards/ace.png.pureasset.yaml
+  Scenes/
+    Main.pure.scene.yaml
+```
+
+- 「Import Image…」でPNG／JPEGを `Assets/` へコピーし、新規IDの登録情報（`version: 1`・`id`・`kind: image`）を作る。同じ素材の移動・改名は登録情報ごと行えばIDを維持する。
+- Projectを開くときとRefreshで索引を作り直す。同じ画像IDのファイルを変更した場合も、Refresh後の次の描画で画像キャッシュを更新する。重複ID・欠落・壊れた登録・種別違いはConsoleに理由を表示し、該当IDを解決不能にする。索引の再走査だけではファイルを作らない。
+- Assets以下のリンク／junctionは使用できない。取込先・登録情報・画像読込の直前に検証し、索引作成後にリンクへ差し替わった場合も外部ファイルを読まない。
+- 素材のライセンス確認と保持は取り込む側の責任。エンジンは推定しない。
 
 
 ## 自作C#と自動反映
@@ -309,7 +328,7 @@ dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchm
 
 ## Vulkan描画の確認（Windows x64）
 
-通常のEditorを起動してProjectを開くと、Scene Viewに固定サンプルを表示します。対応しないGPU・表示バックエンドでは描画領域に理由を表示し、Consoleへ記録します。既存の編集・保存機能は利用できます。
+通常のEditorを起動してProjectを開くと、Scene Viewに編集中のSceneを描きます。対応しないGPU・表示バックエンドでは描画領域に理由を表示し、Consoleへ記録します。
 
 Editorに依存しない描画確認用ウィンドウ：
 
@@ -317,7 +336,7 @@ Editorに依存しない描画確認用ウィンドウ：
 dotnet run --project src/PureEngine.Player
 ```
 
-これはV2の描画試作であり、保存したゲームのPlayerではありません。開発SDKはglobal.jsonの指定版、実行時はVulkan対応GPUドライバーが必要です。シェーダー・フォントは同梱するので実行時のVulkan SDK／シェーダーコンパイラは不要です。
+これはImage／Sprite／UiLayoutの描画試作であり、保存したゲームのPlayerではありません。ウィンドウを横に広げると、下の帯がStretchし、右側の小さい画像が親領域の右下へ追従します。開発SDKはglobal.jsonの指定版、実行時はVulkan対応GPUドライバーが必要です。シェーダー・フォントは同梱するので実行時のVulkan SDK／シェーダーコンパイラは不要です。
 
 シェーダーの変更後は次を実行します。固定版glslang 16.6.0をtools/.cacheへ取得してGLSLをSPIR-Vへコンパイルします。生成物とHashes.propsも変更に含めてください。通常ビルドは欠落・ソースと生成物のハッシュ不一致を拒否します。
 
@@ -333,3 +352,48 @@ GPUの実ウィンドウ検証は通常CIと分離しています。Khronos Vali
 ```
 
 Scene Viewのリサイズ・サイズ0・最小化／復元・Gameタブ切替・20回の取り外し／再作成・ハンドル数・Inspectorのヒットテストを検査します。目視確認時は `$env:PUREENGINE_VISUAL_CHECK='1'` を設定すると最後にウィンドウを残します。使用後は環境変数を削除してください。描画規約・資源の所有権・依存ライセンスは[設計書](docs/EngineArchitecture.md#v0v2の描画経路と資源所有)を参照してください。
+
+
+## UI配置の単体計算
+
+Coreの`UiLayout.Calculate(parentSize, parentWorld, transform, uiElement)`で、拡縮前の矩形サイズと配置行列を取得できます。親のサイズ・行列には親のUiLayout結果を渡し、ルートには呼び出し側で決めた表示領域と基準行列を渡します。TransformやUiElementの値は変更しません。
+
+```csharp
+var (size, world) = UiLayout.Calculate(
+    new Vector2(400, 200), Matrix4x4.Identity,
+    new Transform(),
+    new UiElement
+    {
+        AnchorMin = new(0.5f), AnchorMax = new(0.5f),
+        Pivot = new(0.5f), SizeDelta = new(100, 40),
+    });
+// sizeは(100, 40)、ローカル原点をworldで変換した左上は(150, 80, 0)。
+```
+
+`System.Numerics`と`PureEngine.Core`を使用します。これはGPU不要の配置計算APIです。編集中Sceneの描画・Buttonの前段階の選択枠と共通の計算です。配置・入力検証の仕様は[設計書](docs/EngineArchitecture.md#配置計算の置き場所と入出力)を参照してください。
+
+
+## Spriteの素材データ
+
+`PureEngine.Core.Sprite`は元画像のIDと切り出し領域を表します。Componentではなく、GPUや画像ファイルを所有しない変更不可のデータです。
+
+```csharp
+// imageIdには、参照したい元画像のIDを指定する。
+var whole = new Sprite(imageId);
+var cropped = new Sprite(imageId, (16, 8, 32, 24));
+var region = cropped.ResolveSourceRect(imageWidth: 128, imageHeight: 64);
+// region = (X: 16, Y: 8, Width: 32, Height: 24)
+```
+
+切り出しは左上原点の整数ピクセルです。省略すると画像全体を使い、`ResolveSourceRect`にはデコード後の実寸を渡します。画像外の切り出しは例外になります。`Image.Sprite`のInspector選択・YAML保存・Clone・編集中Sceneの描画に接続済みです。素材IDの解決はProjectの `Assets/` 索引を使い、検証用の固定画像辞書は制作データに使いません。
+
+
+## Image Componentの描画
+
+Imageは`Sprite`と`Color`を持ち、位置・回転・拡縮をTransform、領域をUiElementから取得します。Spriteがnullなら表示しません。実行は上記のEditorまたは試作Playerを使います。[単体表示](docs/evidence/image-component-player.png)と[リサイズ後](docs/evidence/image-component-resized.png)は検証用サンプルの画面証跡として残しています。
+
+コードから使う入口は`PureEngine.Rendering.UiImageRenderer.Draw`です。対象SceneObject、親のサイズ／UI配置行列、画像IDからPNG等のバイト列を取得する辞書、表示先のクリップ矩形を渡します。戻り値のサイズ・行列を子へ渡せます。画像辞書の内容は描画リストの寿命中不変としてください。
+
+編集中Sceneの一括走査は`PureEngine.Rendering.EditSceneRenderer.Build`です。Scene・画像辞書・表示領域を渡すと、親子・兄弟順に辿って描き、描けなかった対象の診断を返します。Start／Updateは呼びません。Button操作は後続です。
+
+完成目標の操作：StuffsでEmptyを作る → InspectorのAdd Componentで `Transform`・`UiElement`・`Image` を検索して付ける → Projectへ画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置・色を変える → 保存 → 開き直して同じ表示になる。親を含む例も保存往復とCloneで確認する。

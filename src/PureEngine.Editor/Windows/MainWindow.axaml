@@ -484,6 +484,7 @@
                         <MenuItem x:Name="TreeCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />
                         <MenuItem x:Name="TreeCreateCSharpMenu" Header="Create C#" Click="OnExplorerCreateCSharp" />
                         <MenuItem x:Name="TreeCreateSceneMenu" Header="Create Scene" Click="OnExplorerCreateScene" />
+                        <MenuItem Header="Import Image…" Click="OnImportImage" AutomationProperties.Name="Import Image" />
                         <Separator />
                         <MenuItem x:Name="TreeRenameMenu" Header="Rename" Click="OnExplorerRename" />
                         <MenuItem x:Name="TreeDeleteMenu" Header="Delete" Click="OnExplorerDelete" />
@@ -518,6 +519,7 @@
                       <MenuItem x:Name="FilesCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />
                       <MenuItem x:Name="FilesCreateCSharpMenu" Header="Create C#" Click="OnExplorerCreateCSharp" />
                       <MenuItem x:Name="FilesCreateSceneMenu" Header="Create Scene" Click="OnExplorerCreateScene" />
+                      <MenuItem Header="Import Image…" Click="OnImportImage" AutomationProperties.Name="Import Image" />
                       <Separator />
                       <MenuItem x:Name="FilesRenameMenu" Header="Rename" Click="OnExplorerRename" />
                       <MenuItem x:Name="FilesDeleteMenu" Header="Delete" Click="OnExplorerDelete" />
@@ -665,15 +667,18 @@
                 </Grid>
                 <StackPanel x:Name="AttachedClasses" IsVisible="False" Spacing="8" Margin="0,4,0,0">
                   <Separator Classes="divider" />
-                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                     <TextBlock x:Name="ComponentsHeader" Text="Components" Classes="sectionHeader"
                                VerticalAlignment="Center" />
-                    <TextBlock x:Name="ComponentsError" Classes="errorBadge" Grid.Column="1" IsVisible="False" />
+                    <Button x:Name="AddComponentButton" Content="Add Component" Grid.Column="1"
+                            FontSize="11" Padding="8,2" VerticalAlignment="Center"
+                            AutomationProperties.Name="Add Component" Click="OnAddComponent" />
+                    <TextBlock x:Name="ComponentsError" Classes="errorBadge" Grid.Column="2" IsVisible="False" />
                   </Grid>
                   <StackPanel x:Name="ComponentEditors" Spacing="12" />
                 </StackPanel>
                 <TextBlock x:Name="NoComponentsHint" Classes="hint" IsVisible="False"
-                           Text="No components — drag a .cs file from Project to attach." />
+                           Text="No components — press Add Component or drag a .cs file from Project to attach." />
                 <TextBlock x:Name="AttachError" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="False" />
               </StackPanel>
             </ScrollViewer>

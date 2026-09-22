@@ -120,7 +120,7 @@ static class EditorOwnershipChecks
         ((Border)cards.Children[0]).ContextMenu!.Items.OfType<MenuItem>().Single()
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Check(target.Components.Count == 0 && cards.Children.Count == 0
-            && !editor.FindControl<StackPanel>("AttachedClasses")!.IsVisible
+            && editor.FindControl<Button>("AddComponentButton")!.IsEffectivelyVisible
             && editor.FindControl<TextBlock>("NoComponentsHint")!.IsVisible, "The last component must be removable and show the empty hint.");
         Call(editor, "DeleteSelectedObject");
         Check(current.Disposes == 1 && current.DisposedWithLiveServices, "Deleting an edit object must release it.");

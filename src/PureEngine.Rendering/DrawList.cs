@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using SkiaSharp;
+using PureEngine.Core;
 
 namespace PureEngine.Rendering;
 
@@ -45,22 +46,55 @@ public sealed class DrawList : IDisposable
         _vertices.Clear();
     }
 
+    /// <summary>Invalidates atlas entries after source images change. The renderer uploads the new revision next frame.</summary>
+    public void ResetAtlas()
+    {
+        Clear();
+        _entries.Clear();
+        _atlas.Erase(SKColors.Transparent);
+        _atlas.SetPixel(1, 1, SKColors.White);
+        _x = 3;
+        _y = _rowHeight = 1;
+        Revision++;
+    }
+
     public void Rectangle(Vector2 size, Matrix3x2 transform, Vector4 color, Vector4 clip) =>
         Quad(size, new SKRect(1.5f, 1.5f, 1.5f, 1.5f), transform, color, clip);
 
     public void Image(string key, ReadOnlySpan<byte> encodedImage, Vector2 size, Matrix3x2 transform, Vector4 color, Vector4 clip)
+        => Quad(size, GetImageRegion("image:" + key, encodedImage, null), transform, color, clip);
+
+    /// <summary>Copies a sprite crop into its own atlas region, isolating its filtered edges from neighboring sprites.</summary>
+    public void Image(Sprite sprite, ReadOnlySpan<byte> encodedImage, Vector2 size, Matrix3x2 transform, Vector4 color, Vector4 clip)
+    {
+        ArgumentNullException.ThrowIfNull(sprite);
+        var key = sprite.SourceRect is { } rect
+            ? FormattableString.Invariant($"sprite:{sprite.ImageId:N}:{rect.X}:{rect.Y}:{rect.Width}:{rect.Height}")
+            : $"sprite:{sprite.ImageId:N}:whole";
+        Quad(size, GetImageRegion(key, encodedImage, sprite), transform, color, clip);
+    }
+
+    private SKRect GetImageRegion(string key, ReadOnlySpan<byte> encodedImage, Sprite? sprite)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_entries.TryGetValue("image:" + key, out var uv))
+        if (!_entries.TryGetValue(key, out var uv))
         {
             using var data = SKData.CreateCopy(encodedImage);
             using var codec = SKCodec.Create(data) ?? throw new ArgumentException("Invalid image.", nameof(encodedImage));
             if (codec.Info.Width > AtlasSize - 2 || codec.Info.Height > AtlasSize - 2)
                 throw new ArgumentException("Image exceeds atlas dimensions.", nameof(encodedImage));
-            using var image = SKBitmap.Decode(codec) ?? throw new ArgumentException("Invalid image.", nameof(encodedImage));
-            uv = Add("image:" + key, image);
+            var source = sprite?.ResolveSourceRect(codec.Info.Width, codec.Info.Height);
+            using var bitmap = SKBitmap.Decode(codec) ?? throw new ArgumentException("Invalid image.", nameof(encodedImage));
+            if (source is { } crop)
+            {
+                using var subset = new SKBitmap();
+                if (!bitmap.ExtractSubset(subset, SKRectI.Create(crop.X, crop.Y, crop.Width, crop.Height)))
+                    throw new ArgumentException("Cannot extract sprite region.", nameof(sprite));
+                uv = Add(key, subset);
+            }
+            else uv = Add(key, bitmap);
         }
-        Quad(size, uv, transform, color, clip);
+        return uv;
     }
 
     /// <summary>Japanese/Latin display text. Width wraps by Unicode text element; input/IME is outside this API.</summary>
