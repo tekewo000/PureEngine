@@ -32,11 +32,11 @@ internal static class SpriteReopenChecks
         card.Rename("Card");
         card.Attach(new Transform());
         card.Attach(new UiElement());
-        card.Attach(new global::Image { Sprite = new Sprite(imported.Id) });
+        card.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imported.Id) });
         SceneFile.Write(project.StartupScenePath, serializer.Serialize(scene));
 
         CheckReopened(project, imported, null);
-        card.GetComponent<global::Image>()!.Sprite = new Sprite(imported.Id, (2, 3, 8, 6));
+        card.GetComponent<PureEngine.Core.Image>()!.Sprite = new Sprite(imported.Id, (2, 3, 8, 6));
         SceneFile.Write(project.StartupScenePath, serializer.Serialize(scene));
         CheckReopened(project, imported, (2, 3, 8, 6));
         Console.WriteLine("PASS: reopened whole/cropped Sprites resolve immediately; asset loss/recovery updates all Inspector text without changing saved values.");
@@ -65,7 +65,7 @@ internal static class SpriteReopenChecks
                 .Single(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, "Image.Sprite.Info"));
             var warning = editor.GetVisualDescendants().OfType<TextBlock>()
                 .Single(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, "Image.Requirements"));
-            var image = store.Current.Objects.Single().GetComponent<global::Image>()!;
+            var image = store.Current.Objects.Single().GetComponent<PureEngine.Core.Image>()!;
             var sprite = image.Sprite;
             var yaml = File.ReadAllText(project.StartupScenePath);
 
