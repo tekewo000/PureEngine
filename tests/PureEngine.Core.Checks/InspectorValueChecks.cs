@@ -109,6 +109,95 @@ static class InspectorValueChecks
             "Empty string elements did not survive.");
         sample.Tags = ["a", "b"];
 
+        // Custom classes nest as mappings: direct members, doubly nested members, arrays, lists, and dictionaries.
+        var customRegistry = new ComponentRegistry();
+        customRegistry.Register<NestedProbe>("checks.custom");
+        var customSerializer = new SceneSerializer(customRegistry);
+        var customScene = new Scene();
+        var nestedItem = customScene.AddEmpty();
+        nestedItem.Rename("Nested");
+        var nested = new NestedProbe
+        {
+            Boss = new SkillStats { Hp = 30, Name = "Rex" },
+            Loadout = new SkillLoadout { Weapon = "Bow", Stats = new SkillStats { Hp = 5, Name = "Kit" } },
+            Squad = [new SkillStats { Hp = 1, Name = "A" }, new SkillStats { Hp = 2, Name = "B" }],
+            Party = [new SkillStats { Hp = 3, Name = "C" }],
+            Ranks = new Dictionary<string, SkillStats>(StringComparer.Ordinal)
+            {
+                ["leader"] = new SkillStats { Hp = 9, Name = "Z" },
+            },
+        };
+        nestedItem.Attach(nested);
+        var nestedYaml = customSerializer.Serialize(customScene);
+        var nestedCopy = customSerializer.Deserialize(nestedYaml).Objects[0].GetComponent<NestedProbe>()!;
+        Check(nestedCopy.Boss is not null && nestedCopy.Boss.Hp == 30 && nestedCopy.Boss.Name == "Rex",
+            "Custom class member did not survive.");
+        Check(!ReferenceEquals(nestedCopy.Boss, nested.Boss), "Custom class member must be deep-copied.");
+        Check(nestedCopy.Loadout is not null && nestedCopy.Loadout.Weapon == "Bow"
+            && nestedCopy.Loadout.Stats is not null && nestedCopy.Loadout.Stats.Hp == 5 && nestedCopy.Loadout.Stats.Name == "Kit",
+            "Doubly nested custom class did not survive.");
+        Check(nestedCopy.Squad.Length == 2 && nestedCopy.Squad[0].Hp == 1 && nestedCopy.Squad[1].Name == "B",
+            "Custom class array did not survive.");
+        Check(nestedCopy.Party.Count == 1 && nestedCopy.Party[0].Hp == 3 && nestedCopy.Party[0].Name == "C",
+            "Custom class list did not survive.");
+        Check(nestedCopy.Ranks.Count == 1 && nestedCopy.Ranks["leader"].Hp == 9 && nestedCopy.Ranks["leader"].Name == "Z",
+            "Custom class dictionary did not survive.");
+        Check(customSerializer.Serialize(customSerializer.Deserialize(nestedYaml)) == nestedYaml,
+            "Custom class save/load changed output.");
+        var formerYaml = nestedYaml.Replace("Hp:", "Health:");
+        Check(customSerializer.Serialize(customSerializer.Deserialize(formerYaml)) == nestedYaml,
+            "Former names must preserve custom values in members, nested objects, arrays, lists and dictionaries.");
+        Reject(() => customSerializer.Deserialize(nestedYaml.Replace("Name: Rex", "Health: 31")),
+            "Current and former nested names for the same member must be rejected.");
+        // Null custom members survive, and missing nested keys keep their initializers.
+        nested.Boss = null;
+        Check(customSerializer.Deserialize(customSerializer.Serialize(customScene)).Objects[0].GetComponent<NestedProbe>()!.Boss is null,
+            "Null custom class member did not survive.");
+        var renamedYaml = nestedYaml.Replace("Name: Rex", "Nickname: Rex");
+        var renamedCopy = customSerializer.Deserialize(renamedYaml).Objects[0].GetComponent<NestedProbe>()!;
+        Check(renamedCopy.Boss is not null && renamedCopy.Boss.Hp == 30 && renamedCopy.Boss.Name == "fresh",
+            "Unknown nested keys must be ignored while matching values and initializers remain intact.");
+        // Clone must deep-copy nested custom objects; editing the source must not leak into the clone.
+        nested.Boss = new SkillStats { Hp = 30, Name = "Rex" };
+        var nestedClone = customSerializer.Clone(customScene).Objects[0].GetComponent<NestedProbe>()!;
+        nested.Boss.Hp = 999;
+        nested.Loadout!.Stats.Hp = 999;
+        nested.Squad[0].Hp = 999;
+        nested.Party[0].Hp = 999;
+        nested.Ranks["leader"].Hp = 999;
+        Check(nestedClone.Boss!.Hp == 30 && nestedClone.Loadout!.Stats.Hp == 5
+            && nestedClone.Squad[0].Hp == 1 && nestedClone.Party[0].Hp == 3 && nestedClone.Ranks["leader"].Hp == 9,
+            "Clone must deep-copy nested custom objects.");
+        // Rejections: recursive, abstract, generic, struct, or unconstructible custom classes; derived mix-ins.
+        var recursiveRegistry = new ComponentRegistry();
+        recursiveRegistry.Register<RecursiveProbe>("checks.recursive");
+        var recursiveScene = new Scene();
+        recursiveScene.AddEmpty().Attach(new RecursiveProbe());
+        Reject(() => new SceneSerializer(recursiveRegistry).Serialize(recursiveScene), "Recursive custom class saved.");
+        var abstractRegistry = new ComponentRegistry();
+        abstractRegistry.Register<AbstractProbe>("checks.abstract");
+        var abstractScene = new Scene();
+        abstractScene.AddEmpty().Attach(new AbstractProbe());
+        Reject(() => new SceneSerializer(abstractRegistry).Serialize(abstractScene), "Abstract custom class member saved.");
+        var genericRegistry = new ComponentRegistry();
+        genericRegistry.Register<GenericProbe>("checks.generic");
+        var genericScene = new Scene();
+        genericScene.AddEmpty().Attach(new GenericProbe());
+        Reject(() => new SceneSerializer(genericRegistry).Serialize(genericScene), "Generic custom class member saved.");
+        var structRegistry = new ComponentRegistry();
+        structRegistry.Register<StructProbe>("checks.struct");
+        var structScene = new Scene();
+        structScene.AddEmpty().Attach(new StructProbe());
+        Reject(() => new SceneSerializer(structRegistry).Serialize(structScene), "Struct member saved.");
+        var noCtorRegistry = new ComponentRegistry();
+        noCtorRegistry.Register<NoCtorProbe>("checks.noctor");
+        var noCtorScene = new Scene();
+        noCtorScene.AddEmpty().Attach(new NoCtorProbe());
+        Reject(() => new SceneSerializer(noCtorRegistry).Serialize(noCtorScene), "Unconstructible custom class saved.");
+        nested.Boss = new DerivedStats { Hp = 1, Name = "D", Extra = true };
+        Reject(() => customSerializer.Serialize(customScene), "Derived custom class instance saved as its base.");
+        nested.Boss = new SkillStats { Hp = 30, Name = "Rex" };
+
         // Rejections: non-finite, malformed mappings, collections as scalars, unsupported types.
         sample.Ratio = double.NaN;
         Reject(() => serializer.Serialize(scene), "Non-finite double saved.");
@@ -143,7 +232,7 @@ static class InspectorValueChecks
         intKeyScene.AddEmpty().Attach(new IntKeyProbe());
         Reject(() => new SceneSerializer(intKeyRegistry).Serialize(intKeyScene), "Non-string dictionary keys saved.");
 
-        Console.WriteLine("PASS: Inspector extended values (double/vectors/Transform/enum/collections/nullable) round-trip, clone separation, and rejections.");
+        Console.WriteLine("PASS: Inspector extended values (double/vectors/Transform/enum/collections/nullable/custom classes) round-trip, clone separation, and rejections.");
     }
 
     public enum Difficulty
@@ -201,5 +290,84 @@ static class InspectorValueChecks
     public sealed class IntKeyProbe
     {
         [Inspector] public Dictionary<int, int> ById { get; set; } = [];
+    }
+
+    public class SkillStats
+    {
+        [Inspector, FormerlySerializedAs("Health")] public int Hp { get; set; } = 7;
+        [Inspector] public string Name = "fresh";
+    }
+
+    public sealed class DerivedStats : SkillStats
+    {
+        [Inspector] public bool Extra { get; set; }
+    }
+
+    public sealed class SkillLoadout
+    {
+        [Inspector] public string Weapon = "sword";
+        [Inspector] public SkillStats Stats { get; set; } = new();
+    }
+
+    public sealed class NestedProbe
+    {
+        [Inspector] public SkillStats? Boss { get; set; }
+        [Inspector] public SkillLoadout? Loadout { get; set; }
+        [Inspector] public SkillStats[] Squad { get; set; } = [];
+        [Inspector] public List<SkillStats> Party { get; set; } = [];
+        [Inspector] public Dictionary<string, SkillStats> Ranks { get; set; } = [with(StringComparer.Ordinal)];
+    }
+
+    public sealed class RecursiveNode
+    {
+        [Inspector] public RecursiveNode? Next { get; set; }
+    }
+
+    public sealed class RecursiveProbe
+    {
+        [Inspector] public RecursiveNode? Head { get; set; }
+    }
+
+    public abstract class AbstractStats
+    {
+        [Inspector] public int Hp { get; set; }
+    }
+
+    public sealed class AbstractProbe
+    {
+        [Inspector] public AbstractStats? Stats { get; set; }
+    }
+
+    public sealed class Box<T>
+    {
+        [Inspector] public int Count { get; set; }
+    }
+
+    public sealed class GenericProbe
+    {
+        [Inspector] public Box<int>? Box { get; set; }
+    }
+
+    public struct PointStats
+    {
+#pragma warning disable CS0649 // Never assigned: intentional negative case for struct rejection.
+        [Inspector] public int X;
+#pragma warning restore CS0649
+    }
+
+    public sealed class StructProbe
+    {
+        [Inspector] public PointStats Point { get; set; }
+    }
+
+    public sealed class NoCtorStats(int hp)
+    {
+        [Inspector]
+        public int Hp { get; set; } = hp;
+    }
+
+    public sealed class NoCtorProbe
+    {
+        [Inspector] public NoCtorStats? Stats { get; set; }
     }
 }

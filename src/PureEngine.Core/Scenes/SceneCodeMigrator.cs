@@ -50,6 +50,14 @@ public static class SceneCodeMigrator
                     Equals(field.GetRawConstantValue(), after.GetField(field.Name)?.GetRawConstantValue()));
         if (before.IsArray && after.IsArray)
             return before.IsSZArray == after.IsSZArray && CompatibleType(before.GetElementType()!, after.GetElementType()!);
+        if (InspectorValueTypes.IsCustomInspectorObject(before) && InspectorValueTypes.IsCustomInspectorObject(after))
+        {
+            var members = ComponentSchema.GetInspectorMemberNames(after);
+            return before.FullName == after.FullName
+                && ComponentSchema.GetInspectorMembers(before).All(oldMember =>
+                    !members.TryGetValue(oldMember.Name, out var member)
+                    || CompatibleType(MemberType(oldMember), MemberType(member)));
+        }
         return before.IsGenericType && after.IsGenericType
             && before.GetGenericTypeDefinition() == after.GetGenericTypeDefinition()
             && before.GetGenericArguments().Zip(after.GetGenericArguments()).All(pair => CompatibleType(pair.First, pair.Second));

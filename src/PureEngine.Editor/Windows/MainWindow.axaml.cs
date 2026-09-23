@@ -499,6 +499,21 @@ public partial class MainWindow : Window
     {
         var memberType = GetMemberType(member);
         var friendlyType = FriendlyTypeName(memberType);
+        return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType,
+            BuildMemberEditor(component, member));
+    }
+
+    /// <summary>入れ子の自作クラス用に、明示したAutomation名でメンバー行を作る。見た目は <see cref="BuildMemberRow"/> と同じ。</summary>
+    private Grid BuildNestedMemberRow(object owner, MemberInfo member, string automationName)
+    {
+        var memberType = GetMemberType(member);
+        var friendlyType = FriendlyTypeName(memberType);
+        return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType,
+            BuildMemberEditor(owner, member, automationName));
+    }
+
+    private static Grid BuildLabeledEditorRow(string label, string tooltip, string typeText, Control editor)
+    {
         var row = new Grid { ColumnDefinitions = [with("120,*")], ColumnSpacing = 8 };
         row.Classes.Add("inspectorRow");
         // Two-line label: name (primary) + type (secondary). Type is visible without hover
@@ -506,7 +521,7 @@ public partial class MainWindow : Window
         var labelStack = new StackPanel { Spacing = 0, Margin = new Thickness(0, 3, 0, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
         var nameBlock = new TextBlock
         {
-            Text = member.Name,
+            Text = label,
             Foreground = MemberLabelBrush,
             FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -515,15 +530,14 @@ public partial class MainWindow : Window
         var typeBlock = new TextBlock
         {
             Classes = { "memberType" },
-            Text = friendlyType,
+            Text = typeText,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         labelStack.Children.Add(nameBlock);
         labelStack.Children.Add(typeBlock);
-        ToolTip.SetTip(labelStack, $"{member.Name} : {friendlyType}");
-        ToolTip.SetTip(nameBlock, $"{member.Name} : {friendlyType}");
+        ToolTip.SetTip(labelStack, tooltip);
+        ToolTip.SetTip(nameBlock, tooltip);
         Grid.SetColumn(labelStack, 0);
-        var editor = BuildMemberEditor(component, member);
         // Top-anchored so collapsing a tall editor (List/Dictionary) never sinks its header:
         // a centered editor drops by half the label/editor height gap once it becomes shorter than the label.
         editor.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
@@ -533,10 +547,10 @@ public partial class MainWindow : Window
         return row;
     }
 
-    private Control BuildMemberEditor(object component, MemberInfo member)
+    private Control BuildMemberEditor(object component, MemberInfo member, string? automationName = null)
     {
         var memberType = GetMemberType(member);
-        var automationName = $"{component.GetType().Name}.{member.Name}";
+        automationName ??= $"{component.GetType().Name}.{member.Name}";
 
         if (memberType == typeof(string))
         {
@@ -649,6 +663,8 @@ public partial class MainWindow : Window
             if (InspectorValueTypes.IsSupportedType(memberType))
                 return BuildDictionaryEditor(component, member, automationName);
         }
+        if (InspectorValueTypes.IsCustomInspectorObject(memberType))
+            return BuildObjectEditor(component, member, automationName);
 
         return UnsupportedBadge(memberType);
     }

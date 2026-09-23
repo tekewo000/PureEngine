@@ -400,6 +400,14 @@ static class UserCodeChecks
             public enum Mode : int { None = 0, Easy = 1, Hard = 2 }
             public sealed class EnumComponent
             {
+                public sealed class Stats
+                {
+                    [Inspector] public Mode Level = Mode.Hard;
+                }
+                [Inspector] public Stats Custom = new();
+                [Inspector] public Stats[] Customs = [new()];
+                [Inspector] public List<Stats> CustomList = [new()];
+                [Inspector] public Dictionary<string, Stats> CustomMap = new() { ["key"] = new() };
                 [Inspector] public Mode Value = Mode.Hard;
                 [Inspector] public Mode? Maybe = Mode.Hard;
                 [Inspector] public Mode? Missing = null;
@@ -415,22 +423,28 @@ static class UserCodeChecks
         original.Adopt(first);
         var scene = new Scene();
         var item = scene.AddEmpty();
-        Check(original.TryAttach(item, first.AttachableTypes.Single()), "Enum fixture must attach.");
+        Check(original.TryAttach(item, first.AttachableTypes.Single(type => type.Name == "EnumComponent")), "Enum fixture must attach.");
         var serializer = new SceneSerializer(original.Registry);
         var expected = serializer.Serialize(scene);
         // Different initializers ensure migration restores edited data, not freshly constructed defaults.
         var changed = code.Replace("Mode.Hard", "Mode.Easy");
-        foreach (var source in new[] { changed, changed.Replace("Hard = 2", "Hard = 2, Expert = 3") })
+        foreach (var source in new[]
+        {
+            changed,
+            changed.Replace("Hard = 2", "Hard = 2, Expert = 3"),
+            changed.Replace("[Inspector] public Mode Level", "[Inspector, FormerlySerializedAs(\"Level\")] public Mode Rank"),
+        })
         {
             File.WriteAllText(file, source);
             using var candidate = new ProjectComponents();
             var compiled = UserCodeCompiler.CompileFiles([file]);
             Check(compiled.Success, "Compatible enum fixture must compile.");
             candidate.Adopt(compiled);
-            Check(compiled.AttachableTypes.Single() != first.AttachableTypes.Single(), "Reload must use a new assembly.");
+            Check(compiled.AttachableTypes.Single(type => type.Name == "EnumComponent")
+                != first.AttachableTypes.Single(type => type.Name == "EnumComponent"), "Reload must use a new assembly.");
             var migrated = SceneCodeMigrator.Migrate(scene, original.Registry, candidate.Registry);
-            Check(new SceneSerializer(candidate.Registry).Serialize(migrated) == expected,
-                "Recompiled enum, nullable, array, list and dictionary values must survive migration.");
+            Check(new SceneSerializer(candidate.Registry).Serialize(migrated).Replace("Rank:", "Level:") == expected,
+                "Recompiled enum and custom class values, including former names and collections, must survive migration.");
         }
         foreach (var source in new[]
         {
@@ -440,6 +454,8 @@ static class UserCodeChecks
             changed.Replace("Hard = 2", "Renamed = 2"),
             changed.Replace("public enum Mode", "[Flags] public enum Mode"),
             changed.Replace("public Mode Value = Mode.Easy", "public int Value = 1"),
+            changed.Replace("public Mode Level = Mode.Easy", "public int Level = 1"),
+            changed.Replace("Stats", "OtherStats"),
         })
         {
             File.WriteAllText(file, source);
