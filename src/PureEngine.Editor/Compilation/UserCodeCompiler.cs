@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace PureEngine.Editor;
 
-/// <summary>プロジェクト内の自作C#ファイルのコンパイル結果の1件。Console表示用にファイル・行・内容を持つ。</summary>
+/// <summary>A single entry in the compilation result for project-owned C# files. Holds file, line, and content for console display.</summary>
 public sealed record UserCodeDiagnostic(
     string FilePath,
     int Line,
@@ -14,7 +14,7 @@ public sealed record UserCodeDiagnostic(
     string Message,
     bool IsError);
 
-/// <summary>プロジェクト内の自作C#ファイルのコンパイル結果。</summary>
+/// <summary>Compilation result for project-owned C# files.</summary>
 public sealed class UserCodeCompileResult
 {
     internal Dictionary<Type, string> TypeIds { get; } = [];
@@ -27,9 +27,9 @@ public sealed class UserCodeCompileResult
     internal byte[]? AssemblyBytes { get; init; }
     internal Assembly? LoadedAssembly { get; set; }
     internal AssemblyLoadContext? LoadContext { get; set; }
-    /// <summary>アタッチ対象の型一覧。失敗時は空。</summary>
+    /// <summary>Attachable types. Empty on failure.</summary>
     public IReadOnlyList<Type> AttachableTypes { get; internal set; } = [];
-    /// <summary>フルパス→そのファイルに含まれるアタッチ対象の型。フォルダ構成のまま表示・D&D用。</summary>
+    /// <summary>Full path to the attachable types in that file. Keeps the folder structure for display and drag-and-drop.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<Type>> FileTypes { get; internal set; }
         = new Dictionary<string, IReadOnlyList<Type>>(StringComparer.OrdinalIgnoreCase);
 }
@@ -43,21 +43,21 @@ internal sealed class UserCodeLoadContext() : AssemblyLoadContext("PureEngine.Us
 }
 
 /// <summary>
-/// プロジェクト内の自作C#ファイルをコンパイルし、そのプロジェクトで使えるようにする。
-/// 任意のフォルダに置いた .cs を対象にし、専用のComponentsフォルダへの配置は要求しない。
+/// Compiles project-owned C# files for use in that project.
+/// Targets .cs files in any folder without requiring a dedicated Components folder.
 /// </summary>
 public static class UserCodeCompiler
 {
     /// <summary>
-    /// アタッチ対象の識別方法：publicな具象クラス（トップレベルまたは入れ子のpublic）。
-    /// abstract・static・generic定義・interface・enum・struct・delegate・internal/private・コンパイラ生成は補助クラスとして扱い、アタッチ対象にしない。
-    /// 属性の有無は問わない（属性なしのデータだけのクラスもアタッチできる）。
+    /// How attachable types are identified: public concrete classes (top-level or nested public).
+    /// Treats abstract, static, generic definitions, interfaces, enums, structs, delegates, internal/private, and compiler-generated types as helper classes and excludes them.
+    /// Ignores attributes (data-only classes without attributes are also attachable).
     /// </summary>
     public static bool IsAttachable(Type type)
     {
         if (type is null) return false;
         if (!type.IsClass) return false;
-        if (type.IsAbstract) return false; // abstractとstatic（abstract+sealed）を除外
+        if (type.IsAbstract) return false; // Exclude abstract and static (abstract+sealed)
         if (type.IsSealed && type.IsAbstract) return false;
         if (type.ContainsGenericParameters) return false;
         if (typeof(Delegate).IsAssignableFrom(type)) return false;
@@ -66,10 +66,10 @@ public static class UserCodeCompiler
         return true;
     }
 
-    /// <summary>初回登録用のID。Project内ではUserCodeIdentityが改名後も元のIDを保持する。</summary>
+    /// <summary>ID for the first registration. Within the project, UserCodeIdentity keeps the original ID after renames.</summary>
     public static string TypeIdFor(Type type) => "user." + (type.FullName ?? type.Name);
 
-    /// <summary>プロジェクト直下の .cs を再帰列挙する。bin/obj/.git/.vs は除外する。</summary>
+    /// <summary>Recursively enumerates .cs files under the project root. Excludes bin/obj/.git/.vs.</summary>
     public static IReadOnlyList<string> ListSourceFiles(string rootDirectory)
     {
         if (!Directory.Exists(rootDirectory)) return [];
@@ -94,7 +94,7 @@ public static class UserCodeCompiler
                 var name = Path.GetFileName(entry);
                 if (name.StartsWith('.') && !name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 {
-                    // .pure-project-* 等の一時フォルダや隠しファイルを避ける。ただし .cs は拾う。
+                    // Skip temporary folders such as .pure-project-* and hidden files. Still pick up .cs files.
                     if (Directory.Exists(entry)) continue;
                 }
                 if (Directory.Exists(entry))
@@ -157,8 +157,8 @@ public static class UserCodeCompiler
             string text;
             try
             {
-                // 保存途中のファイルでロックされている場合は次回に回すため失敗扱いにせず読み直す。
-                // ここでは1回だけ再試行する。
+                // When a file is locked mid-save, reread instead of failing so the next attempt can handle it.
+                // Retry only once here.
                 try
                 {
                     text = File.ReadAllText(file);
@@ -174,8 +174,8 @@ public static class UserCodeCompiler
                 readDiagnostics.Add(new UserCodeDiagnostic(file, 0, 0, "PE-READ", $"Cannot read file: {error.GetBaseException().Message}", true));
                 continue;
             }
-            // Roslyn 5.x の Preview は C#15 のプレビューに相当する。安定版 NuGet (5.9.0) に
-            // LanguageVersion.CSharp15 がまだ無いため、明示値ではなく Preview で最新を追う。
+            // Roslyn 5.x Preview corresponds to the C# 15 preview. The stable NuGet package (5.9.0) has
+            // no LanguageVersion.CSharp15 yet, so follow the latest via Preview instead of an explicit value.
             trees.Add(CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview), file));
         }
         if (readDiagnostics.Any(d => d.IsError))
@@ -200,7 +200,7 @@ public static class UserCodeCompiler
         var diagnostics = new List<UserCodeDiagnostic>();
         foreach (var diagnostic in compilation.GetDiagnostics())
         {
-            // Hiddenは表示しない。Warningは許可し、Errorのみ失敗とする。
+            // Hide hidden diagnostics. Allow warnings and fail only on errors.
             if (diagnostic.Severity == DiagnosticSeverity.Hidden) continue;
             var line = 0;
             var column = 0;
@@ -230,7 +230,7 @@ public static class UserCodeCompiler
         foreach (var diagnostic in emit.Diagnostics)
         {
             if (diagnostic.Severity == DiagnosticSeverity.Hidden) continue;
-            if (diagnostic.Severity != DiagnosticSeverity.Error) continue; // WarningはGetDiagnostics側で既に収集済み
+            if (diagnostic.Severity != DiagnosticSeverity.Error) continue; // Warnings were already collected via GetDiagnostics
             var line = 0;
             var column = 0;
             var path = files is [var first, ..] ? first : "";
@@ -241,7 +241,7 @@ public static class UserCodeCompiler
                 line = span.StartLinePosition.Line + 1;
                 column = span.StartLinePosition.Character + 1;
             }
-            // Emit由来のエラーは失敗扱い。
+            // Treat emit errors as failures.
             diagnostics.Add(new UserCodeDiagnostic(path, line, column, diagnostic.Id,
                 diagnostic.ToString(), true));
         }
@@ -302,8 +302,8 @@ public static class UserCodeCompiler
     }
 
     /// <summary>
-    /// 1ファイルに複数クラスがある場合の扱い：そのファイルに含まれるアタッチ対象の全型をそのファイルにひも付ける。
-    /// ドラッグ＆ドロップ時はそのファイルの未アタッチ分をすべて付ける。1ファイル1クラスを推奨するが、複数でも動作する。
+    /// Handling for multiple classes per file: maps every attachable type in the file to that file.
+    /// Drag-and-drop attaches all not-yet-attached types from that file. One class per file is recommended, but multiples work.
     /// </summary>
     private static Dictionary<string, IReadOnlyList<Type>> BuildFileMap(
         CSharpCompilation compilation, Type[] attachable)
@@ -320,7 +320,7 @@ public static class UserCodeCompiler
                 if (model.GetDeclaredSymbol(node) is not INamedTypeSymbol symbol) continue;
                 var full = SymbolFullName(symbol);
                 if (full is null) continue;
-                if (!byFullName.TryGetValue(full, out var match)) continue; // 補助クラスは対象外
+                if (!byFullName.TryGetValue(full, out var match)) continue; // Helper classes are out of scope
                 if (!map.TryGetValue(path, out var list)) map[path] = list = [];
                 if (!list.Contains(match)) list.Add(match);
             }
@@ -377,7 +377,7 @@ public static class UserCodeCompiler
         return references;
     }
 
-    /// <summary>診断をConsole表示用の1行にする。ファイル名・行番号・内容を含む。</summary>
+    /// <summary>Formats a diagnostic as one line for console display. Includes file name, line number, and content.</summary>
     public static string FormatDiagnostic(UserCodeDiagnostic diagnostic)
     {
         var file = string.IsNullOrEmpty(diagnostic.FilePath) ? "(unknown)" : Path.GetFileName(diagnostic.FilePath);

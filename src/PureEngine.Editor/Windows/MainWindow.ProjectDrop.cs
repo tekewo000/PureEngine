@@ -8,7 +8,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    /// <summary>ProjectペインへのOSファイルD&amp;D受付を初期化する。MainWindow()から1回呼ぶ。</summary>
+    /// <summary>Initializes OS file drag-and-drop (D&amp;D) handling for the Project pane. Called once from MainWindow().</summary>
     private void InitProjectDrop()
     {
         ProjectTree.AddHandler(DragDrop.DragOverEvent, OnProjectDropDragOver, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
@@ -42,8 +42,8 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// ドロップ位置から取り込み先フォルダ（Project相対）を決める。
-    /// Tree上のノード／右ペインのフォルダタイル直上ならそのフォルダ、それ以外は表示中フォルダ。
+    /// Resolves the import destination folder (project-relative) from the drop position.
+    /// Uses the folder under the Tree node or the right-pane folder tile, or the currently shown folder otherwise.
     /// </summary>
     private string ResolveProjectDropFolder(object? sender, DragEventArgs e)
     {
@@ -65,7 +65,7 @@ public partial class MainWindow
             && selected.Kind == ProjectExplorerKind.Folder && selected.RelativePath is not null
             && tile is null)
         {
-            // 空白部へのドロップでフォルダ行を選択中の場合は、選択フォルダを優先する。
+            // Prefer the selected folder when a folder row is selected and the drop lands on empty space.
             return selected.RelativePath;
         }
         return isComponents ? "" : folder;
@@ -90,7 +90,7 @@ public partial class MainWindow
             }
             else
             {
-                throw new IOException($"ローカルのファイルまたはフォルダをドロップしてください: {item.Name}");
+                throw new IOException($"Drop a local file or folder: {item.Name}");
             }
         }
 
@@ -104,21 +104,21 @@ public partial class MainWindow
         }
         finally
         {
-            // 複数項目の途中で失敗しても、コピー済みの項目を表示する。
+            // Still shows copied items when a multi-item import fails partway.
             RefreshProjectExplorer();
         }
 
         if (imported.Count == 0)
         {
-            SetFileStatus("取り込むファイルがありませんでした（同一フォルダへのドロップはスキップします）。");
+            SetFileStatus("No files to import (drops into the same folder are skipped).");
             return;
         }
 
         _explorerFolder = targetRelative;
         _explorerSelectedFile = imported.LastOrDefault(File.Exists);
         RefreshProjectExplorer();
-        var display = string.IsNullOrEmpty(targetRelative) ? "(ルート)" : targetRelative;
-        SetFileStatus($"ファイルをインポートしました: {imported.Count}件 -> {display}");
+        var display = string.IsNullOrEmpty(targetRelative) ? "(root)" : targetRelative;
+        SetFileStatus($"Imported files: {imported.Count} -> {display}");
     }
 
     private static async Task<string> ImportRemoteFileAsync(IStorageFile source, string targetDirectory)

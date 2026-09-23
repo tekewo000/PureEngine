@@ -7,7 +7,7 @@ public partial class MainWindow
 {
     private Rendering.Avalonia.VulkanViewport? _sceneViewport;
 
-    /// <summary>Scene Viewを編集用Sceneへ接続する。Start／Updateは呼ばない。</summary>
+    /// <summary>Connects the Scene View to the scene being edited. Never calls Start/Update.</summary>
     private void ConnectPreviewViewport(Rendering.Avalonia.VulkanViewport viewport)
     {
         _sceneViewport = viewport;
@@ -24,7 +24,7 @@ public partial class MainWindow
         };
     }
 
-    /// <summary>グリッド・画像・選択枠・Gizmoを同じ配置とビュー変換で描く。Anchor領域はビューで変えない。</summary>
+    /// <summary>Draws the grid, images, selection frame, and gizmo with the same layout and view transform. Never changes the Anchor area via the view.</summary>
     private void DrawSceneView(DrawList draw, System.Numerics.Vector2 size)
     {
         if (_sceneMoveKind is not SceneViewMath.GizmoKind.None) ValidateSceneMove();

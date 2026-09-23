@@ -29,9 +29,10 @@ static class ProjectPersistenceChecks
             var item = scene.AddEmpty();
             item.Attach(new PureEngine.Editor.Samples.PlayerStats { Name = "001", Hp = 25 });
             var yaml = serializer.Serialize(scene);
-            var project = ProjectFile.Create(testRoot, "日本語 Game", yaml);
+            // Filesystem Unicode coverage: escapes decode to Japanese at runtime.
+            var project = ProjectFile.Create(testRoot, "Unicode \u65E5\u672C\u8A9E Game", yaml);
             var opened = ProjectFile.Open(project.ManifestPath);
-            Check(opened.Document.Name == "日本語 Game" && opened.Document.StartupScene == "Scenes/Main.pure.scene.yaml",
+            Check(opened.Document.Name == "Unicode \u65E5\u672C\u8A9E Game" && opened.Document.StartupScene == "Scenes/Main.pure.scene.yaml",
                 "Project metadata did not survive.");
             var restored = serializer.Deserialize(File.ReadAllText(opened.StartupScenePath));
             Check(restored.Objects[0].Id == item.Id && restored.Objects[0].GetComponent<PureEngine.Editor.Samples.PlayerStats>()!.Hp == 25,
@@ -52,7 +53,7 @@ static class ProjectPersistenceChecks
             Check(ProjectFile.Open(project.ManifestPath).StartupScenePath == thirdPath, "Startup scene was not persisted.");
 
             var manifestBefore = File.ReadAllText(project.ManifestPath);
-            Reject(() => ProjectFile.Create(testRoot, "日本語 Game", "wrong"), "An existing project was overwritten.");
+            Reject(() => ProjectFile.Create(testRoot, "Unicode \u65E5\u672C\u8A9E Game", "wrong"), "An existing project was overwritten.");
             Check(File.ReadAllText(project.ManifestPath) == manifestBefore && File.ReadAllText(project.ResolveScenePath("Scenes/Main.pure.scene.yaml")) == yaml,
                 "Rejected project creation changed existing files.");
             Reject(() => ProjectFile.Create(testRoot, "../escape", yaml), "A project name escaped its parent.");

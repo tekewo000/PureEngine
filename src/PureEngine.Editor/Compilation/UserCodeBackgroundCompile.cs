@@ -1,13 +1,13 @@
 namespace PureEngine.Editor;
 
 /// <summary>
-/// バックグラウンドコンパイルの要求札。UIスレッドで発行し、採用時にも同じ札で有効性を確認する。
-/// 世代番号は連続保存の新しさを表し、プロジェクト切替・終了後はどの札も無効になる。
+/// Request ticket for a background compilation. Issued on the UI thread and validated with the same ticket on adoption.
+/// The generation number represents the recency of consecutive saves; all tickets become invalid after a project switch or shutdown.
 /// </summary>
 public sealed record UserCodeCompileTicket(long Generation, string ProjectRoot);
 
 /// <summary>
-/// バックグラウンドコンパイル1件の終了状態。結果の採用・解放の判断材料で、SceneやUIは持たない。
+/// Completion state of a single background compilation. Used to decide adoption and release; holds no scene or UI.
 /// </summary>
 public sealed record UserCodeCompileAttempt(
     UserCodeCompileTicket Ticket,
@@ -16,10 +16,10 @@ public sealed record UserCodeCompileAttempt(
     bool Canceled);
 
 /// <summary>
-/// ソース読み取り・コンパイルだけをバックグラウンドで行う。
-/// Scene移行・結果採用は呼び出し側のUIスレッドで行い、その直前にも世代の有効性を確認する。
-/// MainWindowは保留中の最新結果を所有し、新しい要求や終了で不要になれば解放する。
-/// ProjectSession.OpenAsyncは起動完了またはキャンセルまでのTrackerを所有する。
+/// Runs only source reading and compilation in the background.
+/// Scene migration and result adoption run on the caller's UI thread, validating the generation immediately before adoption.
+/// MainWindow owns the latest pending result and releases it when a new request or shutdown makes it unnecessary.
+/// ProjectSession.OpenAsync owns the tracker until startup completes or is canceled.
 /// </summary>
 public sealed class UserCodeCompileTracker : IDisposable
 {
@@ -28,14 +28,14 @@ public sealed class UserCodeCompileTracker : IDisposable
     private long _latest;
     private bool _disposed;
 
-    /// <summary>この束縛が対象にするプロジェクトのルート。切替時はTrackerごと作り直す。</summary>
+    /// <summary>The project root this binding targets. Recreate the tracker on project switches.</summary>
     public string ProjectRoot { get; }
 
-    /// <param name="projectRoot">このTrackerが束縛されるプロジェクトのルートフォルダ。</param>
+    /// <param name="projectRoot">The project root folder this tracker is bound to.</param>
     /// <param name="compileAsync">
-    /// バックグラウンドで実行するコンパイル処理。呼び出し自体もプールスレッドで行う。
-    /// 未指定時は <see cref="UserCodeCompiler.CompileProject"/> を実行する。Scene・ComponentAssets・UIには触れないこと。
-    /// テストでは完了順を制御できる差し替えを渡し、待ち時間に依存しない逆転・重なりの検証に使う。
+    /// The compilation work to run in the background. The invocation itself also runs on a pool thread.
+    /// Runs <see cref="UserCodeCompiler.CompileProject"/> when unspecified. Do not touch the scene, ComponentAssets, or UI.
+    /// In tests, pass a substitute that controls completion order to verify overtaking and overlap without depending on delays.
     /// </param>
     public UserCodeCompileTracker(
         string projectRoot,
@@ -46,7 +46,7 @@ public sealed class UserCodeCompileTracker : IDisposable
         _compileAsync = compileAsync ?? DefaultCompileAsync;
     }
 
-    /// <summary>新しい変更の要求札を発行する。UIスレッドで呼ぶ。連続保存では最新の札だけが有効になる。</summary>
+    /// <summary>Issues a request ticket for a new change. Call on the UI thread. Only the latest ticket stays valid across consecutive saves.</summary>
     public UserCodeCompileTicket Request()
     {
         lock (_sync)
@@ -57,8 +57,8 @@ public sealed class UserCodeCompileTracker : IDisposable
     }
 
     /// <summary>
-    /// 採用時に札がまだ有効かを確認する。UIスレッドで、採用直前に呼ぶ。
-    /// プロジェクト切替・終了（Dispose）後はすべて無効で、別プロジェクトの札も無効になる。
+    /// Checks whether the ticket is still valid on adoption. Call on the UI thread immediately before adoption.
+    /// All tickets become invalid after a project switch or shutdown (Dispose), including tickets from other projects.
     /// </summary>
     public bool IsCurrent(UserCodeCompileTicket? ticket)
     {
@@ -71,12 +71,12 @@ public sealed class UserCodeCompileTracker : IDisposable
     }
 
     /// <summary>
-    /// 札に対応するコンパイルをバックグラウンドで実行する。UIスレッドを占有しない。
-    /// 開始時点で札が古い場合は処理を実行せず、Supersededの試行を即返す（連続保存の collapse）。
-    /// 開始後に古くなった場合は最後まで実行し、呼び出し側が採用時に <see cref="IsCurrent"/> で不採用にする。
-    /// await で必ず観測すること。OperationCanceledExceptionはCanceledの試行に変える。
-    /// それ以外の例外はそのまま送出し、呼び出し側で報告・旧状態維持・再試行する。
-    /// このメソッド自体はDispatcherへ触れない。UIへの通知は呼び出し側がUIスレッドで行う。
+    /// Runs the compilation for the ticket in the background. Does not occupy the UI thread.
+    /// Returns a superseded attempt immediately without running the work when the ticket is already stale at start (collapsing consecutive saves).
+    /// Runs to completion when the ticket becomes stale after start; the caller then rejects it on adoption via <see cref="IsCurrent"/>.
+    /// Always observe the result with await. Translates OperationCanceledException into a canceled attempt.
+    /// Rethrows any other exception so the caller can report it, keep the previous state, and retry.
+    /// This method never touches the dispatcher. The caller notifies the UI on the UI thread.
     /// </summary>
     public Task<UserCodeCompileAttempt> CompileAsync(
         UserCodeCompileTicket ticket, CancellationToken cancellationToken = default)
@@ -99,8 +99,8 @@ public sealed class UserCodeCompileTracker : IDisposable
         Func<string, CancellationToken, Task<UserCodeCompileResult>> compile,
         CancellationToken cancellationToken)
     {
-        // func全体をプールスレッドで実行する。呼び出し側（UI）の継続を待たず、
-        // 開始前の取り消しではfuncを起動しない。func内部の除外は行わない。
+        // Run the whole func on a pool thread without waiting for the caller (UI) continuation.
+        // Do not start func when cancellation was requested before start. Do not exclude anything inside func.
         try
         {
             var result = await Task.Run(() => compile(root, cancellationToken), cancellationToken)
@@ -114,16 +114,16 @@ public sealed class UserCodeCompileTracker : IDisposable
     }
 
     /// <summary>
-    /// 標準のコンパイル処理。ファイル列挙・読み取り・Roslyn・読込までをプールスレッドで行う。
-    /// 開始前の取り消しだけを尊重し、実行中のRoslynを中断しない。古い結果の不採用は
-    /// <see cref="IsCurrent"/> で保証するため、取り消しの伝達遅れが正しさを壊さない。
+    /// The default compilation work. Runs file enumeration, reading, Roslyn, and loading on a pool thread.
+    /// Honors only cancellation requested before start and never interrupts running Roslyn. Stale results are rejected
+    /// via <see cref="IsCurrent"/>, so delayed cancellation delivery cannot break correctness.
     /// </summary>
     private static Task<UserCodeCompileResult> DefaultCompileAsync(string root, CancellationToken cancellationToken) =>
         Task.FromResult(UserCodeCompiler.CompileProject(root));
 
     /// <summary>
-    /// 不採用のコンパイル結果が持つ読込コードを解放する。どのスレッドからでも呼べる。失敗時は無視する。
-    /// 失敗結果や空結果には読込コードがないため何もしない。採用済みの結果には呼ばない。
+    /// Releases the loaded code held by a rejected compilation result. Callable from any thread. Ignores failures.
+    /// Does nothing for failed or empty results because they hold no loaded code. Never call for an adopted result.
     /// </summary>
     public static void Release(UserCodeCompileResult? result)
     {
@@ -134,9 +134,9 @@ public sealed class UserCodeCompileTracker : IDisposable
     }
 
     /// <summary>
-    /// プロジェクト切替・終了時に呼ぶ。以後の要求を拒否し、進行中の試行はすべて不採用にする。
-    /// 進行中のバックグラウンド処理自体は最後まで走るが、その結果は呼び出し側が解放する。
-    /// UIには触れないため、閉じた画面や別プロジェクトを変更しない。待機もしない。
+    /// Call on project switch or shutdown. Rejects later requests and invalidates every in-flight attempt.
+    /// In-flight background work still runs to completion, but the caller releases its result.
+    /// Touches no UI, so it never modifies closed views or other projects. Does not wait.
     /// </summary>
     public void Dispose()
     {

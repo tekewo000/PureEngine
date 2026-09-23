@@ -3,19 +3,19 @@ using PureEngine.Core;
 
 namespace PureEngine.Rendering;
 
-/// <summary>編集中SceneをScene Viewへ描く走査。親子配置を済ませてからOrder昇順へ並べ替え、Start／Updateは呼ばない。</summary>
-/// <remarks>描画順とヒット判定で同じ <see cref="PureEngine.Core.SceneViewMath.SortForRender"/> を使う。Orderは親から継承しない。</remarks>
+/// <summary>Pass that draws the scene being edited into the Scene View. Resolves parent-child layout first, then sorts ascending by Order. Never calls Start/Update.</summary>
+/// <remarks>Uses the same <see cref="PureEngine.Core.SceneViewMath.SortForRender"/> for draw order and hit testing. Order is never inherited from the parent.</remarks>
 public static class EditSceneRenderer
 {
     public sealed record Diagnostic(Guid ObjectId, string ObjectName, string Message);
 
-    /// <summary>DrawListを編集Sceneで埋め直し、描けなかった対象の診断を返す。例外は投げない。</summary>
+    /// <summary>Refills the DrawList with the edit scene and returns diagnostics for targets that could not be drawn. Never throws.</summary>
     public static IReadOnlyList<Diagnostic> Build(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize) =>
         Build(draw, scene, images, viewportSize, Matrix4x4.Identity);
 
-    /// <summary>ビュー変換付きで描く。配置はScene座標で計算し、最後にビューを合成する。Anchor領域は変えない。</summary>
-    /// <remarks>親子の配置計算を済ませてから描画対象をOrder昇順へ並べ替える。同値は親→子・兄弟順を維持する。</remarks>
+    /// <summary>Draws with a view transform. Computes layout in scene coordinates, then composes the view last. Never changes the Anchor area.</summary>
+    /// <remarks>Resolves parent-child layout first, then sorts draw targets ascending by Order. Ties keep parent-then-child and sibling order.</remarks>
     public static IReadOnlyList<Diagnostic> Build(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize, Matrix4x4 view)
     {
@@ -30,8 +30,8 @@ public static class EditSceneRenderer
         return diagnostics;
     }
 
-    /// <summary>Clearせずに画像だけを追記する。グリッドを背後に描く編集パス用。例外は投げない。</summary>
-    /// <remarks>配置先行・Order整列はBuildと同じ。追記順は呼び出し側のDrawList状態に続く。</remarks>
+    /// <summary>Appends only images without clearing. For the edit path that draws the grid behind. Never throws.</summary>
+    /// <remarks>Layout-first and Order sorting match Build. Append order follows the caller DrawList state.</remarks>
     public static IReadOnlyList<Diagnostic> Append(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize, Matrix4x4 view)
     {
@@ -95,12 +95,12 @@ public static class EditSceneRenderer
             catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
             {
                 diagnostics.Add(new Diagnostic(item.Id, item.Name, error.GetBaseException().Message));
-                // 配置自体が壊れている場合は親の領域を子へ受け渡す。
+                // When the layout itself is broken, passes the parent area through to the child.
             }
         }
         else if (transform is not null)
         {
-            // Transformのみのグループノードは描画対象ではないが、子の配置に変換を受け渡す。
+            // Transform-only group nodes are not draw targets, but pass their transform to child layout.
             if (!SceneViewMath.TryPropagateBareTransform(parentWorld, transform, out var bareWorld))
                 diagnostics.Add(new Diagnostic(item.Id, item.Name, $"{item.Name}: Transform produced a non-finite matrix."));
             else

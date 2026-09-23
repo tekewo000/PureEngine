@@ -11,7 +11,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    /// <summary>選択中オブジェクトへの追加入口。登録型を検索し、既存のアタッチ処理・factoryを使う。</summary>
+    /// <summary>Entry point for adding to the selected object. Searches registered types and uses the existing attach logic and factory.</summary>
     internal void OpenAddComponentDialog()
     {
         if (RejectWhenPlaying("Add")) return;

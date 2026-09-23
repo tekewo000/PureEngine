@@ -2,7 +2,7 @@ using PureEngine.Core;
 
 namespace PureEngine.Editor.Samples;
 
-/// <summary>Play 中に共有する乱数。Scoped 解決の共有・分離を確認するための決定論的な状態。</summary>
+/// <summary>Random numbers shared during play. Deterministic state for verifying sharing and isolation of scoped resolution.</summary>
 public interface IRandomService
 {
     int Calls { get; }

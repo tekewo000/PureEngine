@@ -99,7 +99,7 @@ public sealed class ProjectFile
         .Where(path => path.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
         .Select(GetSceneRelativePath).Order(StringComparer.Ordinal).ToArray();
 
-    /// <summary>Project root直下からの相対フォルダ一覧。""はルート自身を表す。ExplorerのTree用。</summary>
+    /// <summary>Relative folder list from directly under the project root. "" represents the root itself. Used for the Explorer tree.</summary>
     public IReadOnlyList<string> ListDirectories()
     {
         if (!Directory.Exists(RootDirectory)) return [];
@@ -109,7 +109,7 @@ public sealed class ProjectFile
             .Order(StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>指定フォルダ直下のファイル名一覧（非再帰）。Explorerの右ペイン用。</summary>
+    /// <summary>File names directly under the specified folder (non-recursive). Used for the Explorer right pane.</summary>
     public IReadOnlyList<string> ListFiles(string relativeDirectory)
     {
         var directory = ResolveDirectoryPath(relativeDirectory);
@@ -120,7 +120,7 @@ public sealed class ProjectFile
             .Order(StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>相対フォルダパスを実パスに解決し、Root外への脱出を拒否する。</summary>
+    /// <summary>Resolves a relative folder path to a physical path and rejects escapes outside the root.</summary>
     public string ResolveDirectoryPath(string relativeDirectory)
     {
         relativeDirectory = (relativeDirectory ?? "").Replace('/', Path.DirectorySeparatorChar);
@@ -152,7 +152,7 @@ public sealed class ProjectFile
         }
     }
 
-    /// <summary>指定フォルダがScenes配下かどうか。シーンファイル作成可否の判定用。</summary>
+    /// <summary>Whether the specified folder is under Scenes. Used to decide whether a scene file can be created.</summary>
     public bool IsUnderScenes(string relativeDirectory)
     {
         var path = Path.GetFullPath(Path.Combine(RootDirectory,
@@ -161,7 +161,7 @@ public sealed class ProjectFile
             || path.StartsWith(ScenesDirectory + Path.DirectorySeparatorChar, PathComparison);
     }
 
-    /// <summary>指定フォルダ内に重複しないシーン名を返す。</summary>
+    /// <summary>Returns a non-duplicated scene name within the specified folder.</summary>
     public string NextSceneName(string relativeDirectory)
     {
         var directory = ResolveDirectoryPath(relativeDirectory);

@@ -3,15 +3,15 @@ using PureEngine.Core;
 namespace PureEngine.Editor;
 
 /// <summary>
-/// プロジェクト単位の型登録と読込コードの所有者（A4）。
-/// Registry・自作型一覧とソース対応・採用中のコンパイル結果と読込コード（ALC）を1か所で保持し、
-/// 再読み込み時の差し替えと終了時の解放要求の責任を持つ。
-/// 別プロジェクトの所有者に触れず、失敗時は旧状態を保持する。
-/// 終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求（Unload）。
-/// Unloadは要求のみで、参照が残る間はGCまで生存する。所有者は旧Type・Assembly・結果への参照を残さない。
-/// 組み込み型（sample.*）はプロジェクト生成時に各所有者のRegistryへ登録し、user.* の差し替えでは維持する。
-/// 保存互換：typeIdと .pureengine/types.json の形式は従来どおり。Sceneの保存・復元はこのRegistryを明示的に渡す。
-/// A2（再読み込み切り出し）・A3（バックグラウンド化）はこの所有者の CreateCandidateRegistry／Adopt／Dispose を入口に使う。
+/// Per-project owner of type registrations and loaded code (A4).
+/// Keeps the registry, custom type list with source mapping, adopted compilation result, and loaded code (ALC) in one place,
+/// and owns replacement on reload plus release requests on shutdown.
+/// Never touches owners of other projects and keeps the old state on failure.
+/// Shutdown order: dispose editing scene components, then editing services, then request code release (Unload).
+/// Unload is only a request; the code survives until GC while references remain. The owner keeps no references to old types, assemblies, or results.
+/// Registers built-in types (sample.*) into each owner's registry on project creation and keeps them across user.* replacement.
+/// Save compatibility: typeId and .pureengine/types.json formats stay unchanged. Scene save and restore take this registry explicitly.
+/// A2 (reload extraction) and A3 (backgrounding) use this owner's CreateCandidateRegistry, Adopt, and Dispose as entry points.
 /// </summary>
 public sealed class ProjectComponents : IDisposable
 {
@@ -21,15 +21,15 @@ public sealed class ProjectComponents : IDisposable
         = [with(StringComparer.OrdinalIgnoreCase)];
     private bool _disposed;
 
-    /// <summary>このプロジェクト専用の登録表。組み込み＋自作（user.*）を含む。インスタンスは維持し、中身だけ差し替える。</summary>
+    /// <summary>Registry dedicated to this project. Includes built-ins plus custom (user.*) types. Keeps the instance and replaces only the contents.</summary>
     public ComponentRegistry Registry { get; } = new();
 
     public ProjectComponents() => ComponentAssets.RegisterBuiltins(Registry);
 
-    /// <summary>このプロジェクトの全登録型（組み込み＋自作）。アタッチ可否の判定に使う。</summary>
+    /// <summary>All registered types in this project (built-in plus custom). Used to decide attachability.</summary>
     public IReadOnlyList<Type> Types => Registry.Types;
 
-    /// <summary>このプロジェクトの自作C#の現在の一覧。失敗時は空。</summary>
+    /// <summary>Current list of custom C# types in this project. Empty on failure.</summary>
     public IReadOnlyList<Type> UserTypes
     {
         get { lock (_sync) return _userCode?.AttachableTypes ?? []; }
@@ -40,13 +40,13 @@ public sealed class ProjectComponents : IDisposable
         get { lock (_sync) return new Dictionary<string, IReadOnlyList<Type>>(_userFileTypes, StringComparer.OrdinalIgnoreCase); }
     }
 
-    /// <summary>採用中のコンパイル結果。A2・A3が採用・解放の状態を確認する入口。外部で保持・破棄しない。</summary>
+    /// <summary>Adopted compilation result. Entry point where A2 and A3 check adoption and release state. Never hold or dispose externally.</summary>
     internal UserCodeCompileResult? ActiveUserCode
     {
         get { lock (_sync) return _userCode; }
     }
 
-    /// <summary>指定C#ファイルに含まれるアタッチ対象の型。ヘルパーのみのファイルは空。</summary>
+    /// <summary>Attachable types in the specified C# file. Empty for helper-only files.</summary>
     public IReadOnlyList<Type> GetTypesForFile(string? fullPath)
     {
         if (string.IsNullOrEmpty(fullPath)) return [];
@@ -64,16 +64,16 @@ public sealed class ProjectComponents : IDisposable
         ComponentAssets.TryAttach(Registry, target, type, factory);
 
     /// <summary>
-    /// 候補の検証用に、現在の非user.*登録＋新しいコンパイル結果から作る。所有者は変更しない。
-    /// 開く処理・再読み込みはこの候補でScene復元・移行を試してからAdoptする。
+    /// Builds a validation candidate from the current non-user.* registrations plus a new compilation result. Never modifies the owner.
+    /// Open and reload try scene restore and migration with this candidate before calling Adopt.
     /// </summary>
     public ComponentRegistry CreateCandidateRegistry(UserCodeCompileResult? result) =>
         ComponentAssets.CreateCandidateRegistry(Registry, result);
 
     /// <summary>
-    /// コンパイル成功時に呼ぶ。候補を検証してから採用し、直前の正常な user.* 登録だけを外す。
-    /// 同じRegistryインスタンスを維持するため、既存のSceneSerializerはそのまま使える。
-    /// 失敗時は旧登録とSceneを保持し、候補のALCは呼び出し側で解放する。
+    /// Call on successful compilation. Validates the candidate before adoption and removes only the previous healthy user.* registrations.
+    /// Keeps the same registry instance so existing scene serializers keep working.
+    /// Keeps the old registrations and scene on failure; the caller releases the candidate ALC.
     /// </summary>
     public void Adopt(UserCodeCompileResult? result) => Release(Exchange(result));
 
@@ -88,7 +88,7 @@ public sealed class ProjectComponents : IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var previous = _userCode;
-            // 直前の user.* だけを外す。sample.* やテスト登録（checks.*）は残す。
+            // Remove only the previous user.* registrations. Keep sample.* and test registrations (checks.*).
             foreach (var id in Registry.Ids.Where(id => id.StartsWith("user.", StringComparison.Ordinal)).ToArray())
             {
                 var type = Registry.GetType(id);
@@ -96,7 +96,7 @@ public sealed class ProjectComponents : IDisposable
             }
             _userFileTypes.Clear();
             _userCode = null;
-            // Exchangeは旧コードを返す。Coordinatorが旧Component・サービスを解放してからUnloadする。
+            // Exchange returns the old code. The coordinator unloads it after releasing old components and services.
             foreach (var type in result?.AttachableTypes ?? [])
             {
                 var id = result!.GetTypeId(type);
@@ -118,8 +118,8 @@ public sealed class ProjectComponents : IDisposable
     public void Clear() => Adopt(null);
 
     /// <summary>
-    /// 終了時の解放。呼び出し側が編集SceneのComponentとサービスを先に破棄してから呼ぶ。
-    /// user.* 登録を外し、ALCのUnloadを要求する。組み込み登録は残るが、所有者自体は破棄済みになる。
+    /// Releases on shutdown. The caller disposes the editing scene components and services first.
+    /// Removes user.* registrations and requests ALC unload. Built-in registrations remain, but the owner itself is disposed.
     /// </summary>
     public void Dispose()
     {

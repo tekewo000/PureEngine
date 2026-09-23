@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace PureEngine.Core;
 
-/// <summary>Inspector・保存対象の値型。scalar・enum・ベクトル・Transform・Sprite・配列・List・辞書・入れ子の自作クラスを扱う。</summary>
+/// <summary>Inspector and persistable value types. Handles scalars, enums, vectors, Transform, Sprite, arrays, List, dictionaries, and nested custom classes.</summary>
 public static class InspectorValueTypes
 {
     public static bool IsSupportedType(Type type)
@@ -72,13 +72,13 @@ public static class InspectorValueTypes
     }
 
     /// <summary>
-    /// 組み込み変換ではなく <c>[Inspector]</c> メンバーの入れ子として扱う自作クラスかどうか。
-    /// Editorはこの判定で入れ子エディタを出す。派生型の代入は扱わず、宣言型と実行時型の一致を要求する。
+    /// Whether this is a custom class treated as nested <c>[Inspector]</c> members rather than with a built-in conversion.
+    /// The editor uses this check to show a nested editor. Derived-type assignment is not handled; the declared and runtime types must match.
     /// </summary>
     /// <remarks>
-    /// 条件：参照型のclass（string・配列・List・Dictionary・Nullable・enum・Transform・Spriteを除く）、
-    /// 抽象・ジェネリック・struct・object自体を除き、publicな引数なしコンストラクタを持ち、
-    /// すべての <c>[Inspector]</c> メンバーが対応型であること。再帰（自分を直接・間接に含む）は未対応。
+    /// Requirements: a reference-type class (excluding string, arrays, List, Dictionary, Nullable, enums, Transform, and Sprite),
+    /// excluding abstract types, generics, structs, and object itself, with a public parameterless constructor, and
+    /// with every <c>[Inspector]</c> member being a supported type. Recursion (direct or indirect self-containment) is not supported.
     /// </remarks>
     public static bool IsCustomInspectorObject(Type type)
     {
@@ -91,7 +91,7 @@ public static class InspectorValueTypes
         if (!IsCustomObjectShape(type))
             return false;
         if (!chain.Add(type))
-            return false; // 自分を含む再帰型はYAML・Clone・Inspectorのいずれでも有限に扱えない。
+            return false; // Recursive types containing themselves cannot be handled finitely by YAML, Clone, or the Inspector.
         try
         {
             foreach (var member in ComponentSchema.GetInspectorMembers(type))
@@ -107,7 +107,7 @@ public static class InspectorValueTypes
         }
     }
 
-    /// <summary>完全な対応判定なしで、自作クラスの形だけを見る。変換本体の分岐用。検証は呼び出し側が行う。</summary>
+    /// <summary>Checks only the custom-class shape without full support validation. Used for branching in the conversion body. Callers perform validation.</summary>
     private static bool IsCustomObjectShape(Type type)
     {
         if (type == typeof(object) || type == typeof(string))
@@ -141,7 +141,7 @@ public static class InspectorValueTypes
         }
     }
 
-    /// <summary>Capture用にYAMLへ安定して書ける形へ変換する。参照型は深く複製する。</summary>
+    /// <summary>Converts to a form that can be written stably to YAML for Capture. Reference types are deep-copied.</summary>
     public static object? ToStorable(object? value, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -303,12 +303,12 @@ public static class InspectorValueTypes
         throw new InvalidDataException($"Unsupported Inspector value type: {type.FullName}");
     }
 
-    /// <summary>自作クラスをメンバー名→保存形の対応へ変換する。派生型の混入と循環参照を拒否する。</summary>
+    /// <summary>Converts a custom class to a member-name-to-storable mapping. Rejects derived-type mixing and cyclic references.</summary>
     private static Dictionary<string, object?> ToStorableObject(object value, Type type, List<object> seen)
     {
         if (value.GetType() != type)
             throw new InvalidDataException($"Invalid {type.Name} value: {value.GetType().FullName}.");
-        // 参照同一性で循環だけを検出する。値型のボックス化は毎回別参照になるため誤検出しない。
+        // Detects only cycles by reference identity. Boxed value types get a fresh reference each time, so they are never falsely detected.
         if (seen.Contains(value, ReferenceEqualityComparer.Instance))
             throw new InvalidDataException($"Cyclic Inspector value: {type.FullName}.");
         seen.Add(value);
@@ -328,7 +328,7 @@ public static class InspectorValueTypes
         }
     }
 
-    /// <summary>Clone経路の型付き値とYAML経路の文字列・コレクションの両方から復元する。</summary>
+    /// <summary>Restores from both Clone-path typed values and YAML-path strings and collections.</summary>
     public static object? FromStorable(object? raw, Type type, string path)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -477,12 +477,12 @@ public static class InspectorValueTypes
         throw new InvalidDataException($"{path}: unsupported type {type.FullName}.");
     }
 
-    /// <summary>自作クラスを対応→新しいインスタンスへ復元する。欠けた項目は初期値を保ち、未知の項目は読み飛ばす。</summary>
+    /// <summary>Restores a custom class from a mapping into a new instance. Missing entries keep their initial values, and unknown entries are skipped.</summary>
     private static object FromStorableObject(object? raw, Type type, string path)
     {
         if (raw is not null && raw.GetType() == type)
         {
-            // Clone経路の型付き値：同じ型の新しいインスタンスへ深く複製する。
+            // Clone-path typed value: deep-copies into a new instance of the same type.
             var copy = CreateCustomInstance(type, path);
             foreach (var member in ComponentSchema.GetInspectorMembers(type))
             {
@@ -504,7 +504,7 @@ public static class InspectorValueTypes
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
         {
             if (!values.TryGetValue(member, out var itemRaw))
-                continue; // 後から追加されたメンバーはクラスの初期値を維持する。
+                continue; // Members added later keep the class initializers.
             SetObjectMember(instance, member, FromStorable(itemRaw, MemberType(member), $"{path}.{member.Name}"));
         }
         return instance;

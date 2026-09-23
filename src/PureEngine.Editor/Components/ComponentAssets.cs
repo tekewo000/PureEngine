@@ -18,9 +18,9 @@ public static class ComponentAssets
     }
 
     /// <summary>
-    /// 組み込み型の登録方針（A4）：各プロジェクトの所有者（ProjectComponents）が生成時に
-    /// 自分のRegistryへ登録する。共有のstatic登録は持たない。user.* の差し替えでは維持される。
-    /// Transform・UiElement・Image・Buttonは普通のComponentとして同じ経路で検索・追加・保存する。
+    /// Built-in type registration policy (A4): each project owner (ProjectComponents) registers
+    /// into its own registry on creation. Holds no shared static registration. Survives user.* replacement.
+    /// Transform, UiElement, Image, and Button follow the same search, add, and save path as ordinary components.
     /// </summary>
     public static void RegisterBuiltins(ComponentRegistry registry)
     {
@@ -34,7 +34,7 @@ public static class ComponentAssets
         registry.Register<Samples.InjectedPlayer>("sample.injected-player");
     }
 
-    /// <summary>Inspectorの追加候補を型名・完全名・typeIdの部分一致で絞り込む。大文字小文字を区別しない。</summary>
+    /// <summary>Filters Inspector add candidates by substring match on type name, full name, and type ID. Case-insensitive.</summary>
     public static IReadOnlyList<(Type Type, string TypeId)> SearchCandidates(ComponentRegistry registry, string? query)
     {
         ArgumentNullException.ThrowIfNull(registry);
@@ -55,8 +55,8 @@ public static class ComponentAssets
     }
 
     /// <summary>
-    /// 候補の検証用に、現在の非user.*登録＋新しいコンパイル結果から作る。呼び出し元の所有者は変更しない。
-    /// 採用前にScene復元・移行の検証へ渡す。失敗時は旧登録を保持する。
+    /// Builds a validation candidate from the current non-user.* registrations plus a new compilation result. Never modifies the caller's owner.
+    /// Passes it to scene restore and migration validation before adoption. Keeps the old registrations on failure.
     /// </summary>
     internal static ComponentRegistry CreateCandidateRegistry(ComponentRegistry current, UserCodeCompileResult? result)
     {
@@ -81,9 +81,9 @@ public static class ComponentAssets
     {
         ArgumentNullException.ThrowIfNull(registry);
         if (!CanAttach(registry, target, type)) return false;
-        // Component 生成箇所 (編集時): ドラッグ＆ドロップで新しい編集用インスタンスを作る。
-        // factory 未指定時は従来のパラメータレス生成、指定時はその factory でコンストラクタ注入する。
-        // factory の失敗時は報告し、パラメータレス生成で再試行して隠さない。受け入れ失敗時は生成側で解放する。
+        // Component creation point (editing): creates a new editing instance via drag-and-drop.
+        // Without a factory, uses the conventional parameterless creation; with a factory, uses it for constructor injection.
+        // Reports factory failures without hiding them via a parameterless retry. The creator releases on acceptance failure.
         object component;
         if (factory is null)
         {
@@ -117,7 +117,7 @@ public static class ComponentAssets
             if (component is IDisposable disposable)
             {
                 try { disposable.Dispose(); }
-                catch { /* Attach 失敗の元例外を優先する。 */ }
+                catch { /* Prefer the original Attach failure. */ }
             }
             throw;
         }

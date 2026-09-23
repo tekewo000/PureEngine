@@ -4,10 +4,10 @@ using PureEngine.Runtime;
 namespace PureEngine.Editor;
 
 /// <summary>
-/// 編集Scene・パス・Dirty・編集用サービスの所有者。MainWindowのpartial間に分散していた編集状態の
-/// 変更経路をここに集約し、画面更新（ItemsSource・Inspector・タイトル）はMainWindowが行う。
-/// Avaloniaに依存しない。旧Sceneの破棄は呼び出し側へ返して行い、
-/// Componentからサービスへの終了順はCoordinator（採用）またはMainWindow（終了）が保証する。
+/// Owner of the editing scene, path, dirty flag, and editing services. Consolidates the mutation paths
+/// for editing state that were spread across MainWindow partials; MainWindow handles view updates (items source, Inspector, title).
+/// Has no Avalonia dependency. Returns the old scene to the caller for disposal.
+/// The coordinator (adoption) or MainWindow (shutdown) guarantees teardown order from components to services.
 /// </summary>
 public sealed class EditSceneStore(Scene initial, string? path = null, bool dirty = false)
 {
@@ -20,13 +20,13 @@ public sealed class EditSceneStore(Scene initial, string? path = null, bool dirt
         return previous;
     }
 
-    /// <summary>編集中のScene。実行Sessionが持つ複製とは別の実体。</summary>
+    /// <summary>The scene being edited. A different instance from the copy held by the run session.</summary>
     public Scene Current { get; private set; } = initial ?? throw new ArgumentNullException(nameof(initial));
 
-    /// <summary>編集中Sceneの保存先。未保存の新規シーンはnull。</summary>
+    /// <summary>Save destination of the scene being edited. Null for an unsaved new scene.</summary>
     public string? Path { get; private set; } = path;
 
-    /// <summary>未保存の変更があるかどうか。</summary>
+    /// <summary>Whether unsaved changes exist.</summary>
     public bool IsDirty { get; private set; } = dirty;
 
     public void MarkChanged() => IsDirty = true;
@@ -39,14 +39,14 @@ public sealed class EditSceneStore(Scene initial, string? path = null, bool dirt
 
     public void MarkClean() => IsDirty = false;
 
-    /// <summary>Scene本体を変えずに保存先パスだけ付け替える。Explorerの改名・移動時の参照付け替え用。</summary>
+    /// <summary>Replaces only the save path without changing the scene itself. Used to rebind references on Explorer rename or move.</summary>
     public void SetPath(string? path) => Path = path;
 
     internal void SetDirtyForTest(bool dirty) => IsDirty = dirty;
 
     /// <summary>
-    /// 新しい編集Sceneを採用し、旧Sceneを返す。旧SceneのComponent破棄は呼び出し側が行う。
-    /// Dirtyは呼び出し側が指定する。再読み込みでは旧Dirtyを維持し、保存項目の変更時もtrueにする。
+    /// Adopts a new editing scene and returns the old scene. The caller disposes the old scene's components.
+    /// The caller specifies the dirty flag. Reloads keep the old dirty flag, and changes to saved content set it to true.
     /// </summary>
     public Scene Replace(Scene next, string? path, bool dirty)
     {
@@ -58,7 +58,7 @@ public sealed class EditSceneStore(Scene initial, string? path = null, bool dirt
         return previous;
     }
 
-    /// <summary>終了時など、編集Sceneを空にして旧Sceneを返す。破棄は呼び出し側が行う。</summary>
+    /// <summary>Clears the editing scene on shutdown and similar flows, returning the old scene. The caller disposes it.</summary>
     public Scene Reset()
     {
         var previous = Current;

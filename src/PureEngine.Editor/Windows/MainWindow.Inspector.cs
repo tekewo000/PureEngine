@@ -1033,7 +1033,7 @@ public partial class MainWindow
             }
             catch
             {
-                // 生成に失敗した要素はNullで足し、カードのCreateから作り直せるようにする。
+                // Pad elements that failed to create with Null so they can be rebuilt from the card Create action.
                 return null;
             }
         }

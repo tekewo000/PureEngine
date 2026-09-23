@@ -15,7 +15,8 @@ internal static class RenderingChecks
         Require(draw.Vertices[0].Color.W == .5f && draw.Vertices[6].Color.Y == 1, "Transparency preserves submission order");
         Require(draw.Vertices[0].Clip == clip, "Clip is in logical target coordinates");
         draw.Clear();
-        draw.Text("日本語abc、。\n折り返し\U0001FAE8", 20, 50, 1.5f, Matrix3x2.Identity, Vector4.One, clip);
+        // CJK shaping, punctuation, wrapping, and missing-glyph coverage: escapes decode to Japanese at runtime.
+        draw.Text("\u65E5\u672C\u8A9Eabc\u3001\u3002\n\u6298\u308A\u8FD4\u3057\U0001FAE8", 20, 50, 1.5f, Matrix3x2.Identity, Vector4.One, clip);
         Require(draw.Vertices.Length >= 24 && draw.EntryCount >= 4, "Japanese, missing glyph, newline and wrapping");
         RenderingSample.Build(draw);
         var revision = draw.Revision;

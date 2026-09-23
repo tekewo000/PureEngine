@@ -24,7 +24,7 @@ static class ProjectIsolationChecks
         var root = Path.Combine(parent, "Isolation");
         Directory.CreateDirectory(root);
 
-        // 2つのプロジェクトを同時に保持する。同名クラスを含めて独立させる。
+        // Hold two projects at once. Keep them independent, including same-name classes.
         using var createdA = ProjectSession.Create(root, "ProjA");
         using var createdB = ProjectSession.Create(root, "ProjB");
         var dirA = createdA.Project.RootDirectory;
@@ -48,7 +48,7 @@ static class ProjectIsolationChecks
             && (int)typeB.GetProperty("Marker")!.GetValue(Activator.CreateInstance(typeB)!)! == 20,
             "Same-name classes must carry their own code.");
 
-        // 型解決・保存・Playが独立すること。
+        // Type resolution, saving, and Play must stay independent.
         var itemA = sessionA.Scene.AddEmpty();
         itemA.Rename("A");
         Check(sessionA.Components.TryAttach(itemA, typeA), "Project A must attach its own type.");
@@ -86,7 +86,7 @@ static class ProjectIsolationChecks
             .GetValue(copyB.Objects.Single().Components.Single())! == 22,
             "Project B must be unaffected by Project A Play.");
 
-        // 一方の再読み込みが他方を変更しないこと。
+        // Reloading one side must not change the other.
         File.WriteAllText(Path.Combine(dirA, "Shared.cs"), Source(30));
         var recompiledA = UserCodeCompiler.CompileProject(dirA);
         Check(recompiledA.Success, "Project A recompile must succeed.");
@@ -100,7 +100,7 @@ static class ProjectIsolationChecks
         Check(ReferenceEquals(sessionB.Components.Registry.GetType("user.Game.Shared"), typeB),
             "Project A reload must not change Project B.");
 
-        // 一方の失敗が他方を変更しないこと。失敗時は旧状態を保持する。
+        // A failure on one side must not change the other. Keep the previous state on failure.
         File.WriteAllText(Path.Combine(dirA, "Shared.cs"), Source(30) + "\nthis is broken;");
         var brokenA = UserCodeCompiler.CompileProject(dirA);
         Check(!brokenA.Success, "Broken source must fail.");
@@ -110,7 +110,7 @@ static class ProjectIsolationChecks
             "Project A failure must not change Project B.");
         File.WriteAllText(Path.Combine(dirA, "Shared.cs"), Source(31));
 
-        // 一方の終了後も他方が動くこと。終了順序：Component破棄 → サービス破棄 → コード解放要求。
+        // The other side must keep working after one side exits. Shutdown order: dispose components, then services, then request code unload.
         var sessionC = ProjectSession.Open(Path.Combine(dirA, "Project.pure.project.yaml"));
         var typeC = sessionC.Components.Registry.GetType("user.Game.Shared");
         Check((int)typeC.GetProperty("Marker")!.GetValue(Activator.CreateInstance(typeC)!)! == 31,

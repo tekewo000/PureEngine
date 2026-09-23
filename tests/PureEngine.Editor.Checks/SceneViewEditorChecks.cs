@@ -62,8 +62,8 @@ internal static class SceneViewEditorChecks
     {
         _ = Log.Drain();
         var editor = new MainWindow { WindowState = WindowState.Normal, Width = 1280, Height = 800 };
-        // HeadlessにはGPU interopがなく、VulkanViewportの非同期失敗ログが後続テストへ漏れる。
-        // ロジック検証にGPU描画は不要なため、表示前に取り外して失敗自体を起こさない。
+        // Headless has no GPU interop, and VulkanViewport async failure logs would leak into later tests.
+        // Logic verification does not need GPU rendering, so detach the viewport before showing to avoid the failure itself.
         Control<Grid>(editor, "SceneViewport").Children.Clear();
         editor.Show();
         Dispatcher.UIThread.RunJobs();
@@ -769,7 +769,7 @@ internal static class SceneViewEditorChecks
         Check(movedBack.Objects.First(item => item.Name == "Child").GetComponent<Transform>()!.LocalPosition == new Vector3(50, 60, 7),
             "Moved positions must survive save/reopen with Z intact.");
 
-        // 実ファイル経路：Project作成・画像取込・配置・保存・再OpenでZとビュー描画を再現する。
+        // Real file path: reproduce Z and view rendering via project creation, image import, placement, save, and reopen.
         var root = Path.Combine(Path.GetTempPath(), "PureEngine-SceneView-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

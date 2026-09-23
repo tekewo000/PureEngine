@@ -24,7 +24,7 @@ public partial class MainWindow
     internal Guid? GamePressedForTest => _gamePressed;
     internal Guid? GameFocusedForTest => _gameFocused;
 
-    /// <summary>GameをPlaySessionの実行用Sceneへ接続する。Start／Updateは描画から呼ばない。</summary>
+    /// <summary>Connects the Game view to the PlaySession runtime scene. Never calls Start/Update from rendering.</summary>
     private void ConnectGameViewport(Rendering.Avalonia.VulkanViewport viewport)
     {
         _gameViewport = viewport;
@@ -41,7 +41,7 @@ public partial class MainWindow
         };
     }
 
-    /// <summary>実行Sceneを配置・Order順に描き、Button状態を重ねる。非表示時は描画しないが進行は止めない。</summary>
+    /// <summary>Draws the runtime scene in layout and Order sequence, overlaying button states. Skips drawing while hidden without pausing progress.</summary>
     private void DrawGameView(DrawList draw, Vector2 size)
     {
         var runtime = ActivePlay?.Runtime;
@@ -348,7 +348,7 @@ public partial class MainWindow
             pointer!.Capture(null);
     }
 
-    /// <summary>押下状態だけを解除し、クリックを通知しない。フォーカス喪失・タブ切替・Stop用。</summary>
+    /// <summary>Clears only the pressed state without reporting a click. Used for focus loss, tab switches, and Stop.</summary>
     internal void CancelGamePress()
     {
         var pointer = _gamePressedPointer;
@@ -361,7 +361,7 @@ public partial class MainWindow
             pointer!.Capture(null);
     }
 
-    /// <summary>再Playに向けた入力状態の初期化。Stop・開始失敗・自動停止でも呼ぶ。</summary>
+    /// <summary>Resets input state for the next Play run. Also called after Stop, start failures, and automatic stops.</summary>
     internal void ResetGameInput()
     {
         CancelGamePress();

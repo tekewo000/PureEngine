@@ -25,7 +25,8 @@ static class ScenePersistenceChecks
         var serializer = new SceneSerializer(registry);
         var scene = new Scene();
         var item = scene.AddEmpty();
-        item.Rename("プレイヤー: #1");
+        // Preserve Japanese object-name and YAML punctuation round-trip coverage.
+        item.Rename("\u30D7\u30EC\u30A4\u30E4\u30FC: #1");
         var sample = new PersistenceProbe { Title = "001", Count = -25, Seconds = 0.125f, Enabled = true, Hidden = 123 };
         item.Attach(sample);
         scene.AddEmpty().Rename(item.Name);
@@ -47,7 +48,8 @@ static class ScenePersistenceChecks
         }
         finally { CultureInfo.CurrentCulture = originalCulture; }
 
-        foreach (var text in new string?[] { "", "null", "~", "true", "yes", "1e3", "001", "日本語\nsecond: #line", null })
+        // YAML Unicode and special-character coverage: escapes decode to Japanese at runtime.
+        foreach (var text in new string?[] { "", "null", "~", "true", "yes", "1e3", "001", "\u65E5\u672C\u8A9E\nsecond: #line", null })
         {
             sample.Title = text;
             Check(serializer.Deserialize(serializer.Serialize(scene)).Objects[0].GetComponent<PersistenceProbe>()!.Title == text,

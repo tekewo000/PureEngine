@@ -175,7 +175,7 @@ static class ProjectServiceRegistrationChecks
             var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
             var logType = opened.Components.GetTypesForFile(file).SingleOrDefault(t => t.Name == "QuestLog")
                 ?? boardType.Assembly.GetType("QuestLog")!;
-            // 編集での注入成功と同一セッション内の共有。
+            // Successful edit-time injection and sharing within the same session.
             var first = session.Scene.AddEmpty();
             first.Rename("First");
             Check(opened.Components.TryAttach(first, boardType, editServices.Factory), "Edit attach must inject project services.");
@@ -188,7 +188,7 @@ static class ProjectServiceRegistrationChecks
                 "Scoped services must be shared within the edit session.");
             firstBoard.Score = 37;
 
-            // Play での注入成功と編集・Play 間の分離。
+            // Successful Play injection and separation between edit and Play.
             var serializer = new SceneSerializer(opened.Components.Registry);
             var yaml = serializer.Serialize(session.Scene);
             SceneFile.Write(project.StartupScenePath, yaml);
@@ -214,7 +214,7 @@ static class ProjectServiceRegistrationChecks
                     "Play services must end with the Scope.");
             }
 
-            // 再Play 間の分離。
+            // Separation between replays.
             object? previousLog;
             using (var replay = PlaySession.Prepare(session.Scene, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
@@ -295,7 +295,7 @@ static class ProjectServiceRegistrationChecks
             Check((bool)oldLogObject.GetType().GetField("IsDisposed")!.GetValue(oldLogObject)!,
                 "Old services must end after old components.");
 
-            // 新登録で Play が動く。
+            // Play runs with the new registration.
             Call(editor, "StartPlay");
             Check(editor.IsPlaying, "Play must run with the new registration.");
             Call(editor, "StepPlayOnce", 1f / 60f);
@@ -410,10 +410,10 @@ static class ProjectServiceRegistrationChecks
             var source = new Scene();
             var item = source.AddEmpty();
             item.Rename("Board");
-            // Play 準備は編集用サービス群とは別の独立したサービス群で行う。
+            // Prepare Play with a service group independent from the edit service group.
             using (var play = PlaySession.Prepare(source, opened.Components.Registry, GameServices.ForProject(opened.Components)))
             {
-                // 空シーンの正常終了でもサービス群は単発で解放される。
+                // Even a clean exit from an empty scene releases the service group exactly once.
                 play.Start();
                 play.Stop();
             }
@@ -421,7 +421,7 @@ static class ProjectServiceRegistrationChecks
             source = new Scene();
             item = source.AddEmpty();
             item.Rename("Board");
-            // 直接アタッチした authoring 値は Play 側で復元される。ここでは factory 経由の生成順を検証する。
+            // Directly attached authoring values are restored on the Play side. Here, verify the factory-based creation order.
             using var edit = GameSession.Create(GameServices.ForProject(opened.Components));
             Check(opened.Components.TryAttach(item, boardType, edit.Factory), "Termination test requires an attached board.");
             dynamic authoring = item.Components.Single();
@@ -445,7 +445,7 @@ static class ProjectServiceRegistrationChecks
                     "Repeated termination must be a no-op.");
             }
 
-            // 準備失敗時も生成済み資源を解放する。不足依存の Play 準備は旧状態を作らない。
+            // Release created resources even when preparation fails. A Play preparation with missing dependencies must not create prior state.
             GoodProbe.Disposed.Clear();
             GoodProbe.LastSession = null;
             var badRegistry = new ComponentRegistry();

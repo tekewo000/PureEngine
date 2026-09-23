@@ -3,15 +3,15 @@ using PureEngine.Core;
 
 namespace PureEngine.Rendering;
 
-/// <summary>Play中の実行用SceneをGameへ描く走査。配置・Orderは編集用と同じ経路で、Start／Updateは呼ばない。</summary>
-/// <remarks>Buttonの状態表示は保存済みの Image.Color を書き換えず、実効色の読み取りと重ね描きで行う。</remarks>
+/// <summary>Pass that draws the runtime scene into Game while playing. Uses the same layout and Order path as editing. Never calls Start/Update.</summary>
+/// <remarks>Shows button states by reading the effective color and overdrawing instead of rewriting the saved Image.Color.</remarks>
 public static class GameSceneRenderer
 {
     public sealed record Diagnostic(Guid ObjectId, string ObjectName, string Message);
 
     public sealed record ButtonVisual(UiButtonVisualState State, bool Focused);
 
-    /// <summary>DrawListを実行Sceneで埋め直し、描けなかった対象の診断を返す。例外は投げない。</summary>
+    /// <summary>Refills the DrawList with the runtime scene and returns diagnostics for targets that could not be drawn. Never throws.</summary>
     public static IReadOnlyList<Diagnostic> Build(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
         IReadOnlyDictionary<Guid, ButtonVisual>? states = null)
@@ -77,7 +77,7 @@ public static class GameSceneRenderer
         }
         else if (transform is not null)
         {
-            // Transformのみのグループノードは描画対象ではないが、子の配置に変換を受け渡す。
+            // Transform-only group nodes are not draw targets, but pass their transform to child layout.
             if (!SceneViewMath.TryPropagateBareTransform(parentWorld, transform, out var bareWorld))
                 diagnostics.Add(new Diagnostic(item.Id, item.Name, $"{item.Name}: Transform produced a non-finite matrix."));
             else

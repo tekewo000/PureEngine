@@ -117,7 +117,7 @@ try
 catch (InvalidOperationException) { }
 
 // Both editor drop surfaces use this catalog and attachment policy.
-// A4: プロジェクト単位の所有者を明示的に使う。可変staticには依存しない。
+// A4: Use an explicit per-project owner. Do not depend on mutable statics.
 using var projectOwner = new PureEngine.Editor.ProjectComponents();
 var ownerRegistry = projectOwner.Registry;
 var dropTarget = new SceneObject("Drop target");

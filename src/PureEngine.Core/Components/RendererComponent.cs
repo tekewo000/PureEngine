@@ -1,6 +1,6 @@
 namespace PureEngine.Core;
 
-/// <summary>Imageと将来のSpriteRendererに共通する描画順の基底。配置計算には使わない。</summary>
+/// <summary>Base class for render order shared by Image and the future SpriteRenderer. Not used for layout calculation.</summary>
 public abstract class RendererComponent
 {
     [Inspector]

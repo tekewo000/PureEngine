@@ -20,7 +20,7 @@ public enum ProjectExplorerKind
     Component,
 }
 
-/// <summary>Project Explorerの右ペインに並ぶ1行。フォルダ・シーンファイル・一般ファイル・コンパイル済みクラスを统一表示する。</summary>
+/// <summary>One row in the Project Explorer right pane. Shows folders, scene files, plain files, and compiled classes in a unified view.</summary>
 public sealed record ProjectExplorerEntry(
     ProjectExplorerKind Kind,
     string DisplayName,
@@ -131,7 +131,7 @@ public partial class MainWindow
         selected ??= root;
         if (!nodes.ContainsKey(_explorerFolder) && !_explorerComponentsSelected)
             _explorerFolder = nodes.ContainsKey("Scenes") ? "Scenes" : "";
-        // 祖先を展開して選択行を見える位置にする。
+        // Expands ancestors to bring the selected row into view.
         for (var current = selected; current is not null;
              current = current.Parent as TreeViewItem)
             current.IsExpanded = true;
@@ -169,7 +169,7 @@ public partial class MainWindow
                     var full = Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar));
                     if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                     {
-                        // 自作C#はフォルダ構成のまま表示する。専用フォルダへの配置やComponents一覧への集約は要求しない。
+                        // Shows custom C# files in their folder layout. Does not require a dedicated folder or aggregation into the Components list.
                         var types = _components.GetTypesForFile(full);
                         var detail = types.Count == 0 ? "C# (no attachable types)"
                             : types.Count == 1 ? $"C# {types[0].Name}"
@@ -315,7 +315,7 @@ public partial class MainWindow
         });
     }
 
-    /// <summary>作成先フォルダ。右ペインでフォルダ行を選んでいればそれを、なければTreeの選択を使う。</summary>
+    /// <summary>Destination folder for creation. Uses the right-pane folder row when selected, otherwise the Tree selection.</summary>
     private string ExplorerTargetFolder(string componentsFallback)
     {
         if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
@@ -325,11 +325,11 @@ public partial class MainWindow
         return isComponents ? componentsFallback : folder;
     }
 
-    /// <summary>Scenesフォルダ自体はProject構造のため改名・削除の対象外にする。</summary>
+    /// <summary>Excludes the Scenes folder itself from rename and delete because it is part of the project structure.</summary>
     private static bool IsStructuralFolder(string? relativePath) =>
         string.Equals(relativePath, "Scenes", StringComparison.Ordinal);
 
-    /// <summary>Scenes配下の選択フォルダに空シーンを新規作成する。編集中シーンは触らない。</summary>
+    /// <summary>Creates an empty scene in the selected folder under Scenes. Leaves the scene being edited untouched.</summary>
     private async void OnExplorerCreateScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
         if (_project is null) return;
@@ -523,7 +523,7 @@ public partial class MainWindow
             SetFileStatus($"Deleted: {display}");
         });
 
-    /// <summary>移動・改名後に編集中シーンと起動シーンの参照を付け替える。起動シーンのScenes外脱出は拒否される。</summary>
+    /// <summary>Repoints the edited-scene and startup-scene references after a move or rename. Rejects moves that take the startup scene outside Scenes.</summary>
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)
     {
         if (_project is null) return;

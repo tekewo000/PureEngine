@@ -4,7 +4,7 @@ using PureEngine.Core;
 namespace PureEngine.Rendering;
 
 /// <summary>Single-object UI layout and Image drawing. The caller controls traversal, order and image ownership.</summary>
-/// <remarks>複数対象の描画順は呼び出し側がOrder昇順へ並べ替える。配置は事前に求め、Orderでは変えない。</remarks>
+/// <remarks>The caller sorts multiple targets ascending by Order before drawing. Resolves layout ahead of time and never changes it by Order.</remarks>
 public static class UiImageRenderer
 {
     public static (Vector2 Size, Matrix4x4 World) Draw(
@@ -21,8 +21,8 @@ public static class UiImageRenderer
         return layout;
     }
 
-    /// <summary>配置計算済みの1対象を描く。親子配置を済ませてOrder順に呼ぶための入口。</summary>
-    /// <remarks>配置の再計算はせず、渡されたSize／WorldSceneを使う。Spriteなし・0サイズ・退化変換は描かずに戻る。</remarks>
+    /// <summary>Draws one target with layout already resolved. Entry point for calling in Order after parent-child layout.</summary>
+    /// <remarks>Does not recompute layout; uses the passed Size/WorldScene. Skips and returns without Sprite, zero size, or degenerate transforms.</remarks>
     public static void DrawEntry(
         DrawList draw, SceneObject item, Vector2 size, Matrix4x4 worldScene,
         IReadOnlyDictionary<Guid, byte[]> images, Vector4 clip, Matrix4x4? view = null)
@@ -32,7 +32,7 @@ public static class UiImageRenderer
         ArgumentNullException.ThrowIfNull(images);
         if (item.GetComponent<Image>() is not { Sprite: { } sprite } image) return;
         // Orthographic XY projection. Z is preserved by UiLayout, but does not change 2D submission order.
-        // Editorのビュー変換は配置の後に合成し、Anchor用の親領域は変えない。
+        // Composes the Editor view transform after layout without changing the Anchor parent area.
         var viewMatrix = view ?? Matrix4x4.Identity;
         var world = worldScene * viewMatrix;
         if (world.M14 != 0 || world.M24 != 0 || world.M34 != 0 || world.M44 != 1)

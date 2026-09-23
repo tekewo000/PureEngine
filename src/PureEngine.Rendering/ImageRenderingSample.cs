@@ -49,9 +49,11 @@ public sealed class ImageRenderingSample
         draw.Rectangle(new(viewportSize.X - 40, 270), Matrix3x2.CreateTranslation(20, 60), new(.1f, .13f, .2f, 1), clip);
         Draw(_root, viewportSize, Matrix4x4.Identity);
         draw.Text("Image + Sprite + UiLayout", 24, 700, 1.2f, Matrix3x2.CreateTranslation(20, 15), Vector4.One, clip);
-        draw.Text("全体", 18, 160, 1.2f, Matrix3x2.CreateTranslation(20, 230), Vector4.One, clip);
-        draw.Text("切り出し・色・透明度", 18, 230, 1.2f, Matrix3x2.CreateTranslation(210, 230), Vector4.One, clip);
-        draw.Text("親の回転・子の追従", 18, 230, 1.2f, Matrix3x2.CreateTranslation(430, 230), Vector4.One, clip);
+        // Preserve mixed image/CJK atlas coverage with Japanese labels:
+        // whole image, crop/color/opacity, and parent rotation/child following.
+        draw.Text("\u5168\u4F53", 18, 160, 1.2f, Matrix3x2.CreateTranslation(20, 230), Vector4.One, clip);
+        draw.Text("\u5207\u308A\u51FA\u3057\u30FB\u8272\u30FB\u900F\u660E\u5EA6", 18, 230, 1.2f, Matrix3x2.CreateTranslation(210, 230), Vector4.One, clip);
+        draw.Text("\u89AA\u306E\u56DE\u8EE2\u30FB\u5B50\u306E\u8FFD\u5F93", 18, 230, 1.2f, Matrix3x2.CreateTranslation(430, 230), Vector4.One, clip);
 
         void Draw(SceneObject item, Vector2 parentSize, Matrix4x4 parentWorld)
         {

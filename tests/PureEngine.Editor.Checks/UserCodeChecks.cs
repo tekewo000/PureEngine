@@ -489,7 +489,7 @@ static class UserCodeChecks
         var code = "using PureEngine.Core; public class Legacy { [Inspector] public int Value = 5; }";
         File.WriteAllText(source, code);
         // Emulate a scene made by the old version, without any identity catalog.
-        // A4: 専用の所有者へ採用し、保存互換（typeId・types.json）を維持する。
+        // A4: Adopt into a dedicated owner while keeping save compatibility (typeId and types.json).
         using var legacyOwner = new ProjectComponents();
         var compiled = UserCodeCompiler.CompileFiles([source]);
         Check(compiled.Success, "Legacy test compilation failed.");

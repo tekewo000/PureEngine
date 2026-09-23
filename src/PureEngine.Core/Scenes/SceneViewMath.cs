@@ -2,8 +2,8 @@ using System.Numerics;
 
 namespace PureEngine.Core;
 
-/// <summary>V4前半のScene View編集操作に使う座標・配置の共通計算。データはXYZを維持し、GizmoはXYだけを扱う。</summary>
-/// <remarks>描画・選択・Gizmoで同じUiLayout結果とビュー変換を使う。Anchor用の親領域はパン／ズームで変えない。</remarks>
+/// <summary>Shared coordinate and layout math for the first half of V4 Scene View editing. Data keeps XYZ while gizmos handle XY only.</summary>
+/// <remarks>Rendering, selection, and gizmos share the same UiLayout results and view transform. The parent area for anchors is unaffected by pan/zoom.</remarks>
 public static class SceneViewMath
 {
     public const float MinZoom = 0.25f;
@@ -41,11 +41,11 @@ public static class SceneViewMath
         float.IsFinite(pan.X) && float.IsFinite(pan.Y)
         && float.IsFinite(zoom) && zoom >= MinZoom && zoom <= MaxZoom;
 
-    /// <summary>Scene座標を論理表示座標へ変換する。呼び出し側で有効なビューを保証する。</summary>
+    /// <summary>Converts Scene coordinates to logical view coordinates. Callers guarantee a valid view.</summary>
     public static Vector2 SceneToView(Vector2 scene, Vector2 pan, float zoom) =>
         scene * zoom + pan;
 
-    /// <summary>論理表示座標をScene座標へ変換する。呼び出し側で有効なビューを保証する。</summary>
+    /// <summary>Converts logical view coordinates to Scene coordinates. Callers guarantee a valid view.</summary>
     public static Vector2 ViewToScene(Vector2 view, Vector2 pan, float zoom) =>
         (view - pan) / zoom;
 
@@ -55,7 +55,7 @@ public static class SceneViewMath
             0, 0, 1, 0,
             pan.X, pan.Y, 0, 1);
 
-    /// <summary>ポインター直下のScene座標を保持してズームする。無効値はno-opでfalseを返す。</summary>
+    /// <summary>Zooms while keeping the Scene coordinate under the pointer. Invalid values are a no-op returning false.</summary>
     public static bool TryZoomAt(
         Vector2 viewPoint, Vector2 viewportSize, Vector2 pan, float zoom, float factor,
         out Vector2 nextPan, out float nextZoom)
@@ -84,7 +84,7 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>倍率に応じたグリッド間隔（Scene単位）を求める。画面上では48〜96pxを保つ。</summary>
+    /// <summary>Computes the grid spacing (in Scene units) for the zoom level. Keeps 48-96px on screen.</summary>
     public static float GridStep(float zoom)
     {
         if (!float.IsFinite(zoom) || zoom <= 0)
@@ -118,8 +118,8 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>親→子・兄弟順の深さ優先で有効なUI配置を列挙する。描画順ではなく配置計算順。壊れた配置の子には親領域を受け渡す。</summary>
-    /// <remarks>描画・ヒット判定の前後関係は <see cref="SortForRender"/> でOrder昇順へ並べ替える。配置値は並べ替えで変えない。Transformのみのグループノードは矩形を持たないが、その変換は子へ受け渡す。</remarks>
+    /// <summary>Enumerates valid UI layouts depth-first in parent-to-child and sibling order. This is layout-calculation order, not render order. Children of broken layouts receive the parent area.</summary>
+    /// <remarks>Render and hit-test ordering is rearranged into ascending Order via <see cref="SortForRender"/>. Layout values are unchanged by sorting. Transform-only group nodes have no rectangle, but their transform is passed to children.</remarks>
     public static IReadOnlyList<LayoutEntry> EnumerateLayouts(Scene scene, Vector2 viewportSize)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -146,15 +146,15 @@ public static class SceneViewMath
         else if (item.GetComponent<UiElement>() is null && item.GetComponent<Transform>() is { } bare
             && TryPropagateBareTransform(parentWorld, bare, out var bareWorld))
         {
-            // Transformのみのグループノードは矩形を持たないが、その変換は子へ受け渡す。サイズは継承しない。
+            // Transform-only group nodes have no rectangle, but their transform is passed to children. Size is not inherited.
             world = bareWorld;
         }
         foreach (var child in item.Children)
             AppendRecursive(child, size, world, entries);
     }
 
-    /// <summary>Transformのみのグループノードを子の配置へ受け渡すワールドへ変換する。UiElementの矩形は作らない。</summary>
-    /// <remarks>行ベクトル順（local * parent）でUiLayoutと同じ合成順にする。非有限の行列はfalse。</remarks>
+    /// <summary>Converts a Transform-only group node to the world passed to child layouts. Does not create a UiElement rectangle.</summary>
+    /// <remarks>Uses row-vector order (local * parent) for the same composition order as UiLayout. Non-finite matrices return false.</remarks>
     public static bool TryPropagateBareTransform(Matrix4x4 parentWorld, Transform transform, out Matrix4x4 world)
     {
         world = Matrix4x4.Identity;
@@ -171,8 +171,8 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>UiElementの有無を問わず、対象の親領域・親ワールド・自身ワールドを求める。Gizmo表示とドラッグ検証用。</summary>
-    /// <remarks>配置計算はEnumerateLayoutsと同じ走査規則（UiLayout優先・Transformのみは素通し）を使う。対象不在・Transformなし・非有限はfalse。</remarks>
+    /// <summary>Resolves the parent area, parent world, and self world for a target with or without a UiElement. Used for gizmo display and drag validation.</summary>
+    /// <remarks>Layout calculation uses the same traversal rules as EnumerateLayouts (UiLayout first, Transform-only passed through). Missing targets, missing Transforms, or non-finite values return false.</remarks>
     public static bool TryGetTransformFrame(
         Scene scene, SceneObject target, Vector2 viewportSize,
         out Vector2 parentSize, out Matrix4x4 parentWorld, out Matrix4x4 world)
@@ -239,16 +239,16 @@ public static class SceneViewMath
     private static Matrix3x2 ToPlane(Matrix4x4 world) =>
         new(world.M11, world.M12, world.M21, world.M22, world.M41, world.M42);
 
-    /// <summary>描画対象のImageのOrderを返す。Imageなしは0。親からは継承せず各対象の値を使う。</summary>
+    /// <summary>Returns the Order of the Image to render. Zero when there is no Image. Uses each target's own value without inheriting from the parent.</summary>
     public static int GetRenderOrder(SceneObject item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        // 現在の描画経路はImageのみ。他の派生型のアタッチ順にImageの描画順を左右させない。
+        // The current render path handles Image only. Attach order of other derived types does not affect Image render order.
         return item.GetComponent<Image>()?.Order ?? 0;
     }
 
-    /// <summary>配置計算済みの列をOrder昇順へ安定並べ替えする。描画とヒット判定で同じ処理を使う。</summary>
-    /// <remarks>同値は元の親→子・兄弟順を維持する。配置値は変えず順序だけを変える。</remarks>
+    /// <summary>Stably sorts layout entries into ascending Order. Rendering and hit-testing share this step.</summary>
+    /// <remarks>Equal values keep the original parent-to-child and sibling order. Only the order changes; layout values are unchanged.</remarks>
     public static IReadOnlyList<LayoutEntry> SortForRender(IReadOnlyList<LayoutEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -258,8 +258,8 @@ public static class SceneViewMath
     private static Matrix3x2 ViewPlane(Vector2 pan, float zoom) =>
         new(zoom, 0, 0, zoom, pan.X, pan.Y);
 
-    /// <summary>描画順の逆順（Order降順、同値は後方が手前）で矩形ヒット判定する。回転・拡縮・Pivotを反映し、透明ピクセル判定はしない。</summary>
-    /// <remarks>描画と同じ <see cref="SortForRender"/> を使い、手前から判定する。</remarks>
+    /// <summary>Hit-tests rectangles in reverse render order (descending Order, later entries in front on ties). Reflects rotation, scale, and Pivot; does not test transparent pixels.</summary>
+    /// <remarks>Uses the same <see cref="SortForRender"/> as rendering and tests from front to back.</remarks>
     public static SceneObject? HitTest(
         IReadOnlyList<LayoutEntry> entries, Vector2 viewportSize, Vector2 pan, float zoom,
         Vector2 viewPoint, Func<SceneObject, bool> isDrawable)
@@ -297,7 +297,7 @@ public static class SceneViewMath
         return null;
     }
 
-    /// <summary>選択枠の四隅とPivotを表示座標で求める。UiLayoutと同じ行列から算出する。</summary>
+    /// <summary>Computes the selection-frame corners and Pivot in view coordinates. Derived from the same matrices as UiLayout.</summary>
     public static bool TryGetSelectionFrame(
         LayoutEntry entry, Vector2 pan, float zoom,
         out Vector2[] cornersView, out Vector2 pivotView)
@@ -343,7 +343,7 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>親のUI配置からローカルXY軸の向き（Scene単位の単位ベクトル）を求める。自身の回転は含めない。</summary>
+    /// <summary>Derives the local XY axis directions (unit vectors in Scene units) from the parent UI layout. Excludes the target's own rotation.</summary>
     public static bool TryGetParentAxes(Matrix4x4 parentWorld, out Vector2 xAxis, out Vector2 yAxis)
     {
         xAxis = Vector2.UnitX;
@@ -360,7 +360,7 @@ public static class SceneViewMath
         return float.IsFinite(xAxis.X + xAxis.Y + yAxis.X + yAxis.Y);
     }
 
-    /// <summary>Gizmoのヒット判定。見かけと判定幅は画面の論理ピクセル基準で保つ。中央→X→Yの順に判定する。</summary>
+    /// <summary>Gizmo hit-testing. Appearance and hit width stay in screen logical pixels. Tests center, then X, then Y.</summary>
     public static GizmoKind HitGizmo(
         Vector2 pivotView, Vector2 xAxis, Vector2 yAxis, Vector2 viewPoint)
     {
@@ -398,7 +398,7 @@ public static class SceneViewMath
         return perpendicular.Length() <= GizmoShaftHalfWidth;
     }
 
-    /// <summary>親XY変換の逆行列でScene差分をローカル差分へ戻す。Zは扱わない。</summary>
+    /// <summary>Maps a Scene delta back to a local delta with the inverse parent XY transform. Z is not handled.</summary>
     public static bool TrySceneDeltaToLocal(
         Vector2 sceneDelta, Matrix4x4 parentWorld, out Vector2 localDelta)
     {
@@ -422,7 +422,7 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>開始値からの差分でLocalPositionのX・Yだけを更新し、Zを保持する。</summary>
+    /// <summary>Updates only the X and Y of LocalPosition from the delta off the start value, preserving Z.</summary>
     public static bool TryApplyMove(
         Vector3 startLocal, Vector2 localDelta, GizmoKind kind, out Vector3 nextLocal)
     {
@@ -444,7 +444,7 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>選択矩形（Scene座標の四隅）を余白付きで表示領域へ収めるパン／ズームを求める。</summary>
+    /// <summary>Computes the pan/zoom that fits the selection rectangle (Scene-coordinate corners) into the view with padding.</summary>
     public static bool TryComputeFit(
         Vector2 viewportSize, Vector2[] cornersScene, out Vector2 pan, out float zoom)
     {
@@ -481,7 +481,7 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>配置からScene座標の四隅を求める。F表示の入力に使う。</summary>
+    /// <summary>Computes the Scene-coordinate corners from a layout. Used as input for the F view.</summary>
     public static bool TryGetSceneCorners(LayoutEntry entry, out Vector2[] cornersScene) =>
         TryGetSelectionFrame(entry, Vector2.Zero, 1, out cornersScene, out _);
 }

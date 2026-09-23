@@ -3,9 +3,9 @@ using PureEngine.Core;
 namespace PureEngine.Editor.Samples;
 
 /// <summary>
-/// コンストラクタ注入の最小例。依存は ctor、保存データは [Inspector]。
-/// 保存値を使う初期化は Start で行い、ctor では通信やゲーム進行を開始しない。
-/// 所有資源の解放は自身の Dispose が担当し、注入されたサービスは Dispose しない。
+/// Minimal example of constructor injection. Dependencies come from the constructor, saved data from [Inspector].
+/// Initialize with saved values in Start; never start communication or game progression in the constructor.
+/// Its own Dispose releases owned resources; never dispose injected services.
 /// </summary>
 public sealed class InjectedPlayer(IRandomService random, BattleSession session) : IDisposable
 {
