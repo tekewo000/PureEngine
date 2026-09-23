@@ -552,4 +552,5 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 - Editorは入れ子カード（Null表示＋Create／Set Null＋折りたたみ＋`親.子`のAutomation名）で編集する。単体・配列／リスト要素・辞書値に対応し、無効表示・保存拒否・Esc復元・未保存化は既存の仕組みに合わせる。
 - 追加分（Core・InspectorValueChecks）：自作クラスの単体・二重入れ子・配列・リスト・辞書のYAML往復とClone分離、null・初期値維持・未知項目の読み飛ばし、再帰・抽象・ジェネリック・struct・引数なしコンストラクタなし・派生型混入の拒否を確認。
 - 追加分（Editor・InspectorValueEditorChecks）：入れ子エディタのUnsupported表示なし、Create→入れ子編集→Set Null、二重入れ子・折りたたみ、リスト・辞書のAdd／Removeと値編集、無効表示・Esc復元・未保存化をHeadlessで確認。
-- ローカルの形式検証（提案レベル解析）・警告をエラー扱いにしたビルド・Coreチェック全件を通過。EditorはInspector系3スイート（Priority・InspectorValue・UiImage）を単独実行で通過。Editor全件は `ConsoleChecks.CloseReopen` の `First window must intake` で中断するが、変更なしの pristine な main でも同一箇所で失敗する環境依存の既存不具合であり、本差分の影響ではない。実画面・実GPU・CIは未確認。
+- PR修正：自作クラスの再コンパイル後の型互換性判定と、入れ子の `FormerlySerializedAs` の名前解決を追加。単体・配列・List・Dictionaryの値保持、入れ子の旧名復元、新旧名の重複拒否、非互換な内部メンバー型／クラス名変更時の元Scene保持を回帰チェックで確認した。仕様は[設計書](EngineArchitecture.md)のInspector節を参照。
+- ローカルの `./tools/code-quality.ps1 -Check`（提案レベル解析・警告をエラー扱いにしたビルド・Core／Editorチェック全件）を通過。以前中断した `ConsoleChecks.CloseReopen` も今回の実行では通過。実画面・実GPUは未確認。CIはPRのChecksで別途確認する。

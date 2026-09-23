@@ -144,6 +144,11 @@ static class InspectorValueChecks
             "Custom class dictionary did not survive.");
         Check(customSerializer.Serialize(customSerializer.Deserialize(nestedYaml)) == nestedYaml,
             "Custom class save/load changed output.");
+        var formerYaml = nestedYaml.Replace("Hp:", "Health:");
+        Check(customSerializer.Serialize(customSerializer.Deserialize(formerYaml)) == nestedYaml,
+            "Former names must preserve custom values in members, nested objects, arrays, lists and dictionaries.");
+        Reject(() => customSerializer.Deserialize(nestedYaml.Replace("Name: Rex", "Health: 31")),
+            "Current and former nested names for the same member must be rejected.");
         // Null custom members survive, and missing nested keys keep their initializers.
         nested.Boss = null;
         Check(customSerializer.Deserialize(customSerializer.Serialize(customScene)).Objects[0].GetComponent<NestedProbe>()!.Boss is null,
@@ -289,7 +294,7 @@ static class InspectorValueChecks
 
     public class SkillStats
     {
-        [Inspector] public int Hp { get; set; } = 7;
+        [Inspector, FormerlySerializedAs("Health")] public int Hp { get; set; } = 7;
         [Inspector] public string Name = "fresh";
     }
 

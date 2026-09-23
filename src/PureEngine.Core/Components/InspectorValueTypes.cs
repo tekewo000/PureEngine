@@ -492,10 +492,18 @@ public static class InspectorValueTypes
             return copy;
         }
         var mapping = ToStringKeyedMapping(raw, path);
+        var names = ComponentSchema.GetInspectorMemberNames(type);
+        Dictionary<MemberInfo, object?> values = [];
+        foreach (var (name, value) in mapping)
+        {
+            if (!names.TryGetValue(name, out var member)) continue;
+            if (!values.TryAdd(member, value))
+                throw new InvalidDataException($"{path}.{member.Name}: multiple saved names refer to the same Inspector member.");
+        }
         var instance = CreateCustomInstance(type, path);
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
         {
-            if (!mapping.TryGetValue(member.Name, out var itemRaw))
+            if (!values.TryGetValue(member, out var itemRaw))
                 continue; // 後から追加されたメンバーはクラスの初期値を維持する。
             SetObjectMember(instance, member, FromStorable(itemRaw, MemberType(member), $"{path}.{member.Name}"));
         }
