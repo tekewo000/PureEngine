@@ -119,7 +119,7 @@ public static class SceneViewMath
     }
 
     /// <summary>親→子・兄弟順の深さ優先で有効なUI配置を列挙する。描画順ではなく配置計算順。壊れた配置の子には親領域を受け渡す。</summary>
-    /// <remarks>描画・ヒット判定の前後関係は <see cref="SortForRender"/> でOrder昇順へ並べ替える。配置値は並べ替えで変えない。</remarks>
+    /// <remarks>描画・ヒット判定の前後関係は <see cref="SortForRender"/> でOrder昇順へ並べ替える。配置値は並べ替えで変えない。Transformのみのグループノードは矩形を持たないが、その変換は子へ受け渡す。</remarks>
     public static IReadOnlyList<LayoutEntry> EnumerateLayouts(Scene scene, Vector2 viewportSize)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -143,9 +143,98 @@ public static class SceneViewMath
             world = resolvedWorld;
             entries.Add(new LayoutEntry(item, size, world, parentSize, parentWorld));
         }
+        else if (item.GetComponent<UiElement>() is null && item.GetComponent<Transform>() is { } bare
+            && TryPropagateBareTransform(parentWorld, bare, out var bareWorld))
+        {
+            // Transformのみのグループノードは矩形を持たないが、その変換は子へ受け渡す。サイズは継承しない。
+            world = bareWorld;
+        }
         foreach (var child in item.Children)
             AppendRecursive(child, size, world, entries);
     }
+
+    /// <summary>Transformのみのグループノードを子の配置へ受け渡すワールドへ変換する。UiElementの矩形は作らない。</summary>
+    /// <remarks>行ベクトル順（local * parent）でUiLayoutと同じ合成順にする。非有限の行列はfalse。</remarks>
+    public static bool TryPropagateBareTransform(Matrix4x4 parentWorld, Transform transform, out Matrix4x4 world)
+    {
+        world = Matrix4x4.Identity;
+        ArgumentNullException.ThrowIfNull(transform);
+        if (!IsFiniteMatrix(parentWorld))
+            return false;
+        var local = transform.LocalMatrix;
+        if (!IsFiniteMatrix(local))
+            return false;
+        var combined = local * parentWorld;
+        if (!IsFiniteMatrix(combined))
+            return false;
+        world = combined;
+        return true;
+    }
+
+    /// <summary>UiElementの有無を問わず、対象の親領域・親ワールド・自身ワールドを求める。Gizmo表示とドラッグ検証用。</summary>
+    /// <remarks>配置計算はEnumerateLayoutsと同じ走査規則（UiLayout優先・Transformのみは素通し）を使う。対象不在・Transformなし・非有限はfalse。</remarks>
+    public static bool TryGetTransformFrame(
+        Scene scene, SceneObject target, Vector2 viewportSize,
+        out Vector2 parentSize, out Matrix4x4 parentWorld, out Matrix4x4 world)
+    {
+        parentSize = Vector2.Zero;
+        parentWorld = Matrix4x4.Identity;
+        world = Matrix4x4.Identity;
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.GetComponent<Transform>() is null)
+            return false;
+        if (!float.IsFinite(viewportSize.X) || !float.IsFinite(viewportSize.Y)
+            || viewportSize.X < 0 || viewportSize.Y < 0)
+            return false;
+        foreach (var root in scene.RootObjects)
+            if (TryFindFrame(root, target, viewportSize, Matrix4x4.Identity, out parentSize, out parentWorld, out world))
+                return true;
+        return false;
+    }
+
+    private static bool TryFindFrame(
+        SceneObject current, SceneObject target, Vector2 parentSize, Matrix4x4 parentWorld,
+        out Vector2 foundParentSize, out Matrix4x4 foundParentWorld, out Matrix4x4 foundWorld)
+    {
+        foundParentSize = parentSize;
+        foundParentWorld = parentWorld;
+        foundWorld = parentWorld;
+        var size = parentSize;
+        var world = parentWorld;
+        var hasWorld = false;
+        if (TryGetLayout(current, parentSize, parentWorld, out var resolvedSize, out var resolvedWorld))
+        {
+            size = resolvedSize;
+            world = resolvedWorld;
+            hasWorld = true;
+        }
+        else if (current.GetComponent<UiElement>() is null && current.GetComponent<Transform>() is { } bare
+            && TryPropagateBareTransform(parentWorld, bare, out var bareWorld))
+        {
+            world = bareWorld;
+            hasWorld = true;
+        }
+        if (ReferenceEquals(current, target))
+        {
+            if (!hasWorld)
+                return false;
+            foundParentSize = parentSize;
+            foundParentWorld = parentWorld;
+            foundWorld = world;
+            return true;
+        }
+        foreach (var child in current.Children)
+            if (TryFindFrame(child, target, size, world, out foundParentSize, out foundParentWorld, out foundWorld))
+                return true;
+        return false;
+    }
+
+    private static bool IsFiniteMatrix(Matrix4x4 value) =>
+        float.IsFinite(value.M11) && float.IsFinite(value.M12) && float.IsFinite(value.M13) && float.IsFinite(value.M14)
+        && float.IsFinite(value.M21) && float.IsFinite(value.M22) && float.IsFinite(value.M23) && float.IsFinite(value.M24)
+        && float.IsFinite(value.M31) && float.IsFinite(value.M32) && float.IsFinite(value.M33) && float.IsFinite(value.M34)
+        && float.IsFinite(value.M41) && float.IsFinite(value.M42) && float.IsFinite(value.M43) && float.IsFinite(value.M44);
 
     private static Matrix3x2 ToPlane(Matrix4x4 world) =>
         new(world.M11, world.M12, world.M21, world.M22, world.M41, world.M42);

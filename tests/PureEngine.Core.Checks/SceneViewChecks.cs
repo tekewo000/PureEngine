@@ -11,10 +11,11 @@ internal static class SceneViewChecks
         OverlapOrder();
         RenderOrder();
         ParentMove();
+        BareTransformParent();
         GizmoHit();
         DegenerateSelection();
         Fit();
-        Console.WriteLine("PASS: scene view coordinates, cursor zoom, overlap order, render order, parent-aware move, gizmo hit, and fit.");
+        Console.WriteLine("PASS: scene view coordinates, cursor zoom, overlap order, render order, parent-aware move, bare-transform parents, gizmo hit, and fit.");
     }
 
     private static void Roundtrip()
@@ -261,6 +262,53 @@ internal static class SceneViewChecks
             "Non-invertible parents must disable gizmo moves.");
         Check(!SceneViewMath.TryGetParentAxes(flatParent, out _, out _),
             "Degenerate parent axes must disable the gizmo.");
+    }
+
+    private static void BareTransformParent()
+    {
+        var scene = new Scene();
+        var parent = scene.AddEmpty();
+        parent.Rename("Group");
+        parent.Attach(new Transform { LocalPosition = new Vector3(100, 50, 0) });
+        var child = scene.AddEmpty();
+        child.Rename("Card");
+        child.SetParent(parent);
+        child.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
+        child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(40, 30) });
+        child.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        var viewport = new Vector2(400, 200);
+
+        // Grouping nodes have no rect, but their transform must scope children.
+        var entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+        Check(entries.Count == 1 && ReferenceEquals(entries[0].Object, child),
+            "Transform-only parents must not enumerate, but their child must.");
+        Check(SceneViewMath.TryGetSceneCorners(entries[0], out var corners)
+            && corners[0] == new Vector2(110, 70),
+            $"Child layout must follow the bare parent, got {corners[0]}.");
+
+        // The parent itself exposes a world-space pivot for the gizmo.
+        Check(SceneViewMath.TryGetTransformFrame(scene, parent, viewport, out _, out var parentWorld, out var world)
+            && world.M41 == 100 && world.M42 == 50 && parentWorld.Equals(Matrix4x4.Identity),
+            "Bare parent frame must resolve its world position under an identity parent.");
+        var orphan = scene.AddEmpty();
+        Check(!SceneViewMath.TryGetTransformFrame(scene, orphan, viewport, out _, out _, out _),
+            "Objects without Transform must not expose a gizmo frame.");
+        Check(!SceneViewMath.TryGetTransformFrame(new Scene(), parent, viewport, out _, out _, out _),
+            "Objects outside the scene must not expose a gizmo frame.");
+
+        // Nested bare groups accumulate.
+        var inner = scene.AddEmpty();
+        inner.Rename("Inner");
+        inner.SetParent(parent);
+        inner.Attach(new Transform { LocalPosition = new Vector3(5, 5, 0) });
+        child.SetParent(inner);
+        entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+        Check(SceneViewMath.TryGetSceneCorners(entries[0], out var nested)
+            && nested[0] == new Vector2(115, 75),
+            $"Nested bare groups must accumulate, got {nested[0]}.");
+        Check(SceneViewMath.TryGetTransformFrame(scene, inner, viewport, out _, out _, out var innerWorld)
+            && innerWorld.M41 == 105 && innerWorld.M42 == 55,
+            "Nested bare frames must accumulate parent offsets.");
     }
 
     private static void GizmoHit()

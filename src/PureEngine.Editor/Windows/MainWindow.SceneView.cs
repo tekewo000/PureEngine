@@ -99,11 +99,27 @@ public partial class MainWindow
         yAxis = Vector2.UnitY;
         gizmoValid = false;
         var entry = FindLayout(SceneLayouts(viewportSize), target);
-        if (entry is null)
+        if (entry is not null
+            && SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out cornersView, out pivotView))
+        {
+            gizmoValid = SceneViewMath.TryGetParentAxes(entry.ParentWorld, out xAxis, out yAxis);
+            return true;
+        }
+        // Transformのみのグループ親：矩形はないが配置の起点としてPivotとGizmoを出す。
+        // UiElement付きの潰れた配置は従来どおり枠もGizmoも出さない。
+        if (target.GetComponent<UiElement>() is not null)
             return false;
-        if (!SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out cornersView, out pivotView))
+        if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, target, viewportSize, out _, out var parentWorld, out var world))
             return false;
-        gizmoValid = SceneViewMath.TryGetParentAxes(entry.ParentWorld, out xAxis, out yAxis);
+        if (!SceneViewMath.TryGetParentAxes(parentWorld, out xAxis, out yAxis))
+            return false;
+        var scenePivot = new Vector2(world.M41, world.M42);
+        if (!float.IsFinite(scenePivot.X) || !float.IsFinite(scenePivot.Y))
+            return false;
+        pivotView = SceneViewMath.SceneToView(scenePivot, _scenePan, _sceneZoom);
+        if (!float.IsFinite(pivotView.X) || !float.IsFinite(pivotView.Y))
+            return false;
+        gizmoValid = true;
         return true;
     }
 
@@ -130,9 +146,8 @@ public partial class MainWindow
         if (IsPlaying) { RejectWhenPlaying("Select"); return; }
         var entries = SceneLayouts(viewportSize);
         if (GetSelectedSceneObject() is SceneObject selected
-            && FindLayout(entries, selected) is { } entry
-            && SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out _, out var pivot)
-            && SceneViewMath.TryGetParentAxes(entry.ParentWorld, out var xAxis, out var yAxis)
+            && TrySceneFrame(selected, viewportSize, out _, out var pivot, out var xAxis, out var yAxis, out var gizmoValid)
+            && gizmoValid
             && BeginSceneMove(selected, SceneViewMath.HitGizmo(pivot, xAxis, yAxis, viewPoint), viewPoint))
         {
             _scenePointer = e.Pointer;
@@ -150,10 +165,27 @@ public partial class MainWindow
             || !IsDrawableSceneViewport(out var viewportSize)
             || !float.IsFinite(viewPoint.X) || !float.IsFinite(viewPoint.Y)
             || !_editScene.Current.Objects.Contains(target)) return false;
-        if (target.GetComponent<Transform>() is not { } transform || target.GetComponent<UiElement>() is not { } element) return false;
-        var entry = FindLayout(SceneLayouts(viewportSize), target);
-        if (entry is null || !SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out _, out _)
-            || !SceneViewMath.TryGetParentAxes(entry.ParentWorld, out _, out _)) return false;
+        if (target.GetComponent<Transform>() is not { } transform) return false;
+        var element = target.GetComponent<UiElement>();
+        if (element is not null)
+        {
+            var entry = FindLayout(SceneLayouts(viewportSize), target);
+            if (entry is null || !SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out _, out _)
+                || !SceneViewMath.TryGetParentAxes(entry.ParentWorld, out _, out _)) return false;
+            _dragParentWorld = entry.ParentWorld;
+            _dragParentSize = entry.ParentSize;
+            _dragGeometry = (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, transform.LocalRotation, transform.LocalScale);
+        }
+        else
+        {
+            // Transformのみのグループ親も起点として動かせる。矩形条件は緩和し、親連鎖と自回転・拡縮だけを監視する。
+            if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, target, viewportSize, out var parentSize, out var parentWorld, out _))
+                return false;
+            if (!SceneViewMath.TryGetParentAxes(parentWorld, out _, out _)) return false;
+            _dragParentWorld = parentWorld;
+            _dragParentSize = parentSize;
+            _dragGeometry = (Vector2.Zero, Vector2.Zero, Vector2.Zero, Vector2.Zero, transform.LocalRotation, transform.LocalScale);
+        }
         _sceneMoveKind = kind;
         _dragScene = _editScene.Current;
         _dragTarget = target;
@@ -161,10 +193,7 @@ public partial class MainWindow
         _dragElement = element;
         _dragParent = target.Parent;
         _dragStartLocal = transform.LocalPosition;
-        _dragParentWorld = entry.ParentWorld;
-        _dragParentSize = entry.ParentSize;
         _dragViewportSize = viewportSize;
-        _dragGeometry = (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, transform.LocalRotation, transform.LocalScale);
         _dragStartScene = SceneViewMath.ViewToScene(viewPoint, _scenePan, _sceneZoom);
         return true;
     }
@@ -181,14 +210,36 @@ public partial class MainWindow
         }
         var element = _dragTarget.GetComponent<UiElement>();
         var viewportSize = SceneViewportSize();
-        var entry = FindLayout(SceneLayouts(viewportSize), _dragTarget);
         if (IsPlaying || !IsDrawableSceneViewport(out _) || viewportSize != _dragViewportSize
-            || !ReferenceEquals(_dragTarget.Parent, _dragParent) || element is null || !ReferenceEquals(element, _dragElement)
-            || (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, _dragTransform.LocalRotation, _dragTransform.LocalScale) != _dragGeometry
-            || entry is null || entry.ParentSize != _dragParentSize || entry.ParentWorld != _dragParentWorld)
+            || !ReferenceEquals(_dragTarget.Parent, _dragParent) || !ReferenceEquals(element, _dragElement))
         {
             CancelSceneViewDrag();
             return false;
+        }
+        if (_dragElement is not null)
+        {
+            var entry = FindLayout(SceneLayouts(viewportSize), _dragTarget);
+            if (element is null
+                || (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, _dragTransform.LocalRotation, _dragTransform.LocalScale) != _dragGeometry
+                || entry is null || entry.ParentSize != _dragParentSize || entry.ParentWorld != _dragParentWorld)
+            {
+                CancelSceneViewDrag();
+                return false;
+            }
+        }
+        else
+        {
+            if ((_dragTransform.LocalRotation, _dragTransform.LocalScale) != (_dragGeometry.Rotation, _dragGeometry.Scale))
+            {
+                CancelSceneViewDrag();
+                return false;
+            }
+            if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, _dragTarget, viewportSize, out var parentSize, out var parentWorld, out _)
+                || parentSize != _dragParentSize || parentWorld != _dragParentWorld)
+            {
+                CancelSceneViewDrag();
+                return false;
+            }
         }
         return true;
     }
