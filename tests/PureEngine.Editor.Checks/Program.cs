@@ -70,6 +70,7 @@ internal static class Program
             launcher.Show();
             Dispatcher.UIThread.RunJobs();
             PlayConnectionChecks.Run();
+            ProjectDropChecks.Run();
             EditorOwnershipChecks.Run(root);
             ConsoleChecks.Run();
             EditorSeparationChecks.Run(root);

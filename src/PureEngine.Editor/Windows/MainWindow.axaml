@@ -519,7 +519,7 @@
                   <TextBlock Text="FOLDERS" Classes="columnHeader" Margin="8,2,0,0" />
                   <Separator Grid.Row="1" Classes="divider" Margin="0,6" />
                   <TreeView Grid.Row="2" x:Name="ProjectTree" Background="Transparent" BorderThickness="0"
-                            SelectionMode="Single"
+                            SelectionMode="Single" DragDrop.AllowDrop="True"
                             AutomationProperties.Name="Project folders"
                             SelectionChanged="OnProjectTreeSelectionChanged"
                             ContextRequested="OnProjectTreeContextRequested"
@@ -545,7 +545,7 @@
                 <Grid Grid.Column="2" RowDefinitions="Auto,*">
                   <TextBlock x:Name="ProjectFilesCount" Classes="muted" FontSize="11" Margin="8,2,0,6" />
                   <ListBox Grid.Row="1" x:Name="ProjectFiles" Background="Transparent" BorderThickness="0"
-                           SelectionMode="Single"
+                           SelectionMode="Single" DragDrop.AllowDrop="True"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                            AutomationProperties.Name="Project files"
                            DoubleTapped="OnProjectFilesDoubleTapped" KeyDown="OnProjectFilesKeyDown"
