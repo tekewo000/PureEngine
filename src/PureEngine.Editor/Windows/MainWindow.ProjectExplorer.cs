@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using PureEngine.Core;
+using Color = Avalonia.Media.Color;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace PureEngine.Editor;

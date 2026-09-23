@@ -1,5 +1,6 @@
 using Avalonia.Media;
 using PureEngine.Core;
+using Color = Avalonia.Media.Color;
 
 namespace PureEngine.Editor;
 

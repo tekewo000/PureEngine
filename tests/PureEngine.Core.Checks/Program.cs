@@ -147,6 +147,7 @@ ParentChecks.Run();
 TransformChecks.Run();
 UiLayoutChecks.Run();
 SpriteChecks.Run();
+ColorChecks.Run();
 ProjectImportChecks.Run();
 SceneRuntimeChecks.Run();
 UiCreationChecks.Run();

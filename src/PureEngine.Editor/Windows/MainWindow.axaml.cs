@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using PureEngine.Core;
+using Color = Avalonia.Media.Color;
 using PureEngine.Runtime;
 
 namespace PureEngine.Editor;

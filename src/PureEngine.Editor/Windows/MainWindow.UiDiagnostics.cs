@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using PureEngine.Core;
+using Color = Avalonia.Media.Color;
 
 namespace PureEngine.Editor;
 
