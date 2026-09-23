@@ -26,8 +26,8 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
 - `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える。`Sprite`がNoneのときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
-- Scene Viewは編集中のSceneを親子・兄弟順に辿って描く。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Spriteの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
-- Scene Viewの表示中の画像を左クリックで選択すると、Stuffs／Inspectorと連動して選択枠とPivotを表示する。空白クリックで選択を解除する。選択中の有効なUI対象にはX／Y矢印と中央ハンドルが出て、ドラッグでTransform.LocalPositionのX・Yだけを移動する（Zは保持）。ドラッグ中はInspectorへ即時反映し、左ボタンを離したときに変わっていた場合だけ未保存になる。Esc・フォーカス喪失・キャプチャ喪失や、保存・Scene切替・Play開始・コード採用の前には開始位置へ戻し、マウスの捕捉も解除する。ドラッグ中に親・Anchor・サイズ等の配置条件が変わった場合も中断する。Fキーで選択対象を余白付きで中央に表示する（ドラッグ中やInspectorの入力中は無効）。0サイズやXY変換が潰れた対象のGizmoは無効。Play中は配置編集できない。詳細な座標・中断規則は[設計書](docs/EngineArchitecture.md#v4前半scene-viewの編集操作)、検証状況は[実装計画](docs/ImplementationPlan.md#v4前半のscene-view編集操作2026-09-23)を参照する。
+- Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
+- Scene Viewの表示中の画像を左クリックで選択すると、Stuffs／Inspectorと連動して選択枠とPivotを表示する。重なりは`Order`の大きい値を手前として同じ並べ替えで判定し、手前から選ぶ。空白クリックで選択を解除する。選択中の有効なUI対象にはX／Y矢印と中央ハンドルが出て、ドラッグでTransform.LocalPositionのX・Yだけを移動する（Zは保持）。ドラッグ中はInspectorへ即時反映し、左ボタンを離したときに変わっていた場合だけ未保存になる。Esc・フォーカス喪失・キャプチャ喪失や、保存・Scene切替・Play開始・コード採用の前には開始位置へ戻し、マウスの捕捉も解除する。ドラッグ中に親・Anchor・サイズ等の配置条件が変わった場合も中断する。Fキーで選択対象を余白付きで中央に表示する（ドラッグ中やInspectorの入力中は無効）。0サイズやXY変換が潰れた対象のGizmoは無効。Play中は配置編集できない。詳細な座標・中断規則は[設計書](docs/EngineArchitecture.md#v4前半scene-viewの編集操作)、検証状況は[実装計画](docs/ImplementationPlan.md#v4前半のscene-view編集操作2026-09-23)を参照する。
 - enumはドロップダウン、`[Flags]` はチェックボックスとNoneボタンで編集する。自作enumを含むC#も保存後に自動反映する。互換性のない定義変更はConsoleに理由を表示し、編集中の値を保持する。
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
@@ -55,7 +55,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - 未保存の変更はタイトルの `*` で示す。別シーンを開くときや終了時にSave／Discard／Cancelを選ぶ。
 - Inspectorに入力エラーがある間は保存しない。成否とエラー詳細は画面下部に表示する。
 
-保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。組み込みは `core.transform`・`core.ui-element`・`core.image` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。
+保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。組み込みは `core.transform`・`core.ui-element`・`core.image` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。`Image` の `Order`（`RendererComponent` の共通基底）もInspector値として保存・Cloneし、旧データは `Order: 0` として従来の表示を維持する。ライフサイクルのPriorityとは独立させる。
 読み込みは別のSceneへ復元し、成功してから現在のSceneと入れ替える。保存は同じフォルダの一時ファイルへ書き終えてから置き換える。
 現在の形式は `version: 2`。旧形式（`version: 1`）は全てルート・配列順の兄弟として読み込み、次の明示保存で2へ更新する。YAMLのコメントは再保存で失われる。オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
 
@@ -394,10 +394,12 @@ var region = cropped.ResolveSourceRect(imageWidth: 128, imageHeight: 64);
 
 ## Image Componentの描画
 
-Imageは`Sprite`と`Color`を持ち、位置・回転・拡縮をTransform、領域をUiElementから取得します。Spriteがnullなら表示しません。実行は上記のEditorまたは試作Playerを使います。[単体表示](docs/evidence/image-component-player.png)と[リサイズ後](docs/evidence/image-component-resized.png)は検証用サンプルの画面証跡として残しています。
+Scene Viewの前後関係はInspectorの`Image.Order`で変更します。手前にしたい画像へ大きい値を設定してください。描画順の適用範囲は[設計書](docs/EngineArchitecture.md#image-componentから描画への接続)、確認済みの項目は[検証記録](docs/ImplementationPlan.md#描画順の共通基盤order2026-09-23)を参照してください。
+
+Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を持つ。位置・回転・拡縮をTransform、領域をUiElementから取得します。Spriteがnullなら表示しません。`Order`は昇順で描き、大きい値を手前にする。負数も許可し、親からは継承せず各対象の値を使う。実行は上記のEditorまたは試作Playerを使います。[単体表示](docs/evidence/image-component-player.png)と[リサイズ後](docs/evidence/image-component-resized.png)は検証用サンプルの画面証跡として残しています。
 
 コードから使う入口は`PureEngine.Rendering.UiImageRenderer.Draw`です。対象SceneObject、親のサイズ／UI配置行列、画像IDからPNG等のバイト列を取得する辞書、表示先のクリップ矩形を渡します。戻り値のサイズ・行列を子へ渡せます。画像辞書の内容は描画リストの寿命中不変としてください。
 
-編集中Sceneの一括走査は`PureEngine.Rendering.EditSceneRenderer.Build`です。Scene・画像辞書・表示領域を渡すと、親子・兄弟順に辿って描き、描けなかった対象の診断を返します。Start／Updateは呼びません。Button操作は後続です。
+編集中Sceneの一括走査は`PureEngine.Rendering.EditSceneRenderer.Build`です。Scene・画像辞書・表示領域を渡すと、親子配置を済ませてから`Order`昇順へ並べ替えて描き、描けなかった対象の診断を返します。ヒット判定は`PureEngine.Core.SceneViewMath.HitTest`で同じ並べ替えを使い、手前から判定します。Start／Updateは呼びません。Button・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は今回の対象外です。
 
-完成目標の操作：StuffsでEmptyを作る → InspectorのAdd Componentで `Transform`・`UiElement`・`Image` を検索して付ける → Projectへ画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置・色を変える → 保存 → 開き直して同じ表示になる。親を含む例も保存往復とCloneで確認する。
+完成目標の操作：StuffsでEmptyを作る → InspectorのAdd Componentで `Transform`・`UiElement`・`Image` を検索して付ける → Projectへ画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置・色・`Order`を変える → 保存 → 開き直して同じ表示になる。親を含む例も保存往復とCloneで確認する。

@@ -8,12 +8,13 @@ static class UiComponentChecks
     {
         SpriteRoundTrip();
         SpriteRejections();
+        OrderRoundTrip();
         Requirements();
         ParentRoundTrip();
         ParentRejections();
         SiblingOrder();
         RemoveCascade();
-        Console.WriteLine("PASS: Sprite YAML round-trip/clone, UI requirements, parent save/reopen, sibling order, and subtree removal.");
+        Console.WriteLine("PASS: Sprite YAML round-trip/clone, render Order save/clone, UI requirements, parent save/reopen, sibling order, and subtree removal.");
     }
 
     private static void Check(bool condition, string message)
@@ -102,6 +103,43 @@ static class UiComponentChecks
         Reject(() => _ = new Sprite(Guid.NewGuid(), (0, 0, 0, 1)), "Zero sprite width accepted.");
         Check(wholeItem.GetComponent<global::Image>()!.Sprite is not null, "Whole sprite setup failed.");
         Check(wholeScene.Objects.Count == 0, "Negative-case scene must stay empty.");
+    }
+
+    private static void OrderRoundTrip()
+    {
+        var registry = UiRegistry();
+        var serializer = new SceneSerializer(registry);
+        Check(ComponentSchema.GetInspectorMembers(typeof(global::Image)).Any(member => member.Name == "Order"),
+            "Image must expose Order through the RendererComponent base.");
+        Check(new global::Image().Order == 0, "New Images must start with Order 0.");
+        var scene = new Scene();
+        var item = scene.AddEmpty();
+        item.Rename("Ordered");
+        item.Attach(new Transform());
+        item.Attach(new UiElement());
+        var image = new global::Image { Sprite = new Sprite(Guid.NewGuid()), Order = -7 };
+        item.Attach(image);
+        var yaml = serializer.Serialize(scene);
+        Check(yaml.Contains("Order:"), "Order must be saved through Inspector values.");
+        var restored = serializer.Deserialize(yaml);
+        Check(restored.Objects[0].GetComponent<global::Image>()!.Order == -7,
+            "Negative Order did not survive save/load.");
+        Check(serializer.Serialize(restored) == yaml, "Order save/load changed output.");
+        var clone = serializer.Clone(scene);
+        var cloneImage = clone.Objects[0].GetComponent<global::Image>()!;
+        Check(cloneImage.Order == -7 && !ReferenceEquals(cloneImage, image),
+            "Clone must carry Order to a separate Image instance.");
+        image.Order = 4;
+        Check(cloneImage.Order == -7, "Editing Order after Clone must not leak into the clone.");
+
+        // Old scenes without Order keep the previous display as Order 0.
+        var legacyYaml = string.Join("\n", yaml.Split('\n').Where(line => !line.Contains("Order:", StringComparison.Ordinal)));
+        Check(!legacyYaml.Contains("Order:"), "Legacy YAML setup failed.");
+        var legacy = serializer.Deserialize(legacyYaml, out var membersChanged);
+        Check(legacy.Objects[0].GetComponent<global::Image>()!.Order == 0,
+            "Old data without Order must load as Order 0.");
+        Check(membersChanged, "Missing Order must be reported as added members.");
+        Check(serializer.Serialize(legacy).Contains("Order:"), "Resaving legacy data must connect Order.");
     }
 
     private static void Requirements()

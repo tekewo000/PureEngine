@@ -53,7 +53,7 @@ internal static class SceneViewEditorChecks
         SaveClonePreserveZ();
         HierarchyTreeAndDrop();
         HierarchyRoutedDrag();
-        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, and save/clone.");
+        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, Order save/clone/front pick, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, and save/clone.");
     }
 
     private static MainWindow CreateEditor()
@@ -660,22 +660,29 @@ internal static class SceneViewEditorChecks
         parent.Attach(new Transform { LocalPosition = new Vector3(11, 22, 3) });
         parent.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(120, 60) });
         var imageId = Guid.NewGuid();
-        parent.Attach(new global::Image { Sprite = new Sprite(imageId) });
+        parent.Attach(new global::Image { Sprite = new Sprite(imageId), Order = 2 });
         var child = scene.AddEmpty();
         child.Rename("Child");
         child.SetParent(parent);
         child.Attach(new Transform { LocalPosition = new Vector3(5, 6, 7) });
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(20, 10) });
-        child.Attach(new global::Image { Sprite = new Sprite(imageId) });
+        child.Attach(new global::Image { Sprite = new Sprite(imageId), Order = -4 });
         var yaml = serializer.Serialize(scene);
         var restored = serializer.Deserialize(yaml);
         Check(restored.Objects.First(item => item.Name == "Parent").GetComponent<Transform>()!.LocalPosition.Z == 3,
             "Save roundtrip must preserve a non-zero parent Z.");
         Check(restored.Objects.First(item => item.Name == "Child").GetComponent<Transform>()!.LocalPosition == new Vector3(5, 6, 7),
             "Save roundtrip must preserve a non-zero child Z.");
+        Check(restored.Objects.First(item => item.Name == "Parent").GetComponent<global::Image>()!.Order == 2
+            && restored.Objects.First(item => item.Name == "Child").GetComponent<global::Image>()!.Order == -4,
+            "Save roundtrip must preserve render Order including negatives.");
+        Check(serializer.Serialize(restored) == yaml, "Order save/load must be stable.");
         var clone = serializer.Clone(scene);
         var cloneChild = clone.Objects.First(item => item.Name == "Child");
         Check(cloneChild.GetComponent<Transform>()!.LocalPosition.Z == 7, "Clone must preserve a non-zero Z.");
+        Check(clone.Objects.First(item => item.Name == "Parent").GetComponent<global::Image>()!.Order == 2
+            && cloneChild.GetComponent<global::Image>()!.Order == -4,
+            "Clone must preserve render Order.");
         Check(!ReferenceEquals(cloneChild, child)
             && !ReferenceEquals(cloneChild.GetComponent<Transform>(), child.GetComponent<Transform>()),
             "Clone must separate Transform instances.");
@@ -684,6 +691,16 @@ internal static class SceneViewEditorChecks
         var viewport = new Vector2(400, 200);
         var diagnostics = EditSceneRenderer.Build(draw, restored, images, viewport, SceneViewMath.ViewMatrix(Vector2.Zero, 1f));
         Check(diagnostics.Count == 0, "View-aware drawing must accept the restored scene.");
+        var restoredEntries = SceneViewMath.EnumerateLayouts(restored, viewport);
+        var restoredOrdered = SceneViewMath.SortForRender(restoredEntries);
+        Check(restoredOrdered.Count == 2
+            && ReferenceEquals(restoredOrdered[0].Object, restored.Objects.First(item => item.Name == "Child"))
+            && ReferenceEquals(restoredOrdered[1].Object, restored.Objects.First(item => item.Name == "Parent")),
+            "Restored Order must still sort the child behind its parent.");
+        static bool IsRestoredImage(SceneObject item) => item.GetComponent<global::Image>() is { Sprite: not null };
+        Check(ReferenceEquals(SceneViewMath.HitTest(restoredEntries, viewport, Vector2.Zero, 1f,
+            new Vector2(20, 30), IsRestoredImage), restored.Objects.First(item => item.Name == "Parent")),
+            "Restored overlap click must pick the frontmost Order.");
         var moved = restored.Objects.First(item => item.Name == "Child").GetComponent<Transform>()!;
         moved.LocalPosition = new Vector3(50, 60, 7);
         var movedYaml = serializer.Serialize(restored);
@@ -710,13 +727,13 @@ internal static class SceneViewEditorChecks
             card.Rename("Card");
             card.Attach(new Transform { LocalPosition = new Vector3(20, 30, 4) });
             card.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(120, 60) });
-            card.Attach(new global::Image { Sprite = new Sprite(imported.Id) });
+            card.Attach(new global::Image { Sprite = new Sprite(imported.Id), Order = 1 });
             var badge = projectScene.AddEmpty();
             badge.Rename("Badge");
             badge.SetParent(card);
             badge.Attach(new Transform { LocalPosition = new Vector3(10, 10, 6) });
             badge.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(24, 24) });
-            badge.Attach(new global::Image { Sprite = new Sprite(imported.Id) });
+            badge.Attach(new global::Image { Sprite = new Sprite(imported.Id), Order = -2 });
             var view = SceneViewMath.ViewMatrix(new Vector2(30, -15), 2f);
             using var beforeDraw = new DrawList();
             Check(EditSceneRenderer.Build(beforeDraw, projectScene, projectImages, viewport, view).Count == 0
@@ -729,6 +746,9 @@ internal static class SceneViewEditorChecks
                 "Project reopen must restore the card position with Z intact.");
             Check(session.Scene.Objects.First(item => item.Name == "Badge").GetComponent<Transform>()!.LocalPosition.Z == 6,
                 "Project reopen must restore a non-zero child Z.");
+            Check(reopenedCard.GetComponent<global::Image>()!.Order == 1
+                && session.Scene.Objects.First(item => item.Name == "Badge").GetComponent<global::Image>()!.Order == -2,
+                "Project reopen must restore render Order.");
             var reopenedAssets = ProjectAssets.Scan(project.RootDirectory);
             using var afterDraw = new DrawList();
             Check(EditSceneRenderer.Build(afterDraw, session.Scene, reopenedAssets.LoadImageBytes(), viewport, view).Count == 0

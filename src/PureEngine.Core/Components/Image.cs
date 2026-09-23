@@ -1,7 +1,7 @@
 using System.Numerics;
 using PureEngine.Core;
 
-public sealed class Image
+public sealed class Image : RendererComponent
 {
     [Inspector]
     public Sprite? Sprite { get; set; }

@@ -118,7 +118,8 @@ public static class SceneViewMath
         return true;
     }
 
-    /// <summary>描画順（親→子・兄弟順の深さ優先）で有効なUI配置を列挙する。壊れた配置の子には親領域を受け渡す。</summary>
+    /// <summary>親→子・兄弟順の深さ優先で有効なUI配置を列挙する。描画順ではなく配置計算順。壊れた配置の子には親領域を受け渡す。</summary>
+    /// <remarks>描画・ヒット判定の前後関係は <see cref="SortForRender"/> でOrder昇順へ並べ替える。配置値は並べ替えで変えない。</remarks>
     public static IReadOnlyList<LayoutEntry> EnumerateLayouts(Scene scene, Vector2 viewportSize)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -149,10 +150,27 @@ public static class SceneViewMath
     private static Matrix3x2 ToPlane(Matrix4x4 world) =>
         new(world.M11, world.M12, world.M21, world.M22, world.M41, world.M42);
 
+    /// <summary>描画対象のImageのOrderを返す。Imageなしは0。親からは継承せず各対象の値を使う。</summary>
+    public static int GetRenderOrder(SceneObject item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        // 現在の描画経路はImageのみ。他の派生型のアタッチ順にImageの描画順を左右させない。
+        return item.GetComponent<global::Image>()?.Order ?? 0;
+    }
+
+    /// <summary>配置計算済みの列をOrder昇順へ安定並べ替えする。描画とヒット判定で同じ処理を使う。</summary>
+    /// <remarks>同値は元の親→子・兄弟順を維持する。配置値は変えず順序だけを変える。</remarks>
+    public static IReadOnlyList<LayoutEntry> SortForRender(IReadOnlyList<LayoutEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        return [.. entries.OrderBy(entry => GetRenderOrder(entry.Object))];
+    }
+
     private static Matrix3x2 ViewPlane(Vector2 pan, float zoom) =>
         new(zoom, 0, 0, zoom, pan.X, pan.Y);
 
-    /// <summary>表示順の逆順で矩形ヒット判定する。回転・拡縮・Pivotを反映し、透明ピクセル判定はしない。</summary>
+    /// <summary>描画順の逆順（Order降順、同値は後方が手前）で矩形ヒット判定する。回転・拡縮・Pivotを反映し、透明ピクセル判定はしない。</summary>
+    /// <remarks>描画と同じ <see cref="SortForRender"/> を使い、手前から判定する。</remarks>
     public static SceneObject? HitTest(
         IReadOnlyList<LayoutEntry> entries, Vector2 viewportSize, Vector2 pan, float zoom,
         Vector2 viewPoint, Func<SceneObject, bool> isDrawable)
@@ -166,9 +184,10 @@ public static class SceneViewMath
         if (viewPoint.X < 0 || viewPoint.Y < 0 || viewPoint.X > viewportSize.X || viewPoint.Y > viewportSize.Y)
             return null;
         var view = ViewPlane(pan, zoom);
-        for (var i = entries.Count - 1; i >= 0; i--)
+        var ordered = SortForRender(entries);
+        for (var i = ordered.Count - 1; i >= 0; i--)
         {
-            var entry = entries[i];
+            var entry = ordered[i];
             if (!isDrawable(entry.Object))
                 continue;
             if (!float.IsFinite(entry.Size.X) || !float.IsFinite(entry.Size.Y))

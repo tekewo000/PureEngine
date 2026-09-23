@@ -172,6 +172,22 @@ internal static class UiImageEditorChecks
             "Unknown image IDs must keep their ID and warn.");
         Check(image.Sprite.ImageId != Guid.Empty, "Missing sprite must keep its ID.");
 
+        var orderBox = editor.GetVisualDescendants().OfType<TextBox>()
+            .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, "Image.Order"));
+        Check(orderBox.Text == "0", $"New Image Order must start as 0, got '{orderBox.Text}'.");
+        orderBox.Text = "5";
+        Dispatcher.UIThread.RunJobs();
+        Check(image.Order == 5, "Inspector Order edit did not reach the scene.");
+        orderBox.Text = "-3";
+        Dispatcher.UIThread.RunJobs();
+        Check(image.Order == -3, "Negative Order must be editable from the Inspector.");
+        orderBox.Text = "abc";
+        Dispatcher.UIThread.RunJobs();
+        Check(image.Order == -3, "Invalid Order input must not change the scene.");
+        orderBox.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape });
+        Dispatcher.UIThread.RunJobs();
+        Check(orderBox.Text == "-3", $"Esc must restore the last valid Order, got '{orderBox.Text}'.");
+
         foreach (var other in scene.Objects.Where(candidate => !ReferenceEquals(candidate, item)).ToList())
             scene.Remove(other);
         Select(editor, item);
@@ -184,6 +200,6 @@ internal static class UiImageEditorChecks
         Dispatcher.UIThread.RunJobs();
         Check(Control<StackPanel>(editor, "ObjectInspector").IsEnabled,
             "Inspector editing must return after Stop.");
-        Console.WriteLine("PASS: component add entry, Image requirements warn/clear, Sprite select/None/missing, and Play guard.");
+        Console.WriteLine("PASS: component add entry, Image requirements warn/clear, Sprite select/None/missing, Order Inspector edit, and Play guard.");
     }
 }

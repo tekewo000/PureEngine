@@ -40,12 +40,13 @@ internal static class UiEndToEndChecks
         card.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
         card.GetComponent<global::Image>()!.Sprite = new Sprite(imported.Id);
         card.GetComponent<global::Image>()!.Color = new Vector4(1, 0.5f, 0.25f, 1);
+        card.GetComponent<global::Image>()!.Order = 3;
         var child = scene.AddEmpty();
         child.Rename("Badge");
         child.SetParent(card);
         child.Attach(new Transform { LocalPosition = new Vector3(10, 10, 0) });
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(24, 24) });
-        child.Attach(new global::Image { Sprite = new Sprite(imported.Id) });
+        child.Attach(new global::Image { Sprite = new Sprite(imported.Id), Order = -1 });
         Check(UiComponentRequirements.GetMissing(card).Count == 0
             && UiComponentRequirements.GetMissing(child).Count == 0, "E2E requirements must clear.");
 
@@ -66,8 +67,10 @@ internal static class UiEndToEndChecks
             Check(reopened.GetComponent<global::Image>()!.Sprite!.ImageId == imported.Id
                 && reopened.GetComponent<Transform>()!.LocalPosition == new Vector3(20, 30, 0)
                 && reopened.GetComponent<UiElement>()!.SizeDelta == new Vector2(120, 60)
-                && reopened.GetComponent<global::Image>()!.Color == new Vector4(1, 0.5f, 0.25f, 1),
-                "Reopen must restore Sprite reference, placement and color.");
+                && reopened.GetComponent<global::Image>()!.Color == new Vector4(1, 0.5f, 0.25f, 1)
+                && reopened.GetComponent<global::Image>()!.Order == 3
+                && reopenedChild.GetComponent<global::Image>()!.Order == -1,
+                "Reopen must restore Sprite reference, placement, color and Order.");
             var reopenedAssets = ProjectAssets.Scan(project.RootDirectory);
             var reopenedImages = reopenedAssets.LoadImageBytes();
             using var afterDraw = new DrawList();
@@ -84,8 +87,11 @@ internal static class UiEndToEndChecks
                 && !ReferenceEquals(cloneCard.GetComponent<global::Image>(), reopened.GetComponent<global::Image>())
                 && ReferenceEquals(clone.Objects.First(item => item.Name == "Badge").Parent, cloneCard),
                 "Clone must separate components and resolve parents to the clone.");
+            Check(cloneCard.GetComponent<global::Image>()!.Order == 3
+                && clone.Objects.First(item => item.Name == "Badge").GetComponent<global::Image>()!.Order == -1,
+                "Clone must preserve render Order.");
         }
-        Console.WriteLine("PASS: empty/add/search/sprite/placement/color/save/reopen/clone end-to-end with identical preview.");
+        Console.WriteLine("PASS: empty/add/search/sprite/placement/color/Order/save/reopen/clone end-to-end with identical preview.");
     }
 
     private static void Check(bool condition, string message)

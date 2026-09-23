@@ -9,11 +9,12 @@ internal static class SceneViewChecks
         ZoomAtCursor();
         GridDensity();
         OverlapOrder();
+        RenderOrder();
         ParentMove();
         GizmoHit();
         DegenerateSelection();
         Fit();
-        Console.WriteLine("PASS: scene view coordinates, cursor zoom, overlap order, parent-aware move, gizmo hit, and fit.");
+        Console.WriteLine("PASS: scene view coordinates, cursor zoom, overlap order, render order, parent-aware move, gizmo hit, and fit.");
     }
 
     private static void Roundtrip()
@@ -115,6 +116,104 @@ internal static class SceneViewChecks
         Check(!ReferenceEquals(zeroHit, zero), "Zero-size objects must not be hittable.");
 
         static bool IsImage(SceneObject item) => item.GetComponent<global::Image>() is { Sprite: not null };
+    }
+
+    private static void RenderOrder()
+    {
+        var scene = new Scene();
+        var viewport = new Vector2(400, 200);
+        static SceneObject Card(Scene scene, string name, Vector3 position)
+        {
+            var item = scene.AddEmpty();
+            item.Rename(name);
+            item.Attach(new Transform { LocalPosition = position });
+            item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 100) });
+            item.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+            return item;
+        }
+        var back = Card(scene, "Back", new Vector3(10, 10, 0));
+        var front = Card(scene, "Front", new Vector3(50, 50, 0));
+        static bool IsImage(SceneObject item) => item.GetComponent<global::Image>() is { Sprite: not null };
+
+        // Same Order keeps sibling order: later sibling stays in front.
+        Check(SceneViewMath.GetRenderOrder(back) == 0 && SceneViewMath.GetRenderOrder(front) == 0,
+            "New Images must start with Order 0.");
+        Check(back.GetComponent<RendererComponent>() == back.GetComponent<global::Image>(),
+            "Image Order must be reachable through the RendererComponent base.");
+        var entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+        var ordered = SceneViewMath.SortForRender(entries);
+        Check(ordered.Count == 2 && ReferenceEquals(ordered[0].Object, back) && ReferenceEquals(ordered[1].Object, front),
+            "Same Order must preserve parent-to-child and sibling order.");
+        Check(ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), front),
+            "Same-Order overlap must pick the later sibling.");
+
+        // Larger Order comes to front, even against sibling order. Negatives are allowed.
+        back.GetComponent<global::Image>()!.Order = 1;
+        entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+        Check(ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), back),
+            "Larger Order must come to front regardless of sibling order.");
+        ordered = SceneViewMath.SortForRender(entries);
+        Check(ReferenceEquals(ordered[0].Object, front) && ReferenceEquals(ordered[1].Object, back),
+            "SortForRender must place larger Order later.");
+        var backImage = back.GetComponent<global::Image>()!;
+        back.Detach(backImage);
+        back.Attach(new RenderOrderLifecycle { Order = int.MinValue });
+        back.Attach(backImage);
+        Check(SceneViewMath.GetRenderOrder(back) == backImage.Order
+            && ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), back),
+            "Another renderer attached before Image must not override the displayed Image's Order or selection.");
+        front.GetComponent<global::Image>()!.Order = -1;
+        back.GetComponent<global::Image>()!.Order = -5;
+        entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+        Check(ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), front),
+            "Negative Orders must still compare ascending with larger values in front.");
+
+        // Layout is computed before sorting and never inherited: child keeps its own Order and geometry.
+        var parent = Card(scene, "Parent", new Vector3(100, 50, 0));
+        var child = Card(scene, "Child", new Vector3(10, 20, 0));
+        child.SetParent(parent);
+        var sibling = Card(scene, "Sibling", new Vector3(100, 50, 0));
+        var before = SceneViewMath.EnumerateLayouts(scene, viewport)
+            .First(entry => ReferenceEquals(entry.Object, child));
+        parent.GetComponent<global::Image>()!.Order = 10;
+        child.GetComponent<global::Image>()!.Order = 0;
+        sibling.GetComponent<global::Image>()!.Order = 5;
+        // Reset overlapping cards so only the parent chain decides the frontmost pick.
+        back.GetComponent<global::Image>()!.Order = -10;
+        front.GetComponent<global::Image>()!.Order = -10;
+        entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+        var after = entries.First(entry => ReferenceEquals(entry.Object, child));
+        Check(after.Size == before.Size && after.WorldScene.Equals(before.WorldScene),
+            "Changing Order must not change parent-child layout.");
+        ordered = SceneViewMath.SortForRender(entries);
+        var childIndex = ordered.ToList().FindIndex(entry => ReferenceEquals(entry.Object, child));
+        var siblingIndex = ordered.ToList().FindIndex(entry => ReferenceEquals(entry.Object, sibling));
+        var parentIndex = ordered.ToList().FindIndex(entry => ReferenceEquals(entry.Object, parent));
+        Check(childIndex >= 0 && siblingIndex >= 0 && parentIndex >= 0
+            && childIndex < siblingIndex && siblingIndex < parentIndex,
+            "Each target must use its own Order without inheriting the parent Order.");
+        Check(ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f,
+            new Vector2(115, 75), IsImage), parent),
+            "Clicking an overlap must pick the frontmost Order first.");
+
+        // Lifecycle Priority stays independent from render Order.
+        var probe = scene.AddEmpty();
+        probe.Rename("Probe");
+        var lifecycle = new RenderOrderLifecycle();
+        probe.Attach(lifecycle);
+        probe.SetStartPriority(lifecycle, 100);
+        back.GetComponent<global::Image>()!.Order = 3;
+        Check(SceneViewMath.GetRenderOrder(back) == 3 && probe.GetStartPriority(lifecycle) == 100,
+            "Render Order and lifecycle Priority must be stored independently.");
+        Check(SceneViewMath.GetRenderOrder(probe) == 0,
+            "Objects without a renderer must sort as Order 0.");
+    }
+
+    private sealed class RenderOrderLifecycle : RendererComponent
+    {
+#pragma warning disable CA1822 // Reflection tests require lifecycle members to remain instance members.
+        [Start] public void OnStart() { }
+#pragma warning restore CA1822
     }
 
     private static void ParentMove()

@@ -401,14 +401,14 @@ ProjectFile.ValidateProjectPathをシーン・フォルダ・素材で共有し�
 
 #### UIコンポーネント
 
-最初に用意するのは**UiElement・Text・Image・Button**。全て同じSceneObjectへ付けて組み合わせる普通のComponentとし、専用の基底クラスや別のRectTransformは作らない。位置・回転・拡縮は既存Transformを使い、UiElementに二重に持たせない。現在のコード上の表記は`UiElement`に揃える。Imageは既存のグローバル名前空間のクラスをそのまま使う。`UiElement`（`core.ui-element`）・`Image`（`core.image`）は組み込み登録済み。Text／Buttonの実装と登録は後続。
+最初に用意するのは**UiElement・Text・Image・Button**。全て同じSceneObjectへ付けて組み合わせる普通のComponentとし、描画順以外の専用の基底クラスや別のRectTransformは作らない。位置・回転・拡縮は既存Transformを使い、UiElementに二重に持たせない。現在のコード上の表記は`UiElement`に揃える。Imageは既存のグローバル名前空間のクラスをそのまま使い、`RendererComponent`から派生させる（namespaceの宣言形式は変更しない）。`UiElement`（`core.ui-element`）・`Image`（`core.image`）は組み込み登録済み。Text／Buttonの実装と登録は後続。将来のSpriteRendererも同じ基底を使うが、本体・SortingLayer・Zによる奥行き制御は今回の対象外とする。
 
 | Component | 責任・データ |
 | --- | --- |
 | `Transform`（既存） | `LocalPosition`・`LocalRotation`・`LocalScale`。既存のLocalMatrixの意味・計算は変更しない |
 | `UiElement`（データ定義あり） | `SizeDelta = (100,100)`、`AnchorMin = AnchorMax = (0,0)`、`Pivot = (0.5,0.5)` |
 | `Text`（予定） | 文字を領域へ描く。文字列・フォント・サイズ・行間・色等の詳細は後続で定義 |
-| `Image`（描画確認用の接続済み） | `Sprite? Sprite`と`Vector4 Color = Vector4.One`。nullは描画なし、ColorはRGBA乗算。UiElementの領域へStretchする |
+| `Image`（描画確認用の接続済み） | `Sprite? Sprite`と`Vector4 Color = Vector4.One`、`RendererComponent.Order = 0`。nullは描画なし、ColorはRGBA乗算。UiElementの領域へStretchする |
 | `Button`（予定） | 領域内のクリック判定と処理の通知。見た目はImage／Textとの組み合わせで作る |
 
 UiElementはTransformと組み合わせる。現時点の「Transformが必要」というコメントだけでは依存関係は強制されないため、登録と依存検証は今後の実装対象。構築途中のAttach順序を妨げず、完成したSceneを検証するときの不足の扱いを揃える。Text／Image／Buttonは同じオブジェクトのUiElementが解決した領域を使う。
@@ -427,15 +427,19 @@ Visible・Opacity・ClipChildrenや画面全体の解像度設定は引き続き
 
 #### Image Componentから描画への接続
 
-`PureEngine.Rendering.UiImageRenderer.Draw`は、同じSceneObjectのTransformとUiElementを読み、UiLayoutでサイズと配置行列を計算する。ImageがありSpriteが非nullなら、呼び出し側のID→画像バイト列の辞書から素材を取得し、DrawListへ渡す。Imageなし／Sprite=nullのオブジェクトも配置結果を返すので、画像のない親グループに使える。子にはこの戻り値を渡す。走査順・親子の所属・素材データの所有は呼び出し側の責任で、描画アダプターはSceneを書き換えたりライフサイクルを呼んだりしない。
+`RendererComponent`はOrderを保持する共通基底であり、継承しただけで新しい描画形式が登録されるわけではない。現在のScene View描画対象はImageのみのため、整列時も実際に描くImageのOrderを取得する。同じSceneObjectへ別の派生Componentを先に付けてもImageのOrderを上書きしない。SpriteRenderer等の描画接続を追加するときは、その描画対象ごとにOrderを扱う。
 
-現在の2D描画は配置行列のXYへの正投影。Quaternionによる変換はUiLayoutで適用した後にXYを取り出し、Z値での奥行き並べ替えはしない。透視変換は明示的に拒否する。描画順は呼び出し順、画像の表示は矩形いっぱいへのStretch。0サイズ・退化したXY変換は描画を省略する。Transform／UiElement不足、画像ID欠落、壊れた画像、切り出し範囲外は例外とし、現在のViewportは既存の停止・診断経路で通知する。
+`PureEngine.Rendering.UiImageRenderer.Draw`は、同じSceneObjectのTransformとUiElementを読み、UiLayoutでサイズと配置行列を計算する。ImageがありSpriteが非nullなら、呼び出し側のID→画像バイト列の辞書から素材を取得し、DrawListへ渡す。Imageなし／Sprite=nullのオブジェクトも配置結果を返すので、画像のない親グループに使える。子にはこの戻り値を渡す。走査順・親子の所属・素材データの所有は呼び出し側の責任で、描画アダプターはSceneを書き換えたりライフサイクルを呼んだりしない。単体描画ではOrderを使わず、配置も変えない。
+
+配置計算済みの描画は`UiImageRenderer.DrawEntry`に集約し、単体の`Draw`と一括走査の両方から使う。一括走査は配置の失敗原因を診断へ残し、失敗した対象の子には親領域を受け渡す。素材解決だけが失敗した場合は、その対象の有効な配置を子へ引き継ぐ。
+
+現在の2D描画は配置行列のXYへの正投影。Quaternionによる変換はUiLayoutで適用した後にXYを取り出し、Z値での奥行き並べ替えはしない。透視変換は明示的に拒否する。編集中Sceneの一括走査（`EditSceneRenderer`）では親子の配置計算を済ませてから、`RendererComponent.Order`の昇順へ安定並べ替えして描く。大きい値を手前にし、負数も許可する。同値は親→子・兄弟順を維持し、Orderは親から継承せず各描画対象の値を使う。画像の表示は矩形いっぱいへのStretch。0サイズ・退化したXY変換は描画を省略する。Transform／UiElement不足、画像ID欠落、壊れた画像、切り出し範囲外は例外とし、現在のViewportは既存の停止・診断経路で通知する。ライフサイクルのPriorityとは独立させる。
 
 DrawListのSprite用Imageオーバーロードは、元画像を初回だけデコードし、Spriteの領域を独立したアトラス領域へコピーする。キーは画像ID＋切り出し矩形（全体指定は別キー）なので、同じ画像の異なる切り出しを混同せず、線形補間でも隣のSprite領域を直接参照しない。画像IDのバイト列を変更する呼び出し側はキャッシュを無効化する。EditorのRefreshはVulkanViewportへ無効化を予約し、前回の表示処理を待った次の直列フレーム内でDrawList.ResetAtlasを適用する。CPUアトラスの項目と配置をクリアしRevisionを進めることで、同じIDでも新しい画素をGPUへ再転送する。明示Refreshではアトラス全体を再構築し、GPUデバイスや描画先を作り直さない。元画像サイズはV2と同じく各軸2046ピクセル以下、アトラスは2048×2048に制限する。
 
 `ImageRenderingSample`は検証専用Sceneに通常のTransform・UiElement・Imageを付けて親子を作る。Viewportは表示寸法で毎フレーム配置を再計算する。全体画像・部分切り出し・Color／Alpha・親子回転・右下固定・横Stretch・null Spriteを確認する。背景と説明文字は既存DrawListで描き、Text Component実装とは区別する。
 
-Imageの `Sprite`・`Color` はInspector・YAML・Cloneで扱う。`Sprite` の選択肢はProjectの `Assets/` 索引から作り、None解除と欠落IDの保持に対応する。検証用の画像辞書を制作データの保存先にしない。
+Imageの `Sprite`・`Color`・`Order` はInspector・YAML・Cloneで扱う。`Order` は `RendererComponent` の共通基底に `[Inspector] public int Order { get; set; }` として持ち、既定値は0。旧データは `Order = 0` として従来の表示を維持する。`Sprite` の選択肢はProjectの `Assets/` 索引から作り、None解除と欠落IDの保持に対応する。検証用の画像辞書を制作データの保存先にしない。`Sprite` は素材データのまま維持し、描画順を持たせない。
 
 #### 配置計算の置き場所と入出力
 
@@ -481,13 +485,13 @@ UiLayout.Calculateはnull、非有限値、負の親サイズ、逆転したAnch
 
 以下は後続機能の設計案。Visible／Opacity／ClipChildrenの格納先やAPIは未確定で、最初のUiLayout計算には持ち込まない。
 
-親を先に描き、Childrenを兄弟順に深さ優先で辿る。後の兄弟の部分木が手前になる。同じオブジェクトにImageとTextがあればImage→Textの順。Buttonは独立した絵を持たず、V5で入力を受ける。Visible=falseの部分木は全体を非表示にし、Opacityは祖先との積。これらは描画／入力の設定であり、非表示を理由に既存のUpdateを停止しない。透明でもVisible=true・Interactable=trueならButtonの入力対象になり得る。
+親子の配置を済ませてから、`Order`昇順へ安定並べ替えして描く。大きい値を手前にし、同値は親→子・兄弟順（深さ優先の走査順）を維持する。後の兄弟の部分木が手前になるのは、同値の場合に限る。同じオブジェクトにImageとTextがあればImage→Textの順。Buttonは独立した絵を持たず、V5で入力を受ける。Visible=falseの部分木は全体を非表示にし、Opacityは祖先との積。これらは描画／入力の設定であり、非表示を理由に既存のUpdateを停止しない。透明でもVisible=true・Interactable=trueならButtonの入力対象になり得る。
 
 ClipChildrenは親のローカル矩形で子孫を切る。Imageは自身の矩形に収まり、Textは自身の矩形でもクリップする。回転／拡縮した親のクリップは変換された矩形のまま扱い、画面上のAABBへの拡大で代用しない。入れ子は全祖先のクリップの共通部分になる。
 
 **V2との接続上の注意：** 現在のDrawListは画面軸に平行なクリップ矩形のみを扱う。V3ではCoreに変換付き矩形のクリップ列を持たせ、点の包含をGPUなしで検証する。V4の描画接続では、描画三角形をこれらの凸矩形でCPUクリップし、UVを補間して既存の頂点バッチへ渡す処理を追加する。軸平行の場合は従来の矩形クリップを利用できる。Stencil／Render Graph／別バックエンドは不要。正確な親クリップが通るまでUI描画の接続完了とはしない。 またV2のDrawListはフォントが同梱Notoに固定されているため、FontRefの保存だけで外部フォントが表示可能になったとは扱わない。V4では素材索引から画像・フォントを解決する接続、フォントID／サイズを含むキャッシュキー、素材変更時のキャッシュ退役も必要になる。V3ではこれらをGPU非依存の参照検証までとする。
 
-V3は共通の座標変換・矩形包含・クリップ包含を用意し、実際の選択と逆順ヒット検索はV4／V5が同じ結果を使う。非可逆変換、表示領域外、Visible=false、クリップ外はヒットしない。ButtonのInteractable=falseはそのButtonを対象外にし、親のButtonを無効にしても別の子Buttonを自動で無効化しない。
+V3は共通の座標変換・矩形包含・クリップ包含を用意し、実際の選択と逆順ヒット検索はV4／V5が同じ結果を使う。描画とヒット判定で同じ `SceneViewMath.SortForRender` を使い、クリック時は手前（`Order`降順、同値は後方が手前）から判定する。非可逆変換、表示領域外、Visible=false、クリップ外はヒットしない。ButtonのInteractable=falseはそのButtonを対象外にし、親のButtonを無効にしても別の子Buttonを自動で無効化しない。
 
 #### ボタンとゲームコードの接続
 
@@ -533,7 +537,7 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 - Anchor計算用のルート領域はパン／ズームで変更しない。UiLayoutへ渡すサイズをzoomで割ってStretchのサイズを変える実装は避ける。実際の表示領域リサイズ時の配置更新と、Editorだけの視点移動を区別する。
 - グリッドと原点はEditorの表示要素。ゲームのComponentや保存データにはしない。倍率に応じて線の間隔／本数を調整し、極端な拡大縮小で過密描画や無制限の列挙を起こさない。グリッドは今回表示のみで、スナップは行わない。
 - 中ボタンドラッグはパン、ホイールはポインター直下のScene座標を保持してズームする。倍率には有限の上下限を設ける。サイズ0・非有限値・変換不能では操作を開始しない。
-- 画像の選択は描画と同じUiLayout結果を使い、表示順の逆順で矩形をヒット判定する。回転・拡縮・Pivot・表示領域のクリップを反映する。初期は矩形判定とし、画像の透明ピクセル単位の判定はしない。Spriteなし／描画対象外の画像を空白クリックで拾わない。Stuffsからは画像のない有効なUIグループも選択できる。
+- 画像の選択は描画と同じUiLayout結果と`Order`並べ替えを使い、描画順の逆順（手前から）で矩形をヒット判定する。回転・拡縮・Pivot・表示領域のクリップを反映する。初期は矩形判定とし、画像の透明ピクセル単位の判定はしない。Spriteなし／描画対象外の画像を空白クリックで拾わない。Stuffsからは画像のない有効なUIグループも選択できる。
 - 選択状態は既存Stuffs／Inspectorへ接続し、第二の独立した選択リストを作らない。選択枠は変形後の四隅、PivotはUiLayoutの同じ行列から算出する。UiElement／Transform不足や非可逆なXY変換では、選択を維持してもGizmo操作を無効にする。
 - 移動Gizmoは選択対象のPivotに表示し、画像より先にヒット判定する。矢印・中央ハンドルの見かけのサイズと操作判定の幅は画面の論理ピクセル基準で保ち、zoomと一緒に小さくしない。X／YはLocalPositionを書き換える軸、すなわち親のUI配置で変換されたローカルXY軸として表示する。自身の回転によって移動軸をさらに回さない。
 - ドラッグ開始時のLocalPositionと親のUI配置を保持し、マウスのScene座標差を親のXY変換の逆行列でローカル差分へ戻す。X／Yハンドルでは対応軸だけ、中央ではXY両方を変更し、LocalPosition.Z・Anchor・Pivot・SizeDeltaは維持する。非ゼロZの対象でも同じ規則とし、確定・キャンセル・保存・CloneでZを失わない。小刻みな加算の積み重ねではなく、開始値から算出する。
