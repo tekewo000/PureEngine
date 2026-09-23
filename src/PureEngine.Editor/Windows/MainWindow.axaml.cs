@@ -105,6 +105,7 @@ public partial class MainWindow : Window
         ConnectPreviewViewport(viewport);
         RefreshProjectAssets();
         SceneViewport.Children.Add(viewport);
+        InitSceneView();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
@@ -771,7 +772,12 @@ public partial class MainWindow : Window
     }
 
     private void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
-        => RefreshObjectInspector();
+    {
+        if (_sceneMoveKind is not PureEngine.Core.SceneViewMath.GizmoKind.None
+            && !ReferenceEquals(SceneObjects.SelectedItem, _dragTarget))
+            CancelSceneViewDrag();
+        RefreshObjectInspector();
+    }
 
     private void RefreshObjectInspector()
     {
@@ -812,6 +818,7 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("Delete")) return;
         if (SceneObjects.SelectedItem is not SceneObject item) return;
+        CancelSceneViewDrag();
         var index = SceneObjects.SelectedIndex;
         List<object> doomed = [.. item.Components];
         var stack = new Stack<SceneObject>(item.Children);

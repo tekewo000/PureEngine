@@ -39,6 +39,7 @@ public partial class MainWindow
     /// </summary>
     internal void StartPlay()
     {
+        CancelSceneViewDrag();
         if (_play is not null) return;
         var playBlock = EditorOperationGate.PlayBlockReason(alreadyPlaying: false, _fileBusy, HasInputErrors);
         if (playBlock is not null)

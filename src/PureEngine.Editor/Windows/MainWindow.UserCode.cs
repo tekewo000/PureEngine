@@ -81,6 +81,7 @@ public partial class MainWindow
         if (_pendingCompilation is not { Result: { } compiled } attempt || _compileTracker is null
             || _reloadCoordinator.IsReloading
             || EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null) return;
+        CancelSceneViewDrag();
         _pendingCompilation = null;
         if (!_compileTracker.IsCurrent(attempt.Ticket))
         {

@@ -55,6 +55,7 @@ public partial class MainWindow
 
     private async Task<bool> SaveSceneAsync(bool saveAs)
     {
+        CancelSceneViewDrag();
         var saveBlock = EditorOperationGate.SaveBlockReason(HasInputErrors);
         if (saveBlock is not null)
         {
@@ -102,6 +103,7 @@ public partial class MainWindow
 
     private async Task OpenScenePathAsync(string path)
     {
+        CancelSceneViewDrag();
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
@@ -123,6 +125,7 @@ public partial class MainWindow
 
     private void SetCurrentScene(Scene restored, string? path)
     {
+        CancelSceneViewDrag();
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
@@ -143,6 +146,7 @@ public partial class MainWindow
 
     private void CloseEditSession()
     {
+        CancelSceneViewDrag();
         // プロジェクトの切り替え・終了時には、そのプロジェクトの監視を終了する。
         // 終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求。別プロジェクトには触れない。
         StopUserCodeWatching();
@@ -209,6 +213,7 @@ public partial class MainWindow
 
     private async void OnEditorClosing(object? sender, WindowClosingEventArgs e)
     {
+        CancelSceneViewDrag();
         if (_allowClose) return;
         if (_fileBusy) { e.Cancel = true; return; }
         if (_play is not null)

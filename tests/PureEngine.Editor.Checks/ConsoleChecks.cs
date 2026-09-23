@@ -55,6 +55,8 @@ static class ConsoleChecks
         _ = Log.Drain();
         var editor = new MainWindow();
         EnsureChecks(editor);
+        // Console tests drive their own logs; Headless has no GPU interop and its delayed failure is unrelated.
+        Control<Grid>(editor, "SceneViewport").Children.Clear();
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         // Deterministic: stop play timer, drain console manually.

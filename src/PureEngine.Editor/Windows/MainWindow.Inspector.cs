@@ -78,6 +78,7 @@ public partial class MainWindow
         box.TextChanged += (_, _) =>
         {
             if (IsPlaying) return;
+            if (IsSyncingInspectorForSceneView()) return;
             if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value)
                 || !float.IsFinite(value))
             {
@@ -415,6 +416,7 @@ public partial class MainWindow
             box.TextChanged += (_, _) =>
             {
                 if (IsPlaying) return;
+                if (IsSyncingInspectorForSceneView()) return;
                 if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value) || !float.IsFinite(value))
                 {
                     MarkInvalid(box, "Enter a number");

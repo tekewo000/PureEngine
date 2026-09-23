@@ -15,12 +15,43 @@ public partial class MainWindow
         {
             try
             {
-                EditSceneRenderer.Build(draw, _editScene.Current, _previewImages, size);
+                DrawSceneView(draw, size);
             }
             catch (Exception error)
             {
                 Log.Engine.Error($"Scene preview failed: {error.GetBaseException().Message}", error);
             }
         };
+    }
+
+    /// <summary>グリッド・画像・選択枠・Gizmoを同じ配置とビュー変換で描く。Anchor領域はビューで変えない。</summary>
+    private void DrawSceneView(DrawList draw, System.Numerics.Vector2 size)
+    {
+        if (_sceneMoveKind is not SceneViewMath.GizmoKind.None) ValidateSceneMove();
+        var viewportSize = size;
+        if (!SceneViewMath.IsValidViewport(viewportSize))
+        {
+            draw.Clear();
+            return;
+        }
+        if (!SceneViewMath.IsValidView(_scenePan, _sceneZoom))
+        {
+            draw.Clear();
+            return;
+        }
+        var view = SceneViewMath.ViewMatrix(_scenePan, _sceneZoom);
+        draw.Clear();
+        SceneViewOverlay.DrawGrid(draw, viewportSize, _scenePan, _sceneZoom);
+        var diagnostics = EditSceneRenderer.Append(draw, _editScene.Current, _previewImages, viewportSize, view);
+        _sceneDrawFailures.Clear();
+        foreach (var diagnostic in diagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);
+        if (SceneObjects.SelectedItem is not SceneObject selected)
+            return;
+        if (!TrySceneFrame(selected, viewportSize, out var corners, out var pivot, out var xAxis, out var yAxis, out var gizmoValid))
+            return;
+        var clip = new System.Numerics.Vector4(0, 0, viewportSize.X, viewportSize.Y);
+        SceneViewOverlay.DrawSelection(draw, corners, pivot, clip);
+        if (gizmoValid && !IsPlaying)
+            SceneViewOverlay.DrawGizmo(draw, pivot, xAxis, yAxis, clip);
     }
 }

@@ -8,7 +8,7 @@ public static class UiImageRenderer
 {
     public static (Vector2 Size, Matrix4x4 World) Draw(
         DrawList draw, SceneObject item, Vector2 parentSize, Matrix4x4 parentWorld,
-        IReadOnlyDictionary<Guid, byte[]> images, Vector4 clip)
+        IReadOnlyDictionary<Guid, byte[]> images, Vector4 clip, Matrix4x4? view = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(item);
@@ -18,7 +18,9 @@ public static class UiImageRenderer
         var layout = UiLayout.Calculate(parentSize, parentWorld, transform, element);
         if (item.GetComponent<global::Image>() is not { Sprite: { } sprite } image) return layout;
         // Orthographic XY projection. Z is preserved by UiLayout, but does not change 2D submission order.
-        var world = layout.World;
+        // Editorのビュー変換は配置の後に合成し、Anchor用の親領域は変えない。
+        var viewMatrix = view ?? Matrix4x4.Identity;
+        var world = layout.World * viewMatrix;
         if (world.M14 != 0 || world.M24 != 0 || world.M34 != 0 || world.M44 != 1)
             throw new NotSupportedException("UI image drawing requires an affine transform.");
         var matrix = new Matrix3x2(world.M11, world.M12, world.M21, world.M22, world.M41, world.M42);

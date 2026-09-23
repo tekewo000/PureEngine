@@ -17,6 +17,7 @@ public partial class MainWindow
 
     private async Task NewSceneAsync()
     {
+        CancelSceneViewDrag();
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);

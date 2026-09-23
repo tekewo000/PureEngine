@@ -138,6 +138,7 @@ Check(projectOwner.TryAttach(dropTarget, typeof(PureEngine.Editor.Samples.RoundS
 ScenePersistenceChecks.Run();
 InspectorValueChecks.Run();
 UiComponentChecks.Run();
+SceneViewChecks.Run();
 HierarchyLifetimeChecks.Run();
 ProjectPersistenceChecks.Run();
 ParentChecks.Run();
