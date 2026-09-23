@@ -37,12 +37,22 @@ internal static class InspectorVectorHelpers
         _ => throw new ArgumentOutOfRangeException(nameof(axis)),
     };
 
+    public static float GetAxis(this PureEngine.Core.Color color, string channel) => channel switch
+    {
+        "R" => color.R,
+        "G" => color.G,
+        "B" => color.B,
+        "A" => color.A,
+        _ => throw new ArgumentOutOfRangeException(nameof(channel)),
+    };
+
     public static float GetAxis(this object? value, string axis) => value switch
     {
         Vector2 vector2 => vector2.GetAxis(axis),
         Vector3 vector3 => vector3.GetAxis(axis),
         Vector4 vector4 => vector4.GetAxis(axis),
         Quaternion quaternion => quaternion.GetAxis(axis),
+        PureEngine.Core.Color color => color.GetAxis(axis),
         _ => 0f,
     };
 }

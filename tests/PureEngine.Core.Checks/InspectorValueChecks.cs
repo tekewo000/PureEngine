@@ -116,6 +116,50 @@ static class InspectorValueChecks
             "Empty string elements did not survive.");
         sample.Tags = ["a", "b"];
 
+        // Color stores RGBA floats, survives YAML and Clone, and rejects non-finite or malformed values.
+        var colorRegistry = new ComponentRegistry();
+        colorRegistry.Register<ColorProbe>("checks.color");
+        var colorSerializer = new SceneSerializer(colorRegistry);
+        var colorScene = new Scene();
+        var colorItem = colorScene.AddEmpty();
+        colorItem.Rename("Color");
+        var colorSample = new ColorProbe
+        {
+            Tint = new Color(1f, 0.5f, 0.25f, 0.75f),
+            MaybeTint = new Color(0f, 1f, 0f, 1f),
+            MissingTint = null,
+            Swatches = [new Color(1f, 0f, 0f, 1f), new Color(0f, 0f, 1f, 0.5f)],
+            Palette = new Dictionary<string, Color>(StringComparer.Ordinal) { ["accent"] = new Color(0f, 1f, 0f, 1f) },
+        };
+        colorItem.Attach(colorSample);
+        var savedCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            var colorYaml = colorSerializer.Serialize(colorScene);
+            Check(colorYaml.Contains("Tint:") && colorYaml.Contains("r:") && colorYaml.Contains("Swatches"), "Color YAML must use r/g/b/a mappings.");
+            var colorCopy = colorSerializer.Deserialize(colorYaml).Objects[0].GetComponent<ColorProbe>()!;
+            Check(colorCopy.Tint == new Color(1f, 0.5f, 0.25f, 0.75f), "Color did not survive.");
+            Check(colorCopy.MaybeTint == new Color(0f, 1f, 0f, 1f) && colorCopy.MissingTint is null, "Nullable Color did not survive.");
+            Check(colorCopy.Swatches.SequenceEqual([new Color(1f, 0f, 0f, 1f), new Color(0f, 0f, 1f, 0.5f)]), "Color list did not survive.");
+            Check(colorCopy.Palette["accent"] == new Color(0f, 1f, 0f, 1f), "Color dictionary did not survive.");
+            Check(colorSerializer.Serialize(colorSerializer.Deserialize(colorYaml)) == colorYaml, "Color save/load changed output.");
+            var colorClone = colorSerializer.Clone(colorScene).Objects[0].GetComponent<ColorProbe>()!;
+            colorSample.Swatches[0] = new Color(0f, 0f, 0f, 1f);
+            colorSample.Palette["accent"] = new Color(0f, 0f, 0f, 1f);
+            Check(colorClone.Swatches[0] == new Color(1f, 0f, 0f, 1f) && colorClone.Palette["accent"] == new Color(0f, 1f, 0f, 1f), "Clone must copy Color collections.");
+            colorSample.Swatches[0] = new Color(1f, 0f, 0f, 1f);
+            colorSample.Palette["accent"] = new Color(0f, 1f, 0f, 1f);
+        }
+        finally { CultureInfo.CurrentCulture = savedCulture; }
+        colorSample.Tint = new Color(float.NaN, 0f, 0f, 1f);
+        Reject(() => colorSerializer.Serialize(colorScene), "Non-finite Color saved.");
+        colorSample.Tint = new Color(1f, 0.5f, 0.25f, 0.75f);
+        var colorYamlBase = colorSerializer.Serialize(colorScene);
+        Reject(() => colorSerializer.Deserialize(colorYamlBase.Replace("r: 1", "r: NaN")), "NaN Color channel accepted.");
+        Reject(() => colorSerializer.Deserialize(colorYamlBase.Replace("Tint:", "Tint: not-a-mapping")), "String accepted as Color.");
+        Reject(() => colorSerializer.Deserialize(colorYamlBase.Replace("r: 1", "x: 1")), "Vector keys accepted as Color.");
+
         // Custom classes nest as mappings: direct members, doubly nested members, arrays, lists, and dictionaries.
         var customRegistry = new ComponentRegistry();
         customRegistry.Register<NestedProbe>("checks.custom");
@@ -282,6 +326,15 @@ static class InspectorValueChecks
         [Inspector] public Difficulty? MissingLevel { get; set; }
         [Inspector] public List<Difficulty> Stages { get; set; } = [];
         [Inspector] public Dictionary<string, Difficulty> Spawns { get; set; } = [with(StringComparer.Ordinal)];
+    }
+
+    public sealed class ColorProbe
+    {
+        [Inspector] public Color Tint { get; set; } = Color.White;
+        [Inspector] public Color? MaybeTint { get; set; }
+        [Inspector] public Color? MissingTint { get; set; }
+        [Inspector] public List<Color> Swatches { get; set; } = [];
+        [Inspector] public Dictionary<string, Color> Palette { get; set; } = [with(StringComparer.Ordinal)];
     }
 
     public sealed class UnsupportedProbe

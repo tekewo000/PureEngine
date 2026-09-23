@@ -712,6 +712,8 @@ public partial class MainWindow : Window
             return BuildVector4Editor(component, member, automationName, isQuaternion: false);
         if (memberType == typeof(Quaternion))
             return BuildVector4Editor(component, member, automationName, isQuaternion: true);
+        if (memberType == typeof(PureEngine.Core.Color))
+            return BuildColorEditor(component, member, automationName);
         if (memberType == typeof(PureEngine.Core.Transform))
             return BuildTransformEditor(component, member, automationName);
         if (memberType == typeof(Sprite))
@@ -811,6 +813,7 @@ public partial class MainWindow : Window
         type == typeof(Vector3) ? nameof(Vector3) :
         type == typeof(Vector4) ? nameof(Vector4) :
         type == typeof(Quaternion) ? nameof(Quaternion) :
+        type == typeof(PureEngine.Core.Color) ? nameof(PureEngine.Core.Color) :
         type == typeof(PureEngine.Core.Transform) ? nameof(PureEngine.Core.Transform) :
         Nullable.GetUnderlyingType(type) is { } underlying ? $"{FriendlyTypeName(underlying)}?" :
         type.IsArray ? $"{FriendlyTypeName(type.GetElementType()!)}[]" :

@@ -99,6 +99,33 @@ static class InspectorValueEditorChecks
         Check(positionY.Text == "2", $"Esc must restore last valid vector component, got '{positionY.Text}'.");
         Check(!errorBadge.IsVisible, "Esc must clear the vector error.");
 
+        // Color editing reaches the scene, shows a preview, and validates channels.
+        var tintR = Box(editor, $"{nameof(InspectorValueProbe)}.Tint.R");
+        Check(tintR.Text == "1", $"Initial Tint.R must be 1, got '{tintR.Text}'.");
+        Check(AxisBadge(tintR)?.Text == "R", "Color channel must carry its channel badge.");
+        tintR.Text = "0.25";
+        Dispatcher.UIThread.RunJobs();
+        Check(MathF.Abs(probe.Tint.R - 0.25f) < 1e-6f, "Color edit did not reach the scene.");
+        var tintG = Box(editor, $"{nameof(InspectorValueProbe)}.Tint.G");
+        tintG.Text = "abc";
+        Dispatcher.UIThread.RunJobs();
+        Check(errorBadge.IsVisible, "Invalid color input must show an error badge.");
+        Check(MathF.Abs(probe.Tint.G - 0.5f) < 1e-6f, "Invalid color input must not change the scene.");
+        tintG.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+        Dispatcher.UIThread.RunJobs();
+        Check(tintG.Text == "0.5", $"Esc must restore last valid color channel, got '{tintG.Text}'.");
+        Check(!errorBadge.IsVisible, "Esc must clear the color error.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Null"));
+        Dispatcher.UIThread.RunJobs();
+        Check(probe.MaybeTint is null, "Nullable Color Set Null must clear the member.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Create"));
+        Dispatcher.UIThread.RunJobs();
+        Check(probe.MaybeTint == Color.White, "Nullable Color Create must assign white.");
+        var swatchR = Box(editor, $"{nameof(InspectorValueProbe)}.Swatches[0].R");
+        swatchR.Text = "0";
+        Dispatcher.UIThread.RunJobs();
+        Check(probe.Swatches[0].R == 0f, "Color list element edit did not reach the scene.");
+
         // Double editing works with invariant formatting.
         var ratio = Box(editor, $"{nameof(InspectorValueProbe)}.Ratio");
         ratio.Text = "2.5";
@@ -331,6 +358,9 @@ static class InspectorValueEditorChecks
     {
         [Inspector] public Vector3 Position = new(1, 2, 3);
         [Inspector] public Quaternion Rotation = Quaternion.Identity;
+        [Inspector] public Color Tint = new(1f, 0.5f, 0.25f, 1f);
+        [Inspector] public Color? MaybeTint { get; set; } = new(0f, 1f, 0f, 1f);
+        [Inspector] public List<Color> Swatches { get; set; } = [new(1f, 0f, 0f, 1f)];
         [Inspector] public double Ratio = 1.5;
         [Inspector] public List<int> Scores { get; set; } = [1, 2];
         [Inspector] public Dictionary<string, int> Counts { get; set; } = new() { ["alice"] = 3 };

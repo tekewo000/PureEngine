@@ -79,13 +79,14 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - enum：通常のenumと `[Flags]` enum、対応する `Nullable<T>`。通常はドロップダウン、`[Flags]` はチェックボックス群とNoneクリアで編集する
 - `[Flags]` は複合値・符号付きの負値・`ulong` の最上位ビットにも対応する。チェック状態の同期は表示のみを更新し、ユーザー操作として値へ書き戻さない。
 - ベクトル：`Vector2`・`Vector3`・`Vector4`・`Quaternion`（各成分は有限のfloat、対応する `Nullable<T>` を含む）
+- 色：`Color`（`r`・`g`・`b`・`a` の有限float、対応する `Nullable<T>` を含む。Inspectorでは数値とプレビューで編集する）
 - `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
 - `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する
-- 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種・`Sprite`・自作クラスと `Nullable<int/float/double/bool/enum>`、null可）
+- 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種・`Color`・`Sprite`・自作クラスと `Nullable<int/float/double/bool/enum>`、null可）
 - 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）
 - 自作クラス：publicな引数なしコンストラクタを持つclassで、すべての `[Inspector]` メンバーが対応型であるもの。単体・配列・リスト要素・辞書値・入れ子で同じ変換を使う。参照型のためnull可。抽象クラス・ジェネリック・struct・`object` 自体・再帰（自分を直接・間接に含む）は対象外。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する
 
-`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
+`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite`・`Color` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
 
 ライフサイクルのPriorityはエンジン側のアタッチ設定として表示・保存するもので、ゲーム側メンバーの `[Inspector]` 指定とは別に扱う。
 
@@ -226,12 +227,13 @@ Update Priority    0
 
 #### Inspector拡張値のYAML形式（実装済み）
 
-- ベクトルはマッピング：`Vector2` は `{x, y}`、`Vector3` は `{x, y, z}`、`Vector4`・`Quaternion` は `{x, y, z, w}`。例：
+- ベクトルはマッピング：`Vector2` は `{x, y}`、`Vector3` は `{x, y, z}`、`Vector4`・`Quaternion` は `{x, y, z, w}`。`Color` は `{r, g, b, a}`。例：
 
 ```yaml
 values:
   Position: {x: 1, y: 2, z: 3}
   Rotation: {x: 0, y: 0, z: 0, w: 1}
+  Tint: {r: 1, g: 0.5, b: 0.25, a: 1}
 ```
 
 - `Transform` 型のメンバーは `LocalPosition`・`LocalRotation`・`LocalScale` のマッピング。`Transform` コンポーネント自体は同じ3メンバーをvaluesに持つ。例：
