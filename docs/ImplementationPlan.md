@@ -4,11 +4,11 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済み・自動検証済み・実画面確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。2026-09-23、下記のUI5項目（Component検索・追加から保存・Cloneまで）を実装し、自動検証を通過した。2026-09-23、V4前半のScene View編集操作（グリッド・パン／ズーム・選択・XY移動Gizmo・F表示）を実装・レビュー修正し、自動検証と実GPUチェックを通過した。実画面は表示を確認済み。2026-09-23、Stuffsの親子ツリー表示とドラッグ＆ドロップの子付け・並べ替えを実装し、自動検証を通過した。Stuffsの主要なドラッグ操作・折りたたみ・改名は実画面でも確認済み。青線とホバー待機の目視、実画面での保存往復、今回の差分のCIは未確認として区別する。2026-09-23、Buttonに先立つ描画順の共通基盤（`RendererComponent.Order`）を実装し、自動検証を通過した。実画面・実GPU・CIは未確認として区別する。
+実装済み・自動検証済み・実画面確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。2026-09-23、下記のUI5項目（Component検索・追加から保存・Cloneまで）を実装し、自動検証を通過した。2026-09-23、V4前半のScene View編集操作（グリッド・パン／ズーム・選択・XY移動Gizmo・F表示）を実装・レビュー修正し、自動検証と実GPUチェックを通過した。実画面は表示を確認済み。2026-09-23、Stuffsの親子ツリー表示とドラッグ＆ドロップの子付け・並べ替えを実装し、自動検証を通過した。Stuffsの主要なドラッグ操作・折りたたみ・改名は実画面でも確認済み。青線とホバー待機の目視、実画面での保存往復、今回の差分のCIは未確認として区別する。2026-09-23、Buttonに先立つ描画順の共通基盤（`RendererComponent.Order`）を実装し、自動検証を通過した。実画面・実GPU・CIは未確認として区別する。2026-09-23、Game表示とButton操作（Game描画・`core.button`・`IUiButtonHandler`・Game入力・更新境界ディスパッチ）を実装し、自動検証を通過した。実画面・実GPU・CIは未確認として区別する。今回はGame表示とButton操作までとし、V3〜V5全体の完了とは区別する。
 
 ## 次に着手する作業
 
-**描画順の共通基盤（`RendererComponent.Order`）は実装・自動検証済み。** Button実装に先立ち、Imageと将来のSpriteRendererの共通基底として抽象クラスを追加し、`Order`昇順で描画・ヒット判定する。詳細は[検証状況](#描画順の共通基盤order2026-09-23)を参照する。次はButton本体へ進む。SpriteRenderer本体・SortingLayer・Zによる奥行き制御は今回の対象外として区別する。
+**描画順の共通基盤（`RendererComponent.Order`）とGame表示・Button操作は実装・自動検証済み。** Button実装に先立つOrder基盤に続き、Game表示（実行用Sceneの描画）とButton本体（`core.button`・`IUiButtonHandler`・Game入力・更新境界ディスパッチ）を接続した。詳細は[検証状況](#game表示とbutton操作2026-09-23)を参照する。SpriteRenderer本体・SortingLayer・Zによる奥行き制御、Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は今回の対象外として区別する。次はText等の後続候補へ進む前に、実画面・実GPU・CIの未確認分を記録して区別する。
 
 **指定されたV4前半「Scene Viewのグリッド・パン／ズーム・選択・移動Gizmo」は実装・レビュー修正済み。** 背景だけでは位置や縮尺を把握できず、Inspectorの数値入力だけでは配置しづらいため、画像をマウスで選択・移動できる編集面を作った。2026-09-23に下表の5項目の自動検証と実GPUチェックを通過した。実画面は表示を確認済み。一連の手動操作とCIは未確認として区別し、詳細は[検証状況](#v4前半のscene-view編集操作2026-09-23)を参照する。後続の実装候補はサイズ変更・回転Gizmo。
 
@@ -60,7 +60,7 @@
 
 **LauncherからProjectを作成・再開し、シーンのオブジェクトにC#クラスを付けて値とPriorityを編集し、YAMLで保存・復元できる。**
 
-制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene Viewには編集中SceneをImage／Sprite／UiLayoutで描く（Start／Updateなし）。描画順は`RendererComponent.Order`の昇順（同値は親→子・兄弟順）で、ヒット判定も同じ並べ替えを手前から使う。Gameと実行用Sceneの描画接続はV5。
+制作データを編集する基盤に加え、Coreで独立した実行用Sceneを作り、画面なしでStart／Update／DestroyをPriority順に実行できる。EditorのツールバーにあるPlay／Stopで開始・停止でき、実行中の編集・切替は無効化する。Scene Viewには編集中SceneをImage／Sprite／UiLayoutで描く（Start／Updateなし）。描画順は`RendererComponent.Order`の昇順（同値は親→子・兄弟順）で、ヒット判定も同じ並べ替えを手前から使う。GameタブはPlay中の実行用Sceneを描き、Buttonのクリック・キーボード操作を `IUiButtonHandler.OnClick` へ届ける（下記）。単体実行・配布はV6。
 
 ## 実装済み
 
@@ -82,7 +82,9 @@
 | UI組み合わせ診断 | `Image` に必要な `Transform`／`UiElement` の不足を通知し、揃うと解除する。自動追加はしない | [UiComponentRequirements](../src/PureEngine.Core/Components/UiComponentRequirements.cs)、[MainWindow.UiDiagnostics](../src/PureEngine.Editor/Windows/MainWindow.UiDiagnostics.cs) |
 | 画像素材 | `Assets/` への取り込み、隣接登録情報、Project Open・Refreshでの索引再走査、Sprite欄の選択・None解除、欠落IDの保持と診断 | [ProjectAssets](../src/PureEngine.Editor/Assets/ProjectAssets.cs)、[Sprite](../src/PureEngine.Core/Assets/Sprite.cs) |
 | 編集Sceneの描画 | Scene Viewを編集用Sceneへ接続し、親子配置を済ませてから`Order`昇順へ並べ替えて追加・削除・配置・Sprite・色・Orderを反映する。ヒット判定も同じ並べ替えで手前から行う。`UiLayout`／`UiImageRenderer` を再利用し、Start／Updateは呼ばない | [EditSceneRenderer](../src/PureEngine.Rendering/EditSceneRenderer.cs)、[VulkanViewport](../src/PureEngine.Rendering.Avalonia/VulkanViewport.cs)、[MainWindow.Preview](../src/PureEngine.Editor/Windows/MainWindow.Preview.cs) |
-| 描画順の共通基盤 | Imageと将来のSpriteRendererの共通基底として抽象クラス`RendererComponent`を追加し、`[Inspector] public int Order { get; set; }`（既定値0）を持たせる。`Image`を派生させ、`Sprite`は素材データのまま維持する。Order昇順で描画し、大きい値を手前にする。負数も許可し、同値は親→子・兄弟順を維持する。配置計算後に並べ替え、親から継承せず各対象の値を使う。ライフサイクルのPriorityとは独立させる。Button・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は対象外 | [RendererComponent](../src/PureEngine.Core/Components/RendererComponent.cs)、[Image](../src/PureEngine.Core/Components/Image.cs)、[SceneViewMath](../src/PureEngine.Core/Scenes/SceneViewMath.cs)、[UiImageRenderer](../src/PureEngine.Rendering/UiImageRenderer.cs)、[EditSceneRenderer](../src/PureEngine.Rendering/EditSceneRenderer.cs) |
+| 描画順の共通基盤 | Imageと将来のSpriteRendererの共通基底として抽象クラス`RendererComponent`を追加し、`[Inspector] public int Order { get; set; }`（既定値0）を持たせる。`Image`を派生させ、`Sprite`は素材データのまま維持する。Order昇順で描画し、大きい値を手前にする。負数も許可し、同値は親→子・兄弟順を維持する。配置計算後に並べ替え、親から継承せず各対象の値を使う。ライフサイクルのPriorityとは独立させる。SpriteRenderer本体・SortingLayer・Zによる奥行き制御は対象外 | [RendererComponent](../src/PureEngine.Core/Components/RendererComponent.cs)、[Image](../src/PureEngine.Core/Components/Image.cs)、[SceneViewMath](../src/PureEngine.Core/Scenes/SceneViewMath.cs)、[UiImageRenderer](../src/PureEngine.Rendering/UiImageRenderer.cs)、[EditSceneRenderer](../src/PureEngine.Rendering/EditSceneRenderer.cs) |
+| Game表示 | GameタブをPlaySessionの実行用Sceneへ接続し、親子配置を済ませてから`Order`昇順へ並べ替えて描く。Scene Viewは編集用Sceneのまま維持し、Play中の編集禁止を守る。実行中のTransform・Image変更を次のフレームに反映し、描画からStart／Updateを呼ばない。非表示時は描画・入力を止めて進行は維持する。読み取りと更新はUIスレッドで直列化する | [GameSceneRenderer](../src/PureEngine.Rendering/GameSceneRenderer.cs)、[MainWindow.Game](../src/PureEngine.Editor/Windows/MainWindow.Game.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs) |
+| Button操作 | `Button`（`core.button`・`Interactable`）を普通のComponentとしてTransform＋UiElementの領域で判定し、見た目は同じオブジェクトのImageを使う。通常・ホバー・押下・無効・キーボードフォーカスを重ね表示で区別し、保存済み`Image.Color`を書き換えない。一時状態は保存・Cloneしない。重なり前面のみ・押上一致の単発・外し取消・キャプチャ・Tab／Shift+Tab・Enter／Space（リピート抑止）・無効／0サイズ／不能変換の除外・親無効の非波及・Imageなし可・非Button非遮蔽。同じオブジェクトの`IUiButtonHandler`へ更新境界で通知し（0無反応・複数は開始拒否）、例外・削除・停止をRuntime規則へ接続する | [Button](../src/PureEngine.Core/Components/Button.cs)、[IUiButtonHandler](../src/PureEngine.Core/Components/IUiButtonHandler.cs)、[UiButtonValidation](../src/PureEngine.Core/Components/UiButtonValidation.cs)、[UiButtonVisuals](../src/PureEngine.Core/Components/UiButtonVisuals.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[GameSceneRenderer](../src/PureEngine.Rendering/GameSceneRenderer.cs)、[MainWindow.Game](../src/PureEngine.Editor/Windows/MainWindow.Game.cs) |
 | シーン保存 | YAML version 2、ID・名前・parentId・siblingIndex・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表。`Image.Order`もInspector値として保存・Cloneし、旧データは`Order = 0`として読み込む。`version: 1` は読み込みのみ | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | Inspectorメンバー改名 | 属性なしで改名・削除可能。新名は初期値、同名の値は維持し、保存時に古いYAML項目を削除。値を引き継ぐ旧名属性は任意。仕様は [EngineArchitecture.md](EngineArchitecture.md) のInspector節 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
@@ -97,13 +99,13 @@
 
 ## まだできないこと・制限
 
-- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。Game表示・入力・Play描画接続、単体実行・配布は未実装。
-- 親子関係・兄弟順・Sprite参照・描画順（`Order`）の保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・Text／Button・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。
+- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。Game表示とButton操作は実装・自動検証済み（下記）。単体実行・配布は未実装。
+- 親子関係・兄弟順・Sprite参照・描画順（`Order`）・Buttonの`Interactable`の保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・Text・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
-- ゲーム内UIのButton操作・InputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで実装済みで、Button・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoは未実装。
+- ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで実装済みで、Text・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
 ## 仕様整理と次の実装順
@@ -167,7 +169,7 @@
 | V2 | 2D画像・日本語の文字・クリップ・GPU資源管理 | 実装・ローカル／実機確認済み |
 | V3 | 親子・素材参照・UIデータの保存 | Image向けの素材・Inspector・version 2保存／Cloneを実装。Text／Button等は未完了 |
 | V4 | Scene Viewでの配置・Inspector連動 | 編集SceneとInspectorの反映に加え、V4前半（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）を実装・自動検証済み。サイズ変更・回転ハンドル等は未実装 |
-| V5 | Game表示・入力・Play／Stop接続 | 未着手 |
+| V5 | Game表示・入力・Play／Stop接続 | Game表示とButton操作まで実装・自動検証済み（下記）。単体実行・配布は未着手 |
 | V6 | 同じプロジェクトの単体実行・配布確認 | 未着手 |
 
 V1が成立する前にUI本実装へ進まない。最終目標は、カード画像・日本語の得点表示・ボタンを編集保存し、Playと単体実行の両方で操作できること。各段階の完了条件と対象外は上記計画に集約する。
@@ -185,6 +187,20 @@ V1が成立する前にUI本実装へ進まない。最終目標は、カード�
 Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。描画はV2基盤に加え、Image／Sprite／UiLayoutの検証用Sceneまで接続済み。実Projectの編集・保存・Play接続は後続。
 
 ## 検証状況
+
+### Game表示とButton操作（2026-09-23）
+
+Editorで画像とButtonを配置・保存し、Play中のGameで押すと自作C#が呼ばれ、Consoleにログが出る一連を接続した。今回はGame表示とButton操作までとし、Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は追加しない。この達成だけでV3〜V5全体を完了扱いにしない。確定した仕様は[設計書](EngineArchitecture.md#v5前半game表示とbutton操作)を正本とする。namespaceの名前・有無・宣言形式は変更していない（`Button`はAvaloniaとの衝突を避けて`PureEngine.Core.Components`に置き、typeIdは`core.button`）。
+
+- ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェックがすべて通過した。
+- Core追加（`UiButtonChecks`）：Buttonの保存往復・Clone分離・既定値、UI組み合わせ要件、handler数検証（0許可・1実行・複数拒否と理由）、tintの相違と`Image.Color`不変・解決優先度、重なり順・親変換・押下キャンセル・無効化・Imageなし・遮らない画像のヒット規則、更新境界ディスパッチ（0無反応・単発・実行Sceneのcontext・再通知なし・編集不変・例外停止・削除／停止／無効時のスキップ・Start前捨て）を確認。
+- Editor追加（`GameButtonChecks`）：Add Componentの検索・factory追加・重複防止、Inspectorの`Interactable`編集・未保存化・要件警告の表示／解除、保存往復・Clone分離、Game描画の状態別頂点と`Image.Color`不変・描画順・Imageなしのフォーカス枠、Play中の押下／離上一致の単発・外しキャンセル・フォーカス喪失取消・実ポインター経路、重なり前面のみ・親変換追従・無効フォールスルー・Imageなし・非遮蔽、Tab／Shift+TabのOrder移動・無効スキップ・Enter／Space単発・リピート抑止（実キー経路）、削除／停止／例外の終了接続・再Playの状態初期化・20回Play／Stopの単発維持を確認。
+- 自作C#の最小例はREADMEのClickCounter（クリック回数をConsoleへ出す）を正本とし、チェック内のGameClickCounterも同じ形で検証する。
+- レビュー修正：左押下中の右ボタン操作、マウス／キー同時操作、別キー解放・Tab移動によるキーリピート再発火、無効化→再有効化での古い押下復活、削除後のキャプチャ残存、領域外でのホバー残存、画面外・退化変換のTab候補を回帰チェックで確認。動的に追加したhandlerのStart前クリックは次のStart後へ繰り越す。常に成功していた2つの検証条件も修正した。Button関連のみの再実行は `dotnet run --project tests/PureEngine.Editor.Checks -- --game-buttons`。
+- 実画面確認：未実施。Headlessでの配置→保存→再Open相当→Play→クリック→Stop→再Playは自動検証済みとして区別する。実Editorでの配置→保存→再Open→Play→クリック→Stop→再Play、実行中変更の編集漏れなし・再Play初期化、エラー停止を含む20回Play／Stopの重複なし・資源増加なしの目視は未確認。
+- 実GPU：Validation Layerなしの `dotnet run --project tests/PureEngine.Editor.Checks --no-build -- --vulkan` はNVIDIA GeForce RTX 4070、DPI 1.0でPASS。既存のリサイズ・タブ切替・20回再生成（ハンドル数1139→1141で安定）・画像更新を確認した。Gameのクリックから描画までの手動確認やGPU上の20回Play／Stopを検証したものではない。
+- GPU検証の制限：`./tools/vulkan-check.ps1` は `ErrorLayerNotPresent`（Validation Layer不足）で失敗。失敗しても終了コード0を返していた検証アプリを修正し、スクリプトも成功メッセージを必須にした。Validation Layer付き検証・別GPU・高DPIは未確認。
+- CI：未実行。GitHub Actionsの結果確認は未実施。
 
 ### 描画順の共通基盤（Order）（2026-09-23）
 

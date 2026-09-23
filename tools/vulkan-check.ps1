@@ -13,7 +13,11 @@ try {
     $output = & tests/PureEngine.Editor.Checks/bin/Debug/net11.0/PureEngine.Editor.Checks.exe --vulkan 2>&1
     $exitCode = $LASTEXITCODE
     $output | Write-Output
-    if ($exitCode -ne 0 -or ($output | Select-String 'Validation Error|VUID-|SYNC-HAZARD')) {
+    $completed = $output | Select-String -SimpleMatch 'Vulkan Editor GPU checks passed.'
+    $visualReady = $env:PUREENGINE_VISUAL_CHECK -eq '1' -and
+        ($output | Select-String -SimpleMatch 'Visual inspection ready; close the window to finish.')
+    if ($exitCode -ne 0 -or ($output | Select-String 'Validation Error|VUID-|SYNC-HAZARD') -or
+        (!$completed -and !$visualReady)) {
         throw 'GPU validation failed. See the messages above.'
     }
 }

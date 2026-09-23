@@ -69,6 +69,7 @@ public partial class MainWindow
 
         _play = session;
         _playLoggedErrorCount = 0;
+        ResetGameInput();
         try
         {
             _play.Start();
@@ -99,6 +100,7 @@ public partial class MainWindow
         var session = _play;
         if (session is null) return true;
         _playTimer?.Stop();
+        CancelGamePress();
         Exception? stopError = null;
         try
         {
@@ -145,6 +147,7 @@ public partial class MainWindow
         }
         // Play中の変更は保留し、Stop後に反映する。
         FlushPendingUserCodeReload();
+        ResetGameInput();
         return stopError is null && errors.Count == 0;
     }
 
@@ -168,6 +171,8 @@ public partial class MainWindow
         LogPendingRuntimeErrors(session);
         if (!session.Runtime.IsRunning)
             FinishPlayAfterAutoStop(session);
+        else
+            ValidateGameInput();
     }
 
     private void OnPlayTick(object? sender, EventArgs e)
@@ -211,11 +216,13 @@ public partial class MainWindow
         if (cleanupError is not null) detail += $" (cleanup: {cleanupError.GetBaseException().Message})";
         SetFileStatus(detail, true);
         FlushPendingUserCodeReload();
+        ResetGameInput();
     }
 
     private void FinishPlayAfterStepError(PlaySession session, string message)
     {
         _playTimer?.Stop();
+        CancelGamePress();
         var errors = session.Runtime.Errors;
         Exception? cleanupError = null;
         try
@@ -241,11 +248,13 @@ public partial class MainWindow
         if (cleanupError is not null) detail += $" (cleanup: {cleanupError.GetBaseException().Message})";
         SetFileStatus(detail, true);
         FlushPendingUserCodeReload();
+        ResetGameInput();
     }
 
     private void FinishPlayAfterAutoStop(PlaySession session)
     {
         _playTimer?.Stop();
+        CancelGamePress();
         var errors = session.Runtime.Errors;
         Exception? cleanupError = null;
         try
@@ -281,6 +290,7 @@ public partial class MainWindow
             SetFileStatus("Play stopped.");
         }
         FlushPendingUserCodeReload();
+        ResetGameInput();
     }
 
     /// <summary>ウィンドウ終了時など、確実に終了・解放するための内部停止。表示は呼び出し側に任せる。</summary>
@@ -289,6 +299,7 @@ public partial class MainWindow
         var session = _play;
         if (session is null) return;
         _playTimer?.Stop();
+        CancelGamePress();
         try
         {
             session.Dispose();
@@ -299,6 +310,7 @@ public partial class MainWindow
             _playClock?.Stop();
             _playClock = null;
             UpdatePlayUI();
+            ResetGameInput();
             try { LogPendingRuntimeErrors(session); } catch { /* 終了時の記録失敗で終了を妨げない。 */ }
         }
     }

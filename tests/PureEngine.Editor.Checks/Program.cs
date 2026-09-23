@@ -44,7 +44,7 @@ internal static class Program
     {
         if (args.Contains("--vulkan"))
         {
-            PureEngine.Rendering.Avalonia.VulkanViewport.Configure(AppBuilder.Configure<VulkanCheckApp>().UsePlatformDetect()).StartWithClassicDesktopLifetime([]);
+            Environment.ExitCode = PureEngine.Rendering.Avalonia.VulkanViewport.Configure(AppBuilder.Configure<VulkanCheckApp>().UsePlatformDetect()).StartWithClassicDesktopLifetime([]);
             return;
         }
         RenderingChecks.Run();
@@ -57,6 +57,12 @@ internal static class Program
             AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions())
                 .SetupWithClassicDesktopLifetime([]);
             using var desktop = (ClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+            if (args.Contains("--game-buttons"))
+            {
+                desktop.MainWindow!.Show();
+                GameButtonChecks.Run();
+                return;
+            }
             Check(desktop.MainWindow is LauncherWindow, "Startup must display the Launcher.");
             var historyPath = Path.Combine(root, "history.json");
             var launcher = new LauncherWindow(new RecentProjects(historyPath));
@@ -101,6 +107,7 @@ internal static class Program
             UiImageEditorChecks.Run(editor);
             // Isolated Scene View editors; closed before the unsaved flow so window counts stay intact.
             SceneViewEditorChecks.Run();
+            GameButtonChecks.Run();
             // Inspector checks leave unsaved objects; discard them so the following flow starts clean.
             editor.Close();
             Dispatcher.UIThread.RunJobs();

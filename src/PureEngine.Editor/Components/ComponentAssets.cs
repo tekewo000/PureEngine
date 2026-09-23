@@ -1,4 +1,5 @@
 using PureEngine.Core;
+using PureEngine.Core.Components;
 
 namespace PureEngine.Editor;
 
@@ -20,7 +21,7 @@ public static class ComponentAssets
     /// <summary>
     /// 組み込み型の登録方針（A4）：各プロジェクトの所有者（ProjectComponents）が生成時に
     /// 自分のRegistryへ登録する。共有のstatic登録は持たない。user.* の差し替えでは維持される。
-    /// Transform・UiElement・Imageは普通のComponentとして同じ経路で検索・追加・保存する。
+    /// Transform・UiElement・Image・Buttonは普通のComponentとして同じ経路で検索・追加・保存する。
     /// </summary>
     public static void RegisterBuiltins(ComponentRegistry registry)
     {
@@ -28,6 +29,7 @@ public static class ComponentAssets
         registry.Register<Transform>("core.transform");
         registry.Register<UiElement>("core.ui-element");
         registry.Register<global::Image>("core.image");
+        registry.Register<Button>("core.button");
         registry.Register<Samples.PlayerStats>("sample.player-stats");
         registry.Register<Samples.RoundSettings>("sample.round-settings");
         registry.Register<Samples.InjectedPlayer>("sample.injected-player");

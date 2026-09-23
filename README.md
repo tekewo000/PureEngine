@@ -6,7 +6,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 設計方針・Attribute・Priority・保存データ・将来の構想は [EngineArchitecture.md](docs/EngineArchitecture.md) にまとめています。
 実装済みの範囲・制限・次の作業・検証状況は [実装計画・進捗](docs/ImplementationPlan.md) にまとめています。
 
-C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のSceneをImage・Sprite・UiLayoutで描きます（Start／Updateは呼びません）。Game／Play接続・保存プロジェクトの単体実行はV3以降です。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
+C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のSceneをImage・Sprite・UiLayoutで描きます（Start／Updateは呼びません）。GameにはPlay中の実行用Sceneを表示し、Button操作を接続しています。保存プロジェクトの単体実行は後続です。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
 
 ## 現在できること
 
@@ -32,6 +32,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
+- GameタブはPlay中の実行用Sceneを描く。自作C#の `IUiButtonHandler` を同じオブジェクトへ付けると、Buttonのクリック・Tab移動後のEnter／Spaceで呼ばれ、Consoleにログが出る。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -196,7 +197,7 @@ dotnet run --project src/PureEngine.Editor
 - `.github/workflows/code-quality.yml`：push/PR時に同じ品質チェックを実行。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
-Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。ゲーム画面の描画、Steam連携、ゲーム内UI配置はまだ実装していません。
+Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。Game描画とImage／Buttonの配置・操作も実装済みです。Textや単体配布、Steam連携は後続です。
 
 ## Coreのライフサイクル実行
 
@@ -213,7 +214,7 @@ foreach (var error in runtime.Errors)
 
 実行中の追加・アタッチ・削除には `runtime.Scene.AddEmpty()`、`Attach()`、`runtime.Scene.Remove()` を使います。追加分は次のStepでStartし、削除予約後はStart／Updateを呼ばず、フレーム末にDestroy＋Disposeします。各ライフサイクルはPriorityの小さい順に実行し、同値は順序を保証しません。動的追加分は最初のStartより前に `SetStartPriority` などで設定できます。全Componentの生成・復元・検証が成功してからStartし、準備失敗時はStart／Destroyせず生成済み `IDisposable` のみ解放します。Start途中失敗でも受入済み全対象をDestroy＋Disposeし、一つの終了処理の例外でも残りを続けて `Errors` に報告します。`Stop()`／`Dispose()` の重複はno-opで二重終了しません。再実行は新しいSceneRuntimeを作ります。詳細な制約と例外時の動作は設計書を参照してください。
 
-ツールバーのPlayは編集中Sceneの複製で `PlaySession` を作り、約60Hzのタイマーで実測の経過秒を渡して更新します。Inspectorに入力エラーがある間は開始せず、画面下部に理由を表示します。実行中はシーン編集・切替とシーン操作メニューを無効化し、Stopで終了します。開始・更新・終了の失敗とSceneRuntimeのErrorsは画面下部に表示し、失敗後も操作可能な状態へ戻します。ウィンドウを閉じる際も実行中なら終了・解放します。再Playは新しいSceneRuntimeで開始します。描画はまだ行いません。
+ツールバーのPlayは編集中Sceneの複製で `PlaySession` を作り、約60Hzのタイマーで実測の経過秒を渡して更新します。Inspectorに入力エラーがある間は開始せず、画面下部に理由を表示します。実行中はシーン編集・切替とシーン操作メニューを無効化し、Stopで終了します。開始・更新・終了の失敗とSceneRuntimeのErrorsは画面下部に表示し、失敗後も操作可能な状態へ戻します。ウィンドウを閉じる際も実行中なら終了・解放します。再Playは新しいSceneRuntimeで開始し、Gameタブに実行用Sceneを描画します。
 
 Playの実行・終了エラーは画面下部に表示し、ツールチップで全件の発生箇所と例外詳細を確認できます。ウィンドウ終了時にPlayの後片付けでエラーが発生した場合は、その回の終了を取り消して表示を残します。内容を確認してもう一度閉じると終了できます。
 
@@ -400,6 +401,36 @@ Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を
 
 コードから使う入口は`PureEngine.Rendering.UiImageRenderer.Draw`です。対象SceneObject、親のサイズ／UI配置行列、画像IDからPNG等のバイト列を取得する辞書、表示先のクリップ矩形を渡します。戻り値のサイズ・行列を子へ渡せます。画像辞書の内容は描画リストの寿命中不変としてください。
 
-編集中Sceneの一括走査は`PureEngine.Rendering.EditSceneRenderer.Build`です。Scene・画像辞書・表示領域を渡すと、親子配置を済ませてから`Order`昇順へ並べ替えて描き、描けなかった対象の診断を返します。ヒット判定は`PureEngine.Core.SceneViewMath.HitTest`で同じ並べ替えを使い、手前から判定します。Start／Updateは呼びません。Button・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は今回の対象外です。
+編集中Sceneの一括走査は`PureEngine.Rendering.EditSceneRenderer.Build`です。Scene・画像辞書・表示領域を渡すと、親子配置を済ませてから`Order`昇順へ並べ替えて描き、描けなかった対象の診断を返します。ヒット判定は`PureEngine.Core.SceneViewMath.HitTest`で同じ並べ替えを使い、手前から判定します。Start／Updateは呼びません。Button操作は下記のGame表示へ接続しています。SpriteRenderer本体・SortingLayer・Zによる奥行き制御は後続です。
 
 完成目標の操作：StuffsでEmptyを作る → InspectorのAdd Componentで `Transform`・`UiElement`・`Image` を検索して付ける → Projectへ画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置・色・`Order`を変える → 保存 → 開き直して同じ表示になる。親を含む例も保存往復とCloneで確認する。
+
+## Game表示とButton操作
+
+Play中のGameタブに実行用Sceneを描き、Buttonを押すと自作C#が呼ばれてConsoleにログが出る。Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は今回の対象外。確定した仕様は[設計書](docs/EngineArchitecture.md#v5前半game表示とbutton操作)、検証状況は[実装計画](docs/ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
+
+操作手順：StuffsでEmptyを作る → Add Componentで `Transform`・`UiElement`・`Image`・`Button` を検索して付ける → 画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置と `Interactable` を整える → 下の自作C#例をProjectへ作って同じオブジェクトへアタッチする → 保存 → 開き直して同じ表示になることを確認 → Gameタブを開いてPlay → Buttonをクリック（またはTab移動後にEnter／Space） → Consoleに回数が増える → Stop → 再Playで初期状態になる。
+
+自作C#の最小例（クリック回数をConsoleへ出す）：
+
+```csharp
+using PureEngine.Core;
+
+namespace MyGame;
+
+public class ClickCounter : IUiButtonHandler
+{
+    private int _count;
+
+    public void OnClick(UiClickContext context)
+    {
+        _count++;
+        Log.Info($"Clicked {context.ButtonObject.Name} x{_count}");
+    }
+}
+```
+
+- `Button`（`core.button`）は同じオブジェクトの `Transform`・`UiElement` で領域を決め、見た目は同じオブジェクトの `Image` を使う。`Interactable` だけを保存し、押下・ホバー・フォーカスは保存しない。
+- 通常・ホバー・押下・無効・キーボードフォーカスを重ね表示で区別する。保存済みの `Image.Color` は書き換えない。
+- 重なったButtonは手前の1つだけが反応する。左ボタンで押したButton上で左ボタンを離したときだけ1回通知し、外で離すとキャンセルする。`Interactable=false`・0サイズ・判定不能な変換は対象外。親の無効化は子へ波及しない。
+- 同じオブジェクトのhandlerは最大1個（0個は無反応、複数は理由を表示してPlayを開始しない）。クリックは更新境界で届き、例外はConsoleへ報告して安全に停止する。
