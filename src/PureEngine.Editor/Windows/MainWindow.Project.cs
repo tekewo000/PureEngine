@@ -32,7 +32,7 @@ public partial class MainWindow
     private async void OnSetStartupScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
         if (_project is null) return;
-        // Explorerでシーンファイルを選んで呼んだ場合はそのファイルを、Fileメニューからは編集中シーンを登録する。
+        // Registers the Explorer-selected scene file when invoked from it, or the scene being edited from the File menu.
         if (ReferenceEquals(sender, FilesStartupMenu)
             && ProjectFiles.SelectedItem is ProjectExplorerEntry entry
             && entry.Kind == ProjectExplorerKind.Scene && entry.FullPath is not null)

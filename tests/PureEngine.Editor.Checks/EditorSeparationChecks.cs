@@ -86,7 +86,7 @@ static class EditorSeparationChecks
 
     private static void CoordinatorWithoutWindow(string parent)
     {
-        // WindowやControlを生成せず、中核処理だけを検証する。
+        // Verify only the core logic without creating Windows or Controls.
         var root = Path.Combine(parent, "SeparationReload");
         Directory.CreateDirectory(root);
         var file = Path.Combine(root, "Player.cs");

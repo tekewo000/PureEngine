@@ -6,21 +6,21 @@ charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
 
-# Namespaceの名前・有無・宣言形式は変更しない。
+# Do not change namespace names, presence, or declaration style.
 [*.cs]
 dotnet_diagnostic.CA1050.severity = none
 dotnet_diagnostic.IDE0130.severity = none
 dotnet_diagnostic.IDE0160.severity = none
 dotnet_diagnostic.IDE0161.severity = none
 
-# House style: var多用・単文の波かっこ省略。
-# パフォーマンス差はない（varはコンパイル時解決でIL同一）。好み・可読性の問題。
+# House style: prefer var and omit braces for single statements.
+# No performance difference (var is resolved at compile time to identical IL). A matter of taste and readability.
 csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = true:suggestion
 csharp_prefer_braces = false:suggestion
 
-# House style: 式本体（=>）を優先。
+# House style: prefer expression bodies (=>).
 csharp_style_expression_bodied_methods = true:suggestion
 csharp_style_expression_bodied_constructors = true:suggestion
 csharp_style_expression_bodied_operators = true:suggestion
@@ -30,10 +30,10 @@ csharp_style_expression_bodied_accessors = true:suggestion
 csharp_style_expression_bodied_lambdas = true:suggestion
 csharp_style_expression_bodied_local_functions = true:suggestion
 
-# コレクション式への変換で実体の型を変えない。
+# Do not change the actual type when converting to collection expressions.
 dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
 
-# Zedだけでなくビルドでも、採用した提案を検査する。
+# Check adopted suggestions not only in Zed but also in the build.
 dotnet_diagnostic.IDE0007.severity = warning
 dotnet_diagnostic.IDE0017.severity = warning
 dotnet_diagnostic.IDE0021.severity = warning

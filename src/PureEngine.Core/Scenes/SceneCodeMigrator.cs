@@ -24,7 +24,7 @@ public static class SceneCodeMigrator
                 if (!members.TryGetValue(oldMember.Name, out var member)) continue;
                 if (!CompatibleType(MemberType(oldMember), MemberType(member)))
                     throw new InvalidDataException(
-                        $"{item.Name}/{id}.{oldMember.Name}: 型変更により値を引き継げません。元の定義を戻して再保存してください。編集データは保持しています。");
+                        $"{item.Name}/{id}.{oldMember.Name}: Cannot carry over the value due to a type change. Restore the original definition and save again. The edit data is preserved.");
             }
             ComponentSchema.GetLifecycle(newType);
         }

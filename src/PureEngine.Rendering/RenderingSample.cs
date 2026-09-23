@@ -14,7 +14,8 @@ public static class RenderingSample
         list.Rectangle(new(180, 110), Matrix3x2.CreateRotation(.12f) * Matrix3x2.CreateTranslation(65, 80), new(.3f, .5f, 1, .8f), clip);
         list.Image("test", TestImage, new(130, 180), Matrix3x2.CreateScale(.9f) * Matrix3x2.CreateRotation(-.08f) * Matrix3x2.CreateTranslation(95, 95), Vector4.One, clip);
         list.Rectangle(new(140, 65), Matrix3x2.CreateTranslation(160, 200), new(1, .2f, .3f, .55f), clip);
-        list.Text("PureEngine Vulkan\n日本語の得点：１２３\n画像・文字、透明度。\n幅で折り返す文章です。\nMissing: \U0001FAE8", 24, 280, 1.35f,
+        // Rendering test data: Japanese text, full-width digits/punctuation, wrapping, and a missing glyph.
+        list.Text("PureEngine Vulkan\n\u65E5\u672C\u8A9E\u306E\u5F97\u70B9\uFF1A\uFF11\uFF12\uFF13\n\u753B\u50CF\u30FB\u6587\u5B57\u3001\u900F\u660E\u5EA6\u3002\n\u5E45\u3067\u6298\u308A\u8FD4\u3059\u6587\u7AE0\u3067\u3059\u3002\nMissing: \U0001FAE8", 24, 280, 1.35f,
             Matrix3x2.CreateTranslation(320, 60), Vector4.One, new(320, 60, 575, 280));
     }
 

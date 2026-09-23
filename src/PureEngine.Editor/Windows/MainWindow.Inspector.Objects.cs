@@ -10,7 +10,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    /// <summary>自作クラスのメンバー単体を入れ子カードで編集する。nullはCreate／Set Nullで切り替える。</summary>
+    /// <summary>Edits a single custom-class member in a nested card. Toggles null with Create/Set Null.</summary>
     private Control BuildObjectEditor(object owner, MemberInfo member, string automationName)
     {
         var objectType = GetMemberType(member);
@@ -20,13 +20,13 @@ public partial class MainWindow
             objectType, automationName);
     }
 
-    /// <summary>配列・List要素の自作クラスを入れ子カードで編集する。</summary>
+    /// <summary>Edits custom-class array and List elements in nested cards.</summary>
     private Control BuildSequenceObjectBox(object component, MemberInfo member, Type elementType, int index, string automationName) => BuildObjectBox(
             () => SequenceElement(component, member, index),
             value => SetSequenceElement(component, member, index, value),
             elementType, automationName);
 
-    /// <summary>Dictionary値の自作クラスを入れ子カードで編集する。キーが消えたらNull表示になる。</summary>
+    /// <summary>Edits custom-class dictionary values in nested cards. Shows Null when the key is gone.</summary>
     private Control BuildDictionaryObjectBox(object component, MemberInfo member, Type valueType, string key, string automationName) => BuildObjectBox(
             () => DictionaryObjectValue(component, member, key),
             value =>
@@ -46,8 +46,8 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 入れ子の自作クラス共通の折りたたみカード。Null時はCreateだけを見せ、
-    /// 値がある時は [Inspector] メンバーを行で並べる。Create／Set Nullでは中身を作り直す。
+    /// Shared collapsible card for nested custom classes. Shows only Create when null,
+    /// and lists [Inspector] members as rows when a value exists. Create/Set Null rebuilds the contents.
     /// </summary>
     private Control BuildObjectBox(Func<object?> getter, Action<object?> setter, Type objectType, string automationName)
     {

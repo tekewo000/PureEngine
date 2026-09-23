@@ -28,7 +28,7 @@ public partial class MainWindow
     private readonly DispatcherTimer _hierarchyExpandTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private bool _hierarchyRefreshing;
 
-    /// <summary>Stuffsペインのツリー駆動を開始する。コンストラクタから1回だけ呼ぶ。</summary>
+    /// <summary>Starts driving the Stuffs pane tree. Called once from the constructor.</summary>
     private void InitHierarchy()
     {
         _hierarchyExpandTimer.Tick += OnHierarchyExpandTick;
@@ -42,19 +42,19 @@ public partial class MainWindow
         SceneSurface.AddHandler(DragDrop.DragLeaveEvent, OnHierarchyDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
-    /// <summary>検証用: Sceneへ直接追加した新規オブジェクトをツリーへ反映する。選択は維持する。</summary>
+    /// <summary>For tests: reflects objects added directly to the scene in the tree. Preserves the selection.</summary>
     internal void SyncHierarchyForTest() => RefreshHierarchy(GetSelectedSceneObject()?.Id);
 
-    /// <summary>選択中のSceneObject。TreeViewの選択はHierarchyNodeのためRefへ読み替える。</summary>
+    /// <summary>The selected SceneObject. Reads the TreeView selection as a HierarchyNode Ref.</summary>
     internal SceneObject? GetSelectedSceneObject() => (SceneObjects.SelectedItem as HierarchyNode)?.Ref;
 
-    /// <summary>検証用: 選択中ノード。TreeView化後のテストがIDではなく実体で比較できる。</summary>
+    /// <summary>For tests: the selected node. Lets post-TreeView tests compare by instance instead of ID.</summary>
     internal HierarchyNode? SelectedHierarchyNodeForTest() => SceneObjects.SelectedItem as HierarchyNode;
 
-    /// <summary>検証用: SceneObjectから対応ノードを選ぶ。ツリー表示の選択経路を通す。</summary>
+    /// <summary>For tests: selects the node for a SceneObject. Goes through the tree display selection path.</summary>
     internal void SelectSceneObjectForTest(SceneObject? item) => SelectSceneObject(item, focus: false);
 
-    /// <summary>HierarchyNodeの列挙。リビルド前後の状態退避と選択復元に使う。</summary>
+    /// <summary>Enumerates HierarchyNodes. Used to stash state before a rebuild and restore the selection.</summary>
     private IEnumerable<HierarchyNode> EnumerateHierarchyNodes(IEnumerable<HierarchyNode>? roots = null)
     {
         var stack = new Stack<HierarchyNode>(roots ?? _hierarchyRoots);
@@ -67,7 +67,7 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Sceneの親子からStuffsツリーを組み立て直す。展開と選択はID基準で温存する。</summary>
+    /// <summary>Rebuilds the Stuffs tree from scene parent-child links. Preserves expansion and selection by ID.</summary>
     internal void RefreshHierarchy(Guid? keepSelectedId = null, Guid? expandId = null)
     {
         ClearHierarchyDropIndicator();
@@ -108,7 +108,7 @@ public partial class MainWindow
         return null;
     }
 
-    /// <summary>SceneObjectを指定してStuffsツリーを選択する。親ノードを展開して可視化する。</summary>
+    /// <summary>Selects the Stuffs tree for the given SceneObject. Expands parent nodes to make it visible.</summary>
     internal void SelectSceneObject(SceneObject? item, bool focus)
     {
         if (item is null)

@@ -4,19 +4,19 @@ using Microsoft.Extensions.DependencyInjection;
 namespace PureEngine.Editor;
 
 /// <summary>
-/// プロジェクト側のゲーム用サービス登録口。ユーザーコード内の
-/// <c>public static void ConfigureGameServices(IServiceCollection services)</c> を1つだけ探して適用する。
-/// 登録がない既存プロジェクトは従来どおり組み込み登録だけで動く。
-/// 曖昧・不正な登録口は理由付きで報告し、採用しない。
-/// Core は引き続き Func(Type, object) だけを受け、MS DI に依存しない。
+/// Project-side game service registration entry point. Finds and applies exactly one
+/// <c>public static void ConfigureGameServices(IServiceCollection services)</c> in user code.
+/// Existing projects without a registration keep running on built-in registrations only.
+/// Ambiguous or invalid entry points are reported with a reason and never adopted.
+/// Core still accepts only Func(Type, object) and does not depend on MS DI.
 /// </summary>
 public static class ProjectGameServices
 {
     public const string RegistrarName = "ConfigureGameServices";
 
     /// <summary>
-    /// ユーザーコードの登録処理を services へ適用する。登録がなければ何もしない。
-    /// 曖昧・不正・登録中の例外は InvalidOperationException として報告する。
+    /// Applies the user-code registration to services. Does nothing when there is no registration.
+    /// Reports ambiguous, invalid, and in-registration exceptions as InvalidOperationException.
     /// </summary>
     public static void Apply(UserCodeCompileResult? userCode, IServiceCollection services)
     {
@@ -42,8 +42,8 @@ public static class ProjectGameServices
     }
 
     /// <summary>
-    /// 登録メソッドを探す。なければ null。曖昧・不正な場合は理由付きで投げる。
-    /// 成功したコンパイル結果の LoadedAssembly がない場合（ソースなし等）も null。
+    /// Finds the registration method. Returns null when absent. Throws with a reason when ambiguous or invalid.
+    /// Also returns null when a successful compilation result has no loaded assembly (such as no sources).
     /// </summary>
     public static MethodInfo? FindRegistrar(UserCodeCompileResult? userCode)
     {
@@ -97,7 +97,7 @@ public static class ProjectGameServices
                 $"Multiple project service registrations {RegistrarName} found ({owners}). Define only one per project.");
         }
 
-        // valid が1つでも同名が複数あれば曖昧として扱う。
+        // Even with one valid match, multiple same-named methods count as ambiguous.
         if (valid.Length == 1)
         {
             var owners = string.Join(", ", named.Select(m =>
@@ -107,7 +107,7 @@ public static class ProjectGameServices
                 $"Expected: public static void {RegistrarName}(IServiceCollection services).");
         }
 
-        // 同名はあるが正しい定義がない。不正として期待形式と実際を報告する。
+        // Same-named methods exist but none is a correct definition. Reports the expected and actual formats as invalid.
         var found = string.Join(", ", named.Select(m =>
             $"{m.DeclaringType?.FullName ?? "(unknown)"}{SignatureOf(m)}"));
         throw new InvalidOperationException(

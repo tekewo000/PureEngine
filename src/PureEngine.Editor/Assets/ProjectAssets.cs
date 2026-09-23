@@ -3,7 +3,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace PureEngine.Editor;
 
-/// <summary>Project内の画像素材の索引。Assets/以下の画像と隣接サイドカーからID→パスを作る。</summary>
+/// <summary>Index of image assets in the project. Builds ID-to-path entries from images under Assets/ and adjacent sidecars.</summary>
 public sealed class ProjectAssets
 {
     public sealed record AssetEntry(Guid Id, string RelativePath, string FullPath);
@@ -34,7 +34,7 @@ public sealed class ProjectAssets
         Diagnostics = diagnostics;
     }
 
-    /// <summary>Project Open時と明示Refreshで再走査する。ファイルの作成・書換はしない。</summary>
+    /// <summary>Rescans on project open and explicit refresh. Never creates or rewrites files.</summary>
     public static ProjectAssets Scan(string projectRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
@@ -63,7 +63,7 @@ public sealed class ProjectAssets
                 var sidecar = full + ".pureasset.yaml";
                 if (!File.Exists(sidecar))
                 {
-                    diagnostics.Add($"{relative}: 素材の登録情報がありません。画像を取り込み直してください。");
+                    diagnostics.Add($"{relative}: Missing asset registration. Reimport the image.");
                     continue;
                 }
                 AssetDocument? document;
@@ -75,14 +75,14 @@ public sealed class ProjectAssets
                 }
                 catch (Exception error)
                 {
-                    diagnostics.Add($"{relative}: 登録情報が壊れています ({error.GetBaseException().Message})。");
+                    diagnostics.Add($"{relative}: Registration is corrupted ({error.GetBaseException().Message}).");
                     continue;
                 }
                 if (document is null || document.Version != 1
                     || !Guid.TryParse(document.Id, out var id) || id == Guid.Empty
                     || document.Kind != "image")
                 {
-                    diagnostics.Add($"{relative}: 登録情報の形式が正しくありません (version 1・id・kind: image)。");
+                    diagnostics.Add($"{relative}: Invalid registration format (version 1, id, kind: image).");
                     continue;
                 }
                 if (!byId.TryGetValue(id, out var list))
@@ -101,7 +101,7 @@ public sealed class ProjectAssets
             {
                 var imagePath = sidecar[..^".pureasset.yaml".Length];
                 if (!File.Exists(imagePath))
-                    diagnostics.Add($"{Path.GetRelativePath(projectRoot, sidecar).Replace('\\', '/')}: 画像がなく登録情報だけが残っています。");
+                    diagnostics.Add($"{Path.GetRelativePath(projectRoot, sidecar).Replace('\\', '/')}: The image is missing; only the registration remains.");
             }
         }
         Dictionary<Guid, AssetEntry> images = [];
@@ -110,7 +110,7 @@ public sealed class ProjectAssets
             if (list.Count != 1)
             {
                 foreach (var (relative, _) in list)
-                    diagnostics.Add($"{relative}: ID {id:D} が重複しているため解決できません。");
+                    diagnostics.Add($"{relative}: Cannot resolve because ID {id:D} is duplicated.");
                 continue;
             }
             images.Add(id, new AssetEntry(id, list[0].Relative, list[0].Full));
@@ -118,7 +118,7 @@ public sealed class ProjectAssets
         return new ProjectAssets(projectRoot, images, diagnostics);
     }
 
-    /// <summary>外部の画像をAssets/へコピーして新規IDで登録する。失敗時は既存素材を上書きしない。</summary>
+    /// <summary>Copies an external image into Assets/ and registers it with a new ID. Never overwrites existing assets on failure.</summary>
     public static AssetEntry ImportImage(string projectRoot, string sourcePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
@@ -127,7 +127,7 @@ public sealed class ProjectAssets
         sourcePath = Path.GetFullPath(sourcePath);
         if (!File.Exists(sourcePath)) throw new FileNotFoundException("Source image not found.", sourcePath);
         if (!IsSupportedImage(sourcePath))
-            throw new InvalidDataException(" PNG／JPEG の画像を取り込んでください。");
+            throw new InvalidDataException("Import a PNG/JPEG image.");
         var assets = Path.Combine(projectRoot, "Assets");
         ValidateAssetPath(projectRoot, assets);
         Directory.CreateDirectory(assets);
@@ -172,7 +172,7 @@ public sealed class ProjectAssets
         return new AssetEntry(id, relative, destination);
     }
 
-    /// <summary>描画用にID→画像バイト列を読む。欠落・重複IDは含めない。</summary>
+    /// <summary>Reads ID-to-image bytes for rendering. Excludes missing and duplicated IDs.</summary>
     public Dictionary<Guid, byte[]> LoadImageBytes()
     {
         Dictionary<Guid, byte[]> bytes = [];
@@ -185,7 +185,7 @@ public sealed class ProjectAssets
             }
             catch
             {
-                // 読み取り失敗は描画時の欠落診断に任せ、索引自体は維持する。
+                // Leave read failures to the missing-asset diagnostics at render time and keep the index intact.
             }
         }
         return bytes;

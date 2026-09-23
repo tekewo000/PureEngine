@@ -2,8 +2,8 @@ using System.Numerics;
 
 namespace PureEngine.Core;
 
-/// <summary>Buttonの状態表示。通常・ホバー・押下・無効の tint とキーボードフォーカスの枠を区別する。</summary>
-/// <remarks>表示のために保存済みの Image.Color を書き換えない。実効色は読み取り時に掛け合わせるだけ。</remarks>
+/// <summary>Button state visuals. Distinguishes the Normal, Hover, Pressed, and Disabled tints from the keyboard-focus outline.</summary>
+/// <remarks>Never rewrites the persisted Image.Color for display. The effective color is only combined by multiplication when read.</remarks>
 public enum UiButtonVisualState
 {
     Normal,
@@ -14,10 +14,10 @@ public enum UiButtonVisualState
 
 public static class UiButtonVisuals
 {
-    /// <summary>キーボードフォーカスの枠色。ホバー等の tint とは別に描く。</summary>
+    /// <summary>Outline color for keyboard focus. Drawn separately from tints such as hover.</summary>
     public static Vector4 FocusOutline { get; } = new(0.55f, 0.49f, 0.96f, 1f);
 
-    /// <summary>状態ごとの乗算 tint。いずれも互いに異なる。</summary>
+    /// <summary>Per-state multiply tint. All states differ from each other.</summary>
     public static Vector4 TintFor(UiButtonVisualState state) => state switch
     {
         UiButtonVisualState.Hover => new Vector4(0.9f, 0.9f, 1f, 1f),
@@ -26,7 +26,7 @@ public static class UiButtonVisuals
         _ => Vector4.One,
     };
 
-    /// <summary>保存済み色に tint を掛けた実効色を求める。元の Image.Color は変更しない。</summary>
+    /// <summary>Computes the effective color by multiplying the persisted color with the tint. The original Image.Color is left unchanged.</summary>
     public static Vector4 ApplyTint(Vector4 imageColor, UiButtonVisualState state)
     {
         var tint = TintFor(state);
@@ -34,7 +34,7 @@ public static class UiButtonVisuals
         return Vector4.Clamp(mixed, Vector4.Zero, Vector4.One);
     }
 
-    /// <summary>Buttonの状態を決める。無効が最優先で、押下・ホバーの順。親Buttonの無効化は子へ波及しない。</summary>
+    /// <summary>Resolves the Button state. Disabled wins, then Pressed, then Hover. Disabling a parent Button does not propagate to children.</summary>
     public static UiButtonVisualState Resolve(bool interactable, bool pressed, bool hovered) =>
         !interactable ? UiButtonVisualState.Disabled
         : pressed ? UiButtonVisualState.Pressed

@@ -4,7 +4,7 @@ using PureEngine.Core;
 
 namespace PureEngine.Editor;
 
-/// <summary>Stuffsペインのツリー表示用ノード。Coreの親子を読み取り専用で写す。</summary>
+/// <summary>Tree-display node for the Stuffs pane. Mirrors Core parent-child relations read-only.</summary>
 public sealed class HierarchyNode(SceneObject item) : INotifyPropertyChanged
 {
     private bool _isExpanded;
@@ -27,7 +27,7 @@ public sealed class HierarchyNode(SceneObject item) : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
-/// <summary>Stuffsペインのドロップ位置。UnityのHierarchy相当: 子にするか前後に挿入するか。</summary>
+/// <summary>Drop position in the Stuffs pane. Unity Hierarchy equivalent: drop as a child or insert before/after.</summary>
 public enum HierarchyDropPosition
 {
     AsChild,
@@ -35,10 +35,10 @@ public enum HierarchyDropPosition
     After,
 }
 
-/// <summary>Stuffsペインの親子付け・並べ替えの実行本体。UI非依存で検証できる。</summary>
+/// <summary>Execution core for Stuffs pane parenting and reordering. Verifiable without UI.</summary>
 public static class HierarchyDrop
 {
-    /// <summary>ドラッグ元がドロップ先へ移動できるかを判定する。UIのカーソル表示用。</summary>
+    /// <summary>Determines whether the dragged item can move to the drop target. Used for UI cursor display.</summary>
     public static bool CanDrop(Scene scene, Guid draggedId, Guid? targetId)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -50,7 +50,7 @@ public static class HierarchyDrop
         return !IsDescendant(target, dragged);
     }
 
-    /// <summary>ドラッグ元を指定位置へ移動する。拒否時は例外を投げ、ツリーを変更しない。</summary>
+    /// <summary>Moves the dragged item to the specified position. Throws on rejection without modifying the tree.</summary>
     public static void Execute(Scene scene, Guid draggedId, Guid? targetId, HierarchyDropPosition position)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -117,7 +117,7 @@ public static class HierarchyDrop
     }
 }
 
-/// <summary>Sceneの親子からTreeView用のノード列を組み立てる。</summary>
+/// <summary>Builds TreeView nodes from scene parent-child relations.</summary>
 public static class StuffsHierarchy
 {
     public static ObservableCollection<HierarchyNode> Build(Scene scene)

@@ -201,6 +201,15 @@ Steamなど設計書で保留している内容は、ここに載せたことを
 
 ## 検証状況
 
+### ソースコード内の英語化（PR #6）
+
+- コメント・XMLドキュメント・例外／ログ／UI・診断メッセージを英語化し、対応するテストの期待メッセージを更新した。言語規約の正本は [AGENTS.md](../AGENTS.md#言語)。
+- レビュー修正：XMLドキュメントの重複した閉じタグと型名の不正なXML表記、英文の前置詞抜けを修正した。変更対象のC#ファイル内のXMLドキュメントブロックがすべて整形式であることをパース検証した。
+- 日本語オブジェクト名の保存往復と描画サンプルのCJK・全角数字／句読点・折り返しは検証用データとして元の実行時文字列を維持した。ソース上はUnicodeエスケープと英語コメントで表現し、英語化による検証範囲の縮小を避けた。
+- ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルド・Core／Editorチェックがすべて通過した。ソース／設定内の日本語・CJK・全角文字の残存チェックと `git diff --check` も通過した。
+- CI：修正前のPRチェックは成功を確認済み。レビュー修正後の結果は [PR #6](https://github.com/tekewo000/PureEngine/pull/6) のチェックを参照。
+- 実画面・実GPUでの英語ラベルの表示確認は未実施。
+
 ### Game表示とButton操作（2026-09-23）
 
 Editorで画像とButtonを配置・保存し、Play中のGameで押すと自作C#が呼ばれ、Consoleにログが出る一連を接続した。今回はGame表示とButton操作までとし、Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は追加しない。この達成だけでV3〜V5全体を完了扱いにしない。確定した仕様は[設計書](EngineArchitecture.md#v5前半game表示とbutton操作)を正本とする。namespaceの名前・有無・宣言形式は変更していない（`Button`はAvaloniaとの衝突を避けて`PureEngine.Core.Components`に置き、typeIdは`core.button`）。

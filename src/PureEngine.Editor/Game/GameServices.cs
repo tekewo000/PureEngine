@@ -4,10 +4,10 @@ using PureEngine.Editor.Samples;
 namespace PureEngine.Editor;
 
 /// <summary>
-/// Editor側のゲーム用サービス登録（サンプル）。編集・Playとも同じ登録処理を
-/// <see cref="Runtime.GameSession"/>.Create／<see cref="Runtime.PlaySession"/>.Prepareへ渡して使う。
-/// Component 自体の DI 登録は不要。既存の ComponentRegistry への型登録は別の役割として残す。
-/// ForProject／ForUserCodeで組み込み登録と当該プロジェクトの登録を組み合わせる。
+/// Editor-side game service registration (sample). Editing and play share the same registration,
+/// passed to <see cref="Runtime.GameSession"/>.Create and <see cref="Runtime.PlaySession"/>.Prepare.
+/// Components themselves need no DI registration. Type registration into the existing ComponentRegistry remains a separate role.
+/// ForProject and ForUserCode combine the built-in registrations with the registrations for the project.
 /// </summary>
 public static class GameServices
 {

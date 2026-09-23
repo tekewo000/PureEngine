@@ -9,7 +9,7 @@ public partial class MainWindow
     private ProjectAssets _projectAssets = ProjectAssets.Scan(Path.GetTempPath());
     private Dictionary<Guid, byte[]> _previewImages = [];
 
-    /// <summary>Projectの素材索引を走査し、描画用の画像バイト列を更新する。ファイルは作らない。</summary>
+    /// <summary>Scans the project asset index and refreshes the image bytes used for rendering. Creates no files.</summary>
     internal void RefreshProjectAssets()
     {
         if (_project is null)

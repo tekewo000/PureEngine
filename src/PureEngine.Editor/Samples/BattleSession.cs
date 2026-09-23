@@ -1,8 +1,8 @@
 namespace PureEngine.Editor.Samples;
 
 /// <summary>
-/// 一回のゲーム実行で共有する対戦状態。Scoped 登録の基本例。
-/// 生成は DI が行い、後始末も DI（Scope 終了）が担当する。Component 側で Dispose しない。
+/// Battle state shared by a single game run. Basic example of scoped registration.
+/// DI handles creation and cleanup (scope exit). Never dispose from a component.
 /// </summary>
 public sealed class BattleSession : IDisposable
 {

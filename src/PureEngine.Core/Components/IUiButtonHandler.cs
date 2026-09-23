@@ -1,10 +1,10 @@
 namespace PureEngine.Core;
 
-/// <summary>Button自身が実装するクリック入力の契約。</summary>
+/// <summary>Contract for click input implemented by the Button itself.</summary>
 public interface IUiButtonHandler
 {
     void OnClick(UiClickContext context);
 }
 
-/// <summary>クリック呼び出し時の一時的な情報。実行用SceneとButtonのSceneObjectを持つ。</summary>
+/// <summary>Transient information for a click invocation. Holds the runtime Scene and the Button's SceneObject.</summary>
 public readonly record struct UiClickContext(Scene Scene, SceneObject ButtonObject);

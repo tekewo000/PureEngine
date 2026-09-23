@@ -3,9 +3,9 @@ using PureEngine.Core;
 using PureEngine.Runtime;
 
 /// <summary>
-/// 実行接続（PureEngine.Runtime）の登録から実際の生成経路（編集・Play・単体実行）までを MS DI で確認する。
-/// Editor・Avaloniaを参照せず、チェック用の登録処理とローカルなComponent／サービスで検証する。
-/// A1統合後は実際のプロジェクト登録経路での確認が残る。
+/// Verifies MS DI from runtime wiring (PureEngine.Runtime) through the real creation paths (edit, Play, and standalone runs).
+/// Uses check-only registration and local components/services without referencing Editor or Avalonia.
+/// Follow-up after A1 integration: verify through the real project registration path.
 /// </summary>
 static class GameDependencyChecks
 {

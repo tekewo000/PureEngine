@@ -105,8 +105,8 @@ public partial class MainWindow
             gizmoValid = SceneViewMath.TryGetParentAxes(entry.ParentWorld, out xAxis, out yAxis);
             return true;
         }
-        // Transformのみのグループ親：矩形はないが配置の起点としてPivotとGizmoを出す。
-        // UiElement付きの潰れた配置は従来どおり枠もGizmoも出さない。
+        // Transform-only group parent: no rectangle, but shows Pivot and Gizmo as layout origins.
+        // Keeps the legacy behavior for collapsed layouts with UiElement: shows neither frame nor gizmo.
         if (target.GetComponent<UiElement>() is not null)
             return false;
         if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, target, viewportSize, out _, out var parentWorld, out var world))
@@ -178,7 +178,7 @@ public partial class MainWindow
         }
         else
         {
-            // Transformのみのグループ親も起点として動かせる。矩形条件は緩和し、親連鎖と自回転・拡縮だけを監視する。
+            // Transform-only group parents can also move as origins. Relaxes the rectangle requirement and watches only the parent chain plus local rotation and scale.
             if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, target, viewportSize, out var parentSize, out var parentWorld, out _))
                 return false;
             if (!SceneViewMath.TryGetParentAxes(parentWorld, out _, out _)) return false;
@@ -420,7 +420,7 @@ public partial class MainWindow
     internal bool IsSyncingInspectorForSceneView() => _sceneViewSyncing;
 
 
-    /// <summary>Headless検証用のパン。制作データや未保存状態を変えない。</summary>
+    /// <summary>Pan for headless verification. Does not change production data or the unsaved state.</summary>
     internal bool TryPanForTest(Vector2 delta)
     {
         if (!float.IsFinite(delta.X) || !float.IsFinite(delta.Y))
@@ -434,7 +434,7 @@ public partial class MainWindow
         return true;
     }
 
-    /// <summary>Headless検証用のズーム。カーソル位置を中心にし、未保存化しない。</summary>
+    /// <summary>Zoom for headless verification. Centers on the cursor position without marking unsaved changes.</summary>
     internal bool TryZoomForTest(Vector2 viewPoint, float factor)
     {
         if (!SceneViewMath.TryZoomAt(viewPoint, SceneViewportSize(), _scenePan, _sceneZoom, factor, out var pan, out var zoom))
@@ -444,7 +444,7 @@ public partial class MainWindow
         return true;
     }
 
-    /// <summary>Headless検証用の移動開始。Gizmoヒット済みの種別を受け取り、開始位置と親配置を保持する。</summary>
+    /// <summary>Move start for headless verification. Takes the already-hit gizmo kind and keeps the start position and parent layout.</summary>
     internal bool TryBeginMoveForTest(SceneObject target, SceneViewMath.GizmoKind kind, Vector2 viewPoint) =>
         BeginSceneMove(target, kind, viewPoint);
 
@@ -452,7 +452,7 @@ public partial class MainWindow
 
     internal bool TryConfirmMoveForTest(Vector2 viewPoint) => ConfirmSceneMove(viewPoint);
 
-    /// <summary>Headless検証用のF表示。選択対象を余白付きで中央に収め、未保存化しない。</summary>
+    /// <summary>F framing for headless verification. Centers the selection with padding without marking unsaved changes.</summary>
     internal bool TryFitForTest()
     {
         if (GetSelectedSceneObject() is not SceneObject target)

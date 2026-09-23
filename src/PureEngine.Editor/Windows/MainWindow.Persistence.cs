@@ -111,7 +111,7 @@ public partial class MainWindow
         }
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
-        // 編集用 factory でコンストラクタ注入し、Play 用とは別のサービス群を使う。
+        // Use the editing factory for constructor injection with a service set separate from Play.
         var restored = _sceneSerializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
         // This first scene only validates the file; it is never adopted by the editor.
         ComponentAssets.DisposeComponents(restored.Objects.SelectMany(item => item.Components));
@@ -147,8 +147,8 @@ public partial class MainWindow
     {
         ClearHierarchyDropIndicator();
         CancelSceneViewDrag();
-        // プロジェクトの切り替え・終了時には、そのプロジェクトの監視を終了する。
-        // 終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求。別プロジェクトには触れない。
+        // When switching or closing projects, stop watching that project.
+        // Shutdown order: dispose edit-scene components, then edit services, then request code release. Leaves other projects untouched.
         StopUserCodeWatching();
         _playTimer?.Stop();
         var errors = new List<Exception>();
@@ -166,7 +166,7 @@ public partial class MainWindow
         if (errors.Count != 0) throw new AggregateException("Editor cleanup failed.", errors);
     }
 
-    /// <summary>開いたシーンのフォルダをExplorerで選び直し、右ペインでそのファイルを選択する。</summary>
+    /// <summary>Reselects the opened scene folder in the Explorer and selects that file in the right pane.</summary>
     private void SyncExplorerToScene(string? path)
     {
         _explorerSelectedFile = path;
@@ -183,7 +183,7 @@ public partial class MainWindow
         }
         catch (InvalidDataException)
         {
-            // Project外シーンはExplorer選択を変えない。
+            // Leaves the Explorer selection unchanged for scenes outside the project.
         }
     }
 
@@ -218,10 +218,10 @@ public partial class MainWindow
         if (_fileBusy) { e.Cancel = true; return; }
         if (_play is not null)
         {
-            // 実行中なら確実に終了・解放してから未保存確認へ進む。編集Sceneは実行前の状態を保つ。
+            // While running, always stop and release before the unsaved-changes check. Keeps the edit scene as it was before the run.
             if (!StopPlay())
             {
-                // エラーを読めるよう今回は閉じない。次のCloseでは通常の未保存確認へ進む。
+                // Keeps the window open so the error stays readable. The next Close goes through the usual unsaved-changes check.
                 e.Cancel = true;
                 return;
             }

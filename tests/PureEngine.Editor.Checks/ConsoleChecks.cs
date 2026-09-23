@@ -42,7 +42,7 @@ static class ConsoleChecks
 
     private static void EnsureChecks(MainWindow editor)
     {
-        // A4: 各ウィンドウの所有者に明示登録する。共有staticには依存しない。
+        // A4: Register explicitly with each window's owner. Do not depend on shared statics.
         var components = Field<ProjectComponents>(editor, "_components");
         components.Registry.Register<ConsoleProbe>("checks.console-probe");
         components.Registry.Register<ConsoleFailUpdate>("checks.console-fail-update");
@@ -491,7 +491,7 @@ static class ConsoleChecks
             Drain(editor);
             Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == countAfterStop, "Double stop must not duplicate errors.");
 
-            // Stop後もログを読める.
+            // Logs must remain readable after Stop.
             var list = Control<ListBox>(editor, "ConsoleList");
             var rows = View(editor);
             Check(rows.Length > 0, "Logs must remain readable after Stop.");
