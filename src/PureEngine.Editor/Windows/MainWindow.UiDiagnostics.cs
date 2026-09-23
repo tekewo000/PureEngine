@@ -23,38 +23,9 @@ public partial class MainWindow
         void refreshOptions()
         {
             var current = (Sprite?)GetMemberValue(component, member);
-            List<SpriteOption> options = [new SpriteOption(null, "None")];
-            foreach (var entry in AssetImageEntries())
-                options.Add(new SpriteOption(entry.Id, entry.RelativePath));
-            SpriteOption selected;
-            if (current is null)
-            {
-                selected = options[0];
-                info.Text = "No sprite.";
-                ToolTip.SetTip(combo, $"{member.Name} : Sprite — Select an image or None");
-            }
-            else
-            {
-                var match = options.FirstOrDefault(option => option.Id == current.ImageId);
-                if (match is null)
-                {
-                    match = new SpriteOption(current.ImageId, $"Missing: {current.ImageId:D}");
-                    options.Add(match);
-                    info.Text = current.SourceRect is { } rect
-                        ? $"Missing image {current.ImageId:D} (crop {rect.X},{rect.Y},{rect.Width}x{rect.Height} kept)."
-                        : $"Missing image {current.ImageId:D}. ID is kept.";
-                }
-                else if (current.SourceRect is { } rect)
-                {
-                    info.Text = $"Crop {rect.X},{rect.Y},{rect.Width}x{rect.Height} from {match.Display}. Picking another image uses the whole image.";
-                }
-                else
-                {
-                    info.Text = match.Display;
-                }
-                selected = match;
-                ToolTip.SetTip(combo, $"{member.Name} : Sprite — {info.Text}");
-            }
+            var (options, selected, infoText, tip) = SpriteDisplayState(current, member.Name);
+            info.Text = infoText;
+            ToolTip.SetTip(combo, tip);
             combo.ItemsSource = options;
             combo.SelectedItem = selected;
         }
@@ -143,7 +114,7 @@ public partial class MainWindow
             {
                 // Asset list may have changed; rebuild selection without losing the kept ID.
                 var member = ComponentSchema.GetInspectorMembers(component.GetType())
-                    .FirstOrDefault(m => m.Name == "Sprite");
+                    .FirstOrDefault(m => m.Name == "Sprite" && GetMemberType(m) == typeof(Sprite));
                 if (member is not null) RefreshSpriteCombo(combo, component, member);
             }
         }
@@ -152,18 +123,42 @@ public partial class MainWindow
     private void RefreshSpriteCombo(ComboBox combo, object component, MemberInfo member)
     {
         var current = (Sprite?)GetMemberValue(component, member);
+        var (options, selected, infoText, tip) = SpriteDisplayState(current, member.Name);
+        combo.ItemsSource = options;
+        combo.SelectedItem = selected;
+        ToolTip.SetTip(combo, tip);
+        // The info line lives next to the combo in the Sprite editor root; keep it consistent on asset refreshes.
+        if (combo.GetValue(AutomationProperties.NameProperty) is string name && combo.Parent is Panel panel)
+        {
+            var info = panel.Children.OfType<TextBlock>()
+                .FirstOrDefault(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, name + ".Info"));
+            info?.Text = infoText;
+        }
+    }
+
+    /// <summary>Single rule for Sprite display: options, selection, info line, and tooltip from the asset index.</summary>
+    private (List<SpriteOption> Options, SpriteOption Selected, string Info, string Tip) SpriteDisplayState(Sprite? current, string memberName)
+    {
         List<SpriteOption> options = [new SpriteOption(null, "None")];
         foreach (var entry in AssetImageEntries())
             options.Add(new SpriteOption(entry.Id, entry.RelativePath));
-        SpriteOption selected;
-        if (current is null) selected = options[0];
-        else
+        if (current is null)
+            return (options, options[0], "No sprite.", $"{memberName} : Sprite — Select an image or None");
+        var match = options.FirstOrDefault(option => option.Id == current.ImageId);
+        if (match is null)
         {
-            selected = options.FirstOrDefault(option => option.Id == current.ImageId)
-                ?? new SpriteOption(current.ImageId, $"Missing: {current.ImageId:D}");
-            if (!options.Contains(selected)) options.Add(selected);
+            match = new SpriteOption(current.ImageId, $"Missing: {current.ImageId:D}");
+            options.Add(match);
+            var missing = current.SourceRect is { } rect
+                ? $"Missing image {current.ImageId:D} (crop {rect.X},{rect.Y},{rect.Width}x{rect.Height} kept)."
+                : $"Missing image {current.ImageId:D}. ID is kept.";
+            return (options, match, missing, $"{memberName} : Sprite — {missing}");
         }
-        combo.ItemsSource = options;
-        combo.SelectedItem = selected;
+        if (current.SourceRect is { } crop)
+        {
+            var cropped = $"Crop {crop.X},{crop.Y},{crop.Width}x{crop.Height} from {match.Display}. Picking another image uses the whole image.";
+            return (options, match, cropped, $"{memberName} : Sprite — {cropped}");
+        }
+        return (options, match, match.Display, $"{memberName} : Sprite — {match.Display}");
     }
 }

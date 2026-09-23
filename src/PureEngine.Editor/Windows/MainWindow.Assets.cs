@@ -28,6 +28,9 @@ public partial class MainWindow
             Log.Engine.Warning(diagnostic);
         if (_projectAssets.Diagnostics.Count > 0)
             SetFileStatus($"{_projectAssets.Diagnostics.Count} asset issue(s). See Console.", true);
+        // The Sprite Inspector resolves IDs against this index; keep the displayed selection and warnings consistent.
+        if (GetSelectedSceneObject() is { } selected)
+            RefreshUiWarnings(selected);
     }
 
     internal IReadOnlyList<ProjectAssets.AssetEntry> AssetImageEntries() =>

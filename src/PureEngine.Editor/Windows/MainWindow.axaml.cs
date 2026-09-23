@@ -57,8 +57,11 @@ public partial class MainWindow : Window
         {
             _sceneSerializer = new SceneSerializer(_components.Registry);
             _project = session.Project;
+            // Adopt the scene before asset I/O so constructor failure cleanup owns its components.
             SetCurrentScene(session.Scene, session.Project.StartupScenePath);
             RefreshProjectAssets();
+            // Rebuild before showing the window; the initial Inspector used the placeholder asset index.
+            RefreshComponents();
             if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
             StartUserCodeWatching();

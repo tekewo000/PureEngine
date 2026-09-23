@@ -82,6 +82,7 @@ internal static class Program
             IntegratedArchitectureChecks.Run(root);
             ProjectAssetChecks.Run(root);
             UiEndToEndChecks.Run(root);
+            SpriteReopenChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";
             Click(Control<Button>(launcher, "CreateProjectButton"));
