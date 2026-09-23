@@ -71,6 +71,7 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
             PlayConnectionChecks.Run();
             ProjectDropChecks.Run();
+            UiMenuChecks.Run();
             EditorOwnershipChecks.Run(root);
             ConsoleChecks.Run();
             EditorSeparationChecks.Run(root);

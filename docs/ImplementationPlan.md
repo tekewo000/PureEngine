@@ -14,6 +14,13 @@
 
 ## 次に着手する作業
 
+### StuffsのUI作成メニュー（2026-09-23）
+
+「UI → Image／Button」を現在のComponent・Project所有権・親子ツリーへ統合。Transform・UiElementを含む必要な構成を揃え、選択中の親の子として追加する。旧ブランチのSpritePath／Text等の別仕様は導入しない。操作は[README](../README.md)を参照。
+
+- 名前の重複回避・Scene所有権・保存往復、実際のメニューイベントによる作成・ツリー選択・Play保護・アタッチ失敗時の取り消しをチェックに追加。
+- ローカルの `./tools/code-quality.ps1 -Check` は通過（提案レベルの解析・警告／エラー0のビルド・Core/Editor Checks）。実画面・実GPU・CIは未確認。
+
 **描画順の共通基盤（`RendererComponent.Order`）とGame表示・Button操作は実装・自動検証済み。** Button実装に先立つOrder基盤に続き、Game表示（実行用Sceneの描画）とButton本体（`core.button`・`IUiButtonHandler`・Game入力・更新境界ディスパッチ）を接続した。詳細は[検証状況](#game表示とbutton操作2026-09-23)を参照する。SpriteRenderer本体・SortingLayer・Zによる奥行き制御、Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は今回の対象外として区別する。次はText等の後続候補へ進む前に、実画面・実GPU・CIの未確認分を記録して区別する。
 
 **指定されたV4前半「Scene Viewのグリッド・パン／ズーム・選択・移動Gizmo」は実装・レビュー修正済み。** 背景だけでは位置や縮尺を把握できず、Inspectorの数値入力だけでは配置しづらいため、画像をマウスで選択・移動できる編集面を作った。2026-09-23に下表の5項目の自動検証と実GPUチェックを通過した。実画面は表示を確認済み。一連の手動操作とCIは未確認として区別し、詳細は[検証状況](#v4前半のscene-view編集操作2026-09-23)を参照する。後続の実装候補はサイズ変更・回転Gizmo。
