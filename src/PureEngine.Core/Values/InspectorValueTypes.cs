@@ -413,9 +413,15 @@ public static class InspectorValueTypes
         }
         if (type == typeof(Color))
         {
-            if (raw.GetType() == typeof(Color))
-                return raw;
+            if (raw is Color existingColor)
+                return new Color(ReadFloat(existingColor.R, $"{path}.r"), ReadFloat(existingColor.G, $"{path}.g"),
+                    ReadFloat(existingColor.B, $"{path}.b"), ReadFloat(existingColor.A, $"{path}.a"));
             var mapping = ToStringKeyedMapping(raw, path);
+            // Read legacy Vector4 colors without changing how new colors are saved.
+            if (mapping.Count == 4 && mapping.TryGetValue("x", out var x) && mapping.TryGetValue("y", out var y)
+                && mapping.TryGetValue("z", out var z) && mapping.TryGetValue("w", out var w))
+                return new Color(ReadFloat(x, $"{path}.x"), ReadFloat(y, $"{path}.y"),
+                    ReadFloat(z, $"{path}.z"), ReadFloat(w, $"{path}.w"));
             RequireKeys(mapping, ["r", "g", "b", "a"], path);
             return new Color(ReadFloat(mapping["r"], $"{path}.r"), ReadFloat(mapping["g"], $"{path}.g"), ReadFloat(mapping["b"], $"{path}.b"), ReadFloat(mapping["a"], $"{path}.a"));
         }

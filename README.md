@@ -419,6 +419,8 @@ var region = cropped.ResolveSourceRect(imageWidth: 128, imageHeight: 64);
 
 ## Image Componentの描画
 
+`Image.Color` は `PureEngine.Core.Color` 型です。InspectorではRGBA数値と色見本を表示します。旧シーンのVector4形式は読み込めますが、C#で `Vector4` を代入していた箇所は `new Color(r, g, b, a)` または `Color.White` へ変更してください。保存互換性の詳細は [設計書のYAML節](docs/EngineArchitecture.md#inspector拡張値のyaml形式実装済み) を参照してください。
+
 Scene Viewの前後関係はInspectorの`Image.Order`で変更します。手前にしたい画像へ大きい値を設定してください。描画順の適用範囲は[設計書](docs/EngineArchitecture.md#image-componentから描画への接続)、確認済みの項目は[検証記録](docs/ImplementationPlan.md#描画順の共通基盤order2026-09-23)を参照してください。
 
 Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を持つ。位置・回転・拡縮をTransform、領域をUiElementから取得します。Spriteがnullなら表示しません。`Order`は昇順で描き、大きい値を手前にする。負数も許可し、親からは継承せず各対象の値を使う。実行は上記のEditorまたは試作Playerを使います。[単体表示](docs/evidence/image-component-player.png)と[リサイズ後](docs/evidence/image-component-resized.png)は検証用サンプルの画面証跡として残しています。

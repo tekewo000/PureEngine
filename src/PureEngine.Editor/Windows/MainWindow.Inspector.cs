@@ -308,6 +308,8 @@ public partial class MainWindow
         {
             if (IsPlaying) return;
             SetMemberValue(component, member, null);
+            foreach (var box in colorPanel.GetVisualDescendants().OfType<TextBox>())
+                MarkInvalid(box, null);
             refresh();
         };
         refresh();

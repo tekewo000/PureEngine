@@ -48,7 +48,7 @@ static class UiComponentChecks
         var item = scene.AddEmpty();
         item.Rename("Sprite holder");
         var id = Guid.NewGuid();
-        var image = new Image { Sprite = new Sprite(id, (8, 4, 16, 12)), Color = new Vector4(1, 0.5f, 0.25f, 0.75f) };
+        var image = new Image { Sprite = new Sprite(id, (8, 4, 16, 12)), Color = new Color(1, 0.5f, 0.25f, 0.75f) };
         item.Attach(new Transform());
         item.Attach(new UiElement());
         item.Attach(image);
@@ -64,12 +64,20 @@ static class UiComponentChecks
         var copy = restored.Objects[0].GetComponent<Image>()!;
         Check(copy.Sprite is not null && copy.Sprite.ImageId == id && copy.Sprite.SourceRect == (8, 4, 16, 12),
             "Sprite whole/crop did not survive.");
-        Check(copy.Color == new Vector4(1, 0.5f, 0.25f, 0.75f), "Image color did not survive.");
+        Check(copy.Color == new Color(1, 0.5f, 0.25f, 0.75f), "Image color did not survive.");
         Check(!ReferenceEquals(copy.Sprite, image.Sprite), "Restored Sprite must be a new instance.");
         var probeCopy = restored.Objects[1].GetComponent<SpriteProbe>()!;
         Check(probeCopy.MaybeSprite is null && probeCopy.Sprites.Count == 1 && probeCopy.Sprites[0].ImageId == id,
             "Sprite null and list entries did not survive.");
         Check(serializer.Serialize(restored) == yaml, "Sprite save/load changed output.");
+
+        var legacyYaml = yaml.Replace("r: 1", "x: 1").Replace("g: 0.5", "y: 0.5")
+            .Replace("b: 0.25", "z: 0.25").Replace("a: 0.75", "w: 0.75");
+        Check(legacyYaml != yaml, "Legacy color fixture must differ from the current format.");
+        var legacyScene = serializer.Deserialize(legacyYaml);
+        Check(legacyScene.Objects[0].GetComponent<Image>()!.Color == image.Color,
+            "Legacy Vector4 Image color must retain all channels.");
+        Check(serializer.Serialize(legacyScene) == yaml, "Legacy Image colors must save as RGBA.");
 
         var clone = serializer.Clone(scene);
         var cloneImage = clone.Objects[0].GetComponent<Image>()!;
@@ -185,7 +193,7 @@ static class UiComponentChecks
         var childImageId = Guid.NewGuid();
         child.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         child.Attach(new UiElement { SizeDelta = new Vector2(64, 32) });
-        child.Attach(new Image { Sprite = new Sprite(childImageId), Color = new Vector4(0, 1, 0, 1) });
+        child.Attach(new Image { Sprite = new Sprite(childImageId), Color = new Color(0, 1, 0, 1) });
         var sibling = scene.AddEmpty();
         sibling.Rename("Sibling");
         sibling.SetParent(parent);

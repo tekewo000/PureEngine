@@ -160,6 +160,19 @@ static class InspectorValueChecks
         Reject(() => colorSerializer.Deserialize(colorYamlBase.Replace("Tint:", "Tint: not-a-mapping")), "String accepted as Color.");
         Reject(() => colorSerializer.Deserialize(colorYamlBase.Replace("r: 1", "x: 1")), "Vector keys accepted as Color.");
 
+        foreach (var invalid in new[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity })
+        {
+            foreach (var color in new[] { new Color(invalid, 0, 0, 1), new Color(0, invalid, 0, 1),
+                new Color(0, 0, invalid, 1), new Color(0, 0, 0, invalid) })
+            {
+                Reject(() => InspectorValueTypes.ToStorable(color, typeof(Color)), "Non-finite channel saved.");
+                Reject(() => InspectorValueTypes.FromStorable(color, typeof(Color), "Tint"), "Non-finite typed color restored.");
+            }
+        }
+        var outside = new Color(2, -1, 0.125f, 3);
+        Check(Equals(InspectorValueTypes.FromStorable(InspectorValueTypes.ToStorable(outside, typeof(Color)), typeof(Color), "Tint"), outside),
+            "Persistence must not clamp or quantize finite Color channels.");
+
         // Custom classes nest as mappings: direct members, doubly nested members, arrays, lists, and dictionaries.
         var customRegistry = new ComponentRegistry();
         customRegistry.Register<NestedProbe>("checks.custom");

@@ -79,7 +79,7 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - enum：通常のenumと `[Flags]` enum、対応する `Nullable<T>`。通常はドロップダウン、`[Flags]` はチェックボックス群とNoneクリアで編集する
 - `[Flags]` は複合値・符号付きの負値・`ulong` の最上位ビットにも対応する。チェック状態の同期は表示のみを更新し、ユーザー操作として値へ書き戻さない。
 - ベクトル：`Vector2`・`Vector3`・`Vector4`・`Quaternion`（各成分は有限のfloat、対応する `Nullable<T>` を含む）
-- 色：`Color`（`r`・`g`・`b`・`a` の有限float、対応する `Nullable<T>` を含む。Inspectorでは数値とプレビューで編集する）
+- 色：`Color`（RGBAの有限float、単体の `Nullable<T>` を含む。単体とNullableは数値と色見本、コレクション要素は数値で編集する）。保存値は範囲外でもクランプせず、色見本のみ0〜1へ制限する。新規要素とCreateは白。カラーピッカー・HSV／hex入力は未対応。
 - `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
 - `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する
 - 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種・`Color`・`Sprite`・自作クラスと `Nullable<int/float/double/bool/enum>`、null可）
@@ -235,6 +235,8 @@ values:
   Rotation: {x: 0, y: 0, z: 0, w: 1}
   Tint: {r: 1, g: 0.5, b: 0.25, a: 1}
 ```
+
+`Color` の読み込みは旧Vector4の完全な `{x, y, z, w}` もRGBA順で受け付ける。旧 `Image.Color` の値を維持し、次回保存時に `{r, g, b, a}` へ統一する。両形式の混在・欠落・余分なキー・非有限値は拒否する。Vector4側の読み込み形式は変更しない。C#ソースのVector4代入はColor構築へ変更が必要で、コード再読み込み時の任意の型変更を許可する機能ではない。
 
 - `Transform` 型のメンバーは `LocalPosition`・`LocalRotation`・`LocalScale` のマッピング。`Transform` コンポーネント自体は同じ3メンバーをvaluesに持つ。例：
 
@@ -443,14 +445,14 @@ ProjectFile.ValidateProjectPathをシーン・フォルダ・素材で共有し�
 | `Transform`（既存） | `LocalPosition`・`LocalRotation`・`LocalScale`。既存のLocalMatrixの意味・計算は変更しない |
 | `UiElement`（データ定義あり） | `SizeDelta = (100,100)`、`AnchorMin = AnchorMax = (0,0)`、`Pivot = (0.5,0.5)` |
 | `Text`（予定） | 文字を領域へ描く。文字列・フォント・サイズ・行間・色等の詳細は後続で定義 |
-| `Image`（描画確認用の接続済み） | `Sprite? Sprite`と`Vector4 Color = Vector4.One`、`RendererComponent.Order = 0`。nullは描画なし、ColorはRGBA乗算。UiElementの領域へStretchする |
+| `Image`（描画確認用の接続済み） | `Sprite? Sprite`と`Color Color = Color.White`、`RendererComponent.Order = 0`。nullは描画なし、ColorはRGBA乗算。UiElementの領域へStretchする |
 | `Button`（予定） | 領域内のクリック判定と処理の通知。見た目はImage／Textとの組み合わせで作る |
 
 UiElementはTransformと組み合わせる。現時点の「Transformが必要」というコメントだけでは依存関係は強制されないため、登録と依存検証は今後の実装対象。構築途中のAttach順序を妨げず、完成したSceneを検証するときの不足の扱いを揃える。Text／Image／Buttonは同じオブジェクトのUiElementが解決した領域を使う。
 
 InputField・DropDown・Slider、Toggle／Checkbox・ScrollView・ProgressBarは後続候補。最初の4Componentを作るために専用Canvas Componentを必須にしない。以前のUiCanvas必須・TransformとRectTransformの併用禁止という案は採用しない。
 
-Visible・Opacity・ClipChildrenや画面全体の解像度設定は引き続き設計対象だが、現在のUiElementのメンバーとして存在するものではない。どこへ持たせるかは使用する機能の実装時に確定する。色には既存Vector4を使う案を維持する。
+Visible・Opacity・ClipChildrenや画面全体の解像度設定は引き続き設計対象だが、現在のUiElementのメンバーとして存在するものではない。どこへ持たせるかは使用する機能の実装時に確定する。Imageの色はCoreのColorを使い、描画境界でVector4へ変換する。
 
 #### Spriteの素材データ
 

@@ -115,9 +115,17 @@ static class InspectorValueEditorChecks
         Dispatcher.UIThread.RunJobs();
         Check(tintG.Text == "0.5", $"Esc must restore last valid color channel, got '{tintG.Text}'.");
         Check(!errorBadge.IsVisible, "Esc must clear the color error.");
+        var preview = editor.GetVisualDescendants().OfType<Border>().Single(border =>
+            Equals(border.GetValue(AutomationProperties.NameProperty), $"{nameof(InspectorValueProbe)}.Tint.Preview"));
+        Check((preview.Background as Avalonia.Media.SolidColorBrush)?.Color == Avalonia.Media.Color.FromArgb(255, 64, 128, 64),
+            "Color preview must reflect edited RGBA without rewriting channels.");
+        Box(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.A").Text = "NaN";
+        Dispatcher.UIThread.RunJobs();
+        Check(errorBadge.IsVisible, "Invalid nullable Color must block saving.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Null"));
         Dispatcher.UIThread.RunJobs();
         Check(probe.MaybeTint is null, "Nullable Color Set Null must clear the member.");
+        Check(!errorBadge.IsVisible, "Set Null must clear errors from hidden Color fields.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Create"));
         Dispatcher.UIThread.RunJobs();
         Check(probe.MaybeTint == Color.White, "Nullable Color Create must assign white.");
@@ -125,6 +133,13 @@ static class InspectorValueEditorChecks
         swatchR.Text = "0";
         Dispatcher.UIThread.RunJobs();
         Check(probe.Swatches[0].R == 0f, "Color list element edit did not reach the scene.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Add"));
+        Check(probe.Swatches[1] == Color.White, "New color elements must start white.");
+        Box(editor, $"{nameof(InspectorValueProbe)}.Palette.Value[0].A").Text = "0.25";
+        Box(editor, $"{nameof(InspectorValueProbe)}.Colors[0].B").Text = "0.5";
+        Dispatcher.UIThread.RunJobs();
+        Check(probe.Palette["accent"].A == 0.25f && probe.Colors[0].B == 0.5f,
+            "Dictionary and array colors must be editable.");
 
         // Double editing works with invariant formatting.
         var ratio = Box(editor, $"{nameof(InspectorValueProbe)}.Ratio");
@@ -361,6 +376,8 @@ static class InspectorValueEditorChecks
         [Inspector] public Color Tint = new(1f, 0.5f, 0.25f, 1f);
         [Inspector] public Color? MaybeTint { get; set; } = new(0f, 1f, 0f, 1f);
         [Inspector] public List<Color> Swatches { get; set; } = [new(1f, 0f, 0f, 1f)];
+        [Inspector] public Color[] Colors { get; set; } = [Color.White];
+        [Inspector] public Dictionary<string, Color> Palette { get; set; } = new() { ["accent"] = Color.White };
         [Inspector] public double Ratio = 1.5;
         [Inspector] public List<int> Scores { get; set; } = [1, 2];
         [Inspector] public Dictionary<string, int> Counts { get; set; } = new() { ["alice"] = 3 };

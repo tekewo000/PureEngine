@@ -24,7 +24,7 @@ internal static class ImageRenderingChecks
         Check(Size == new Vector2(100, 40) && draw.Vertices.Length == 6, "Component produces one quad");
         Check(draw.Vertices[0].Position == new Vector2(150, 80) && draw.Vertices[2].Position == new Vector2(250, 120),
             "Image uses UiLayout geometry");
-        Check(draw.Vertices[0].Color == image.Color && draw.Vertices[0].Clip == clip, "Color and alpha reach the batch");
+        Check(draw.Vertices[0].Color == new Vector4(.4f, .6f, 1, .5f) && draw.Vertices[0].Clip == clip, "Color and alpha reach the batch");
         Near((draw.Vertices[2].Uv - draw.Vertices[0].Uv) * DrawList.AtlasSize, new(64, 32), "Whole image UV extent");
         using (var orderDraw = new DrawList())
         {

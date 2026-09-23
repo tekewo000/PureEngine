@@ -16,7 +16,7 @@ internal static class EditPreviewChecks
         item.Rename("Card");
         var transform = new Transform { LocalPosition = new Vector3(10, 20, 0) };
         var element = new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) };
-        var image = new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = Vector4.One };
+        var image = new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = Color.White };
         item.Attach(transform);
         item.Attach(element);
         item.Attach(image);
@@ -45,9 +45,9 @@ internal static class EditPreviewChecks
         Check(draw.Vertices[2].Position - draw.Vertices[0].Position == new Vector2(80, 20),
             "Size edits must reach the preview.");
 
-        image.Color = new Vector4(1, 0, 0, 0.5f);
+        image.Color = new Color(1, 0, 0, 0.5f);
         EditSceneRenderer.Build(draw, scene, images, viewport);
-        Check(draw.Vertices[0].Color == image.Color, "Color edits must reach the preview.");
+        Check(draw.Vertices[0].Color == new Vector4(1, 0, 0, 0.5f), "Color edits must reach the preview.");
 
         image.Sprite = null;
         diagnostics = EditSceneRenderer.Build(draw, scene, images, viewport);
@@ -130,7 +130,7 @@ internal static class EditPreviewChecks
             item.Rename(name);
             item.Attach(new Transform { LocalPosition = position });
             item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
-            item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = color, Order = order });
+            item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = new(color.X, color.Y, color.Z, color.W), Order = order });
             return item;
         }
         var red = new Vector4(1, 0, 0, 1);
@@ -171,13 +171,13 @@ internal static class EditPreviewChecks
         parent.Rename("Parent");
         parent.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         parent.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
-        parent.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()), Color = red, Order = 0 });
+        parent.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()), Color = new(red.X, red.Y, red.Z, red.W), Order = 0 });
         var child = parentScene.AddEmpty();
         child.Rename("Child");
         child.SetParent(parent);
         child.Attach(new Transform { LocalPosition = new Vector3(5, 5, 0) });
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(20, 10) });
-        child.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()), Color = blue, Order = 0 });
+        child.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()), Color = new(blue.X, blue.Y, blue.Z, blue.W), Order = 0 });
         EditSceneRenderer.Build(draw, parentScene, images, viewport);
         var childBefore = draw.Vertices[6].Position;
         Check(childBefore == new Vector2(15, 25), $"Child layout setup failed, got {childBefore}.");
