@@ -1,7 +1,6 @@
 using System.Numerics;
 using PureEngine.Core;
 using PureEngine.Core.Components;
-using YamlDotNet.Core;
 
 static class UiButtonChecks
 {
@@ -9,25 +8,15 @@ static class UiButtonChecks
     {
         ButtonRoundTrip();
         Requirements();
-        Validation();
         Visuals();
         HitButtonRules();
         RuntimeDispatch();
-        DeferredHandlerStart();
-        Console.WriteLine("PASS: Button save/clone, requirements, handler validation, visuals, overlap/parent/cancel/disable hit rules, and runtime click dispatch.");
+        Console.WriteLine("PASS: Button save/clone, requirements, subscriptions, visuals, overlap/parent/cancel/disable hit rules, and runtime click dispatch.");
     }
 
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
-    }
-
-    private static void Reject(Action action, string message)
-    {
-        try { action(); }
-        catch (Exception error) when (error is InvalidDataException or YamlException or ArgumentException or InvalidOperationException)
-        { return; }
-        throw new InvalidOperationException(message);
     }
 
     private static ComponentRegistry ButtonRegistry()
@@ -37,11 +26,6 @@ static class UiButtonChecks
         registry.Register<UiElement>("core.ui-element");
         registry.Register<global::Image>("core.image");
         registry.Register<Button>("core.button");
-        registry.Register<ClickCounter>("checks.click-counter");
-        registry.Register<SecondHandler>("checks.second-handler");
-        registry.Register<ThrowingHandler>("checks.throwing-handler");
-        registry.Register<SelfRemovingHandler>("checks.self-removing-handler");
-        registry.Register<StoppingHandler>("checks.stopping-handler");
         return registry;
     }
 
@@ -100,30 +84,6 @@ static class UiButtonChecks
         lone.Attach(new UiElement());
         Check(UiComponentRequirements.GetMissing(lone).Count == 0,
             "Button with Transform and UiElement must be complete without an Image.");
-    }
-
-    private static void Validation()
-    {
-        var scene = new Scene();
-        var plain = scene.AddEmpty();
-        plain.Rename("Plain");
-        plain.Attach(new Button());
-        UiButtonValidation.Validate(scene);
-        Check(UiButtonValidation.CountHandlers(plain) == 0, "Button without handlers must count zero.");
-
-        plain.Attach(new ClickCounter());
-        UiButtonValidation.Validate(scene);
-        Check(UiButtonValidation.CountHandlers(plain) == 1, "Single handler must validate.");
-
-        plain.Attach(new SecondHandler());
-        Reject(() => UiButtonValidation.Validate(scene), "Multiple handlers must be rejected.");
-        try { UiButtonValidation.Validate(scene); }
-        catch (InvalidOperationException error)
-        {
-            Check(error.Message.Contains("Plain") && error.Message.Contains('2'),
-                $"Validation error must name the object and count, got '{error.Message}'.");
-        }
-        Reject(() => { using var unused = new SceneRuntime(scene, ButtonRegistry()); }, "Runtime preparation must reject multiple handlers and refuse to start.");
     }
 
     private static void Visuals()
@@ -206,192 +166,101 @@ static class UiButtonChecks
             "Non-button Images must not block Button input; only Buttons participate in Game hit testing.");
     }
 
-    private sealed class ClickCounter : IUiButtonHandler
-    {
-        public int Calls;
-        public Guid LastId;
-        public UiClickContext LastContext;
-        public void OnClick(UiClickContext context)
-        {
-            Calls++;
-            LastId = context.ButtonObject.Id;
-            LastContext = context;
-        }
-    }
-
-    private sealed class SecondHandler : IUiButtonHandler
-    {
-        public void OnClick(UiClickContext _) { }
-    }
-
-    private sealed class StartedHandler : IUiButtonHandler
-    {
-        public bool Started;
-        public int Calls;
-        [Start] private void Start() => Started = true;
-        public void OnClick(UiClickContext _)
-        {
-            Check(Started, "A dynamically attached handler must Start before OnClick.");
-            Calls++;
-        }
-    }
-
-    private sealed class AttachingHandler : IUiButtonHandler
-    {
-        public void OnClick(UiClickContext context) =>
-            context.Scene.Objects.Single(item => item.Name == "Target").Attach(new StartedHandler());
-    }
-
-    private static void DeferredHandlerStart()
-    {
-        var registry = ButtonRegistry();
-        registry.Register<AttachingHandler>("checks.attaching-handler");
-        var scene = new Scene();
-        var source = scene.AddEmpty();
-        source.Attach(new Button());
-        source.Attach(new AttachingHandler());
-        var target = scene.AddEmpty();
-        target.Rename("Target");
-        target.Attach(new Button());
-        using var runtime = new SceneRuntime(scene, registry);
-        runtime.Start();
-        var runtimeTarget = runtime.Scene.Objects.Single(item => item.Id == target.Id);
-        runtime.EnqueueButtonClick(source.Id);
-        runtime.EnqueueButtonClick(target.Id);
-        runtime.Step(0);
-        var handler = runtimeTarget.GetComponent<StartedHandler>()!;
-        Check(runtime.IsRunning && runtime.Errors.Count == 0 && handler.Calls == 0,
-            "Clicks for handlers attached during dispatch must wait for their Start batch.");
-        runtime.Step(0);
-        Check(handler.Started && handler.Calls == 1, "Deferred clicks must run once after Start.");
-    }
-
-    private sealed class ThrowingHandler : IUiButtonHandler
-    {
-        public void OnClick(UiClickContext _) => throw new ApplicationException("click boom");
-    }
-
-    private sealed class SelfRemovingHandler : IUiButtonHandler
-    {
-        public void OnClick(UiClickContext context) => context.Scene.Remove(context.ButtonObject);
-    }
-
-    private sealed class StoppingHandler : IUiButtonHandler
-    {
-        public static Action? RequestStop;
-        public void OnClick(UiClickContext _) => RequestStop?.Invoke();
-    }
-
     private static void RuntimeDispatch()
     {
         var registry = ButtonRegistry();
         var scene = new Scene();
-        var item = scene.AddEmpty();
-        item.Rename("Click me");
-        item.Attach(new Transform());
-        item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
-        item.Attach(new Button());
-        var counter = new ClickCounter();
-        item.Attach(counter);
+        var source = scene.AddEmpty();
+        var authoringButton = new Button();
+        source.Attach(authoringButton);
+        var authoringCalls = 0;
+        authoringButton.Clicked += _ => authoringCalls++;
 
         using var runtime = new SceneRuntime(scene, registry);
-        runtime.Start();
-        var runtimeCounter = runtime.Scene.Objects.First(candidate => candidate.Name == "Click me").GetComponent<ClickCounter>()!;
-        Check(runtimeCounter.Calls == 0, "Start must not flush clicks before the first Step.");
+        var item = runtime.Scene.Objects.Single();
+        var button = item.GetComponent<Button>()!;
+        var calls = 0;
+        void Count(UiClickContext context)
+        {
+            Check(ReferenceEquals(context.Scene, runtime.Scene) && ReferenceEquals(context.ButtonObject, item),
+                "Context must contain the execution Scene and Button object.");
+            calls++;
+        }
+        button.Clicked += Count;
         runtime.EnqueueButtonClick(item.Id);
-        Check(runtimeCounter.Calls == 0, "Enqueued clicks must wait for the update boundary, not run during editing.");
-        runtime.Step(1f / 60f);
-        Check(runtimeCounter.Calls == 1, "Step must dispatch one click once.");
-        Check(runtimeCounter.LastId == item.Id, "Context must carry the Button SceneObject.");
-        Check(ReferenceEquals(runtimeCounter.LastContext.Scene, runtime.Scene), "Context must carry the execution Scene.");
-        Check(!ReferenceEquals(runtimeCounter.LastContext.ButtonObject, item), "Context must use the execution instance, not the authoring one.");
-        runtime.Step(1f / 60f);
-        Check(runtimeCounter.Calls == 1, "Steps without input must not repeat notifications.");
-        Check(counter.Calls == 0, "Running must not mutate the authoring scene.");
+        runtime.Start();
+        runtime.Step(0);
+        Check(calls == 0, "Pre-Start input must be discarded.");
+        runtime.EnqueueButtonClick(item.Id);
+        Check(calls == 0, "Input must wait for Step.");
+        runtime.Step(0);
+        Check(calls == 1 && authoringCalls == 0, "Runtime must notify once without copying authoring subscriptions.");
+        runtime.Step(0);
+        Check(calls == 1, "Input must not repeat.");
 
-        using var empty = new SceneRuntime(new Scene(), registry);
-        empty.Start();
-        empty.Step(1f / 60f);
-        Check(empty.Errors.Count == 0, "Zero handlers must do nothing without errors.");
+        var otherCalls = 0;
+        button.Clicked += _ => otherCalls++;
+        runtime.EnqueueButtonClick(item.Id);
+        runtime.Step(0);
+        Check(calls == 2 && otherCalls == 1, "Multiple subscriptions must be supported.");
+        button.Clicked -= Count;
+        runtime.EnqueueButtonClick(item.Id);
+        runtime.Step(0);
+        Check(calls == 2 && otherCalls == 2, "Unsubscription must remove only that callback.");
+        button.Interactable = false;
+        runtime.EnqueueButtonClick(item.Id);
+        runtime.Step(0);
+        Check(otherCalls == 2, "Disabled buttons must not notify.");
+        button.Interactable = true;
 
-        var badScene = new Scene();
-        var bad = badScene.AddEmpty();
-        bad.Rename("Bad");
-        bad.Attach(new Transform());
-        bad.Attach(new UiElement());
-        bad.Attach(new Button());
-        bad.Attach(new ThrowingHandler());
-        using var throwing = new SceneRuntime(badScene, registry);
-        throwing.Start();
-        throwing.EnqueueButtonClick(bad.Id);
-        throwing.Step(1f / 60f);
-        Check(!throwing.IsRunning && throwing.Errors.Count == 1 && throwing.Errors[0].MethodName == nameof(IUiButtonHandler.OnClick),
-            "Handler exceptions must stop safely and report OnClick.");
+        var serializer = new SceneSerializer(registry);
+        var saved = serializer.Serialize(runtime.Scene);
+        Check(!saved.Contains("Clicked"), "Subscriptions must not be serialized.");
+        foreach (var fresh in new[] { serializer.Clone(runtime.Scene), serializer.Deserialize(saved) })
+        {
+            ((IUiButtonHandler)fresh.Objects.Single().GetComponent<Button>()!).OnClick(new UiClickContext(fresh, fresh.Objects.Single()));
+        }
+        Check(otherCalls == 2 && calls == 2, "Save/load and Clone must not retain subscriptions.");
 
-        var removeScene = new Scene();
-        var removeItem = removeScene.AddEmpty();
-        removeItem.Rename("Remove");
-        removeItem.Attach(new Transform());
-        removeItem.Attach(new UiElement());
-        removeItem.Attach(new Button());
-        var remover = new SelfRemovingHandler();
-        removeItem.Attach(remover);
-        using var removing = new SceneRuntime(removeScene, registry);
+        using var replay = new SceneRuntime(scene, registry);
+        replay.Start();
+        replay.EnqueueButtonClick(source.Id);
+        replay.Step(0);
+        Check(replay.Errors.Count == 0 && authoringCalls == 0, "Replay without subscriptions must do nothing.");
+
+        button.Clicked += _ => throw new ApplicationException("click boom");
+        runtime.EnqueueButtonClick(item.Id);
+        runtime.EnqueueButtonClick(item.Id);
+        runtime.Step(0);
+        Check(!runtime.IsRunning && runtime.Errors.Count == 1 && runtime.Errors[0].ComponentType == typeof(Button)
+            && runtime.Errors[0].MethodName == nameof(IUiButtonHandler.OnClick) && otherCalls == 3,
+            "Callback exceptions must report Button.OnClick, stop safely, and discard remaining input.");
+
+        using var removing = new SceneRuntime(scene, registry);
+        var removed = removing.Scene.Objects.Single();
+        var removeCalls = 0;
+        removed.GetComponent<Button>()!.Clicked += context =>
+        {
+            removeCalls++;
+            context.Scene.Remove(context.ButtonObject);
+        };
         removing.Start();
-        removing.EnqueueButtonClick(removeItem.Id);
-        removing.Step(1f / 60f);
-        Check(removing.IsRunning && removing.Errors.Count == 0, "Deletion during clicks must follow runtime removal rules without errors.");
+        removing.EnqueueButtonClick(removed.Id);
+        removing.EnqueueButtonClick(removed.Id);
+        removing.Step(0);
+        Check(removeCalls == 1 && removing.IsRunning && removing.Scene.Objects.Count == 0,
+            "Deletion during a click must discard remaining input for that object.");
 
-        var stopScene = new Scene();
-        var stopItem = stopScene.AddEmpty();
-        stopItem.Rename("Stop");
-        stopItem.Attach(new Transform());
-        stopItem.Attach(new UiElement());
-        stopItem.Attach(new Button());
-        stopItem.Attach(new StoppingHandler());
-        var other = stopScene.AddEmpty();
-        other.Rename("Other");
-        other.Attach(new Transform());
-        other.Attach(new UiElement());
-        other.Attach(new Button());
-        var otherCounter = new ClickCounter();
-        other.Attach(otherCounter);
-        using var stopping = new SceneRuntime(stopScene, registry);
+        using var stopping = new SceneRuntime(scene, registry);
+        var stopped = stopping.Scene.Objects.Single();
+        var stopCalls = 0;
+        stopped.GetComponent<Button>()!.Clicked += _ => { stopCalls++; stopping.Stop(); };
         stopping.Start();
-        var stoppedOther = stopping.Scene.Objects.First(candidate => candidate.Name == "Other").GetComponent<ClickCounter>()!;
-        StoppingHandler.RequestStop = stopping.Stop;
-        try
-        {
-            stopping.EnqueueButtonClick(stopItem.Id);
-            stopping.EnqueueButtonClick(other.Id);
-            stopping.Step(1f / 60f);
-        }
-        finally
-        {
-            StoppingHandler.RequestStop = null;
-        }
-        Check(!stopping.IsRunning && stoppedOther.Calls == 0, "Stop during clicks must drop the remaining stale input.");
-
-        var disabledScene = new Scene();
-        var disabledItem = disabledScene.AddEmpty();
-        disabledItem.Rename("Disabled");
-        disabledItem.Attach(new Transform());
-        disabledItem.Attach(new UiElement());
-        disabledItem.Attach(new Button { Interactable = false });
-        var disabledCounter = new ClickCounter();
-        disabledItem.Attach(disabledCounter);
-        using var disabled = new SceneRuntime(disabledScene, registry);
-        disabled.Start();
-        var disabledRuntime = disabled.Scene.Objects.First(candidate => candidate.Name == "Disabled").GetComponent<ClickCounter>()!;
-        disabled.EnqueueButtonClick(disabledItem.Id);
-        disabled.Step(1f / 60f);
-        Check(disabledRuntime.Calls == 0 && disabled.IsRunning, "Interactable=false must be skipped without stopping.");
-
-        using var beforeStart = new SceneRuntime(scene, registry);
-        beforeStart.EnqueueButtonClick(item.Id);
-        beforeStart.Start();
-        beforeStart.Step(1f / 60f);
-        var beforeCounter = beforeStart.Scene.Objects.First(candidate => candidate.Name == "Click me").GetComponent<ClickCounter>()!;
-        Check(beforeCounter.Calls == 0, "Clicks queued before Start must never call editing or pre-Start handlers.");
+        stopping.EnqueueButtonClick(stopped.Id);
+        stopping.EnqueueButtonClick(stopped.Id);
+        stopping.Step(0);
+        stopping.EnqueueButtonClick(stopped.Id);
+        Check(!stopping.IsRunning && stopCalls == 1,
+            "Stop during a click must discard queued and subsequent input.");
     }
 }

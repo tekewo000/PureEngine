@@ -495,11 +495,7 @@ V3は共通の座標変換・矩形包含・クリップ包含を用意し、実
 
 #### ボタンとゲームコードの接続
 
-提案する契約は`IUiButtonHandler.OnClick(UiClickContext context)`。Buttonと同じSceneObjectに、この契約を実装したゲームcomponentを付ける。基底クラスは不要。1つのButtonに対応するhandlerは最大1個とし、複数なら完成Scene検証で拒否する。0個は操作しても処理のないボタンとして有効。保存するのは既存のcomponent typeIdとInspector値のみで、メソッド名やデリゲートは保存しない。
-
-contextは実行用SceneとButtonのSceneObjectを持つ一時的な呼出情報。handlerはInspectorで設定したObjectRefをcontext.Sceneで解決し、得点ラベルのText等へアクセスする。例えば得点用handlerをButtonへ付け、そのObjectRefにラベルのIDを設定する。クリック時にC#メソッド内で得点を増やし、解決したラベルのTextを変更する。これなら新しいScene注入サービスやStartの別経路を作らず、対象を明示してゲームコードを呼べる。
-
-V3では参照と型契約の保存・復元・Clone分離まで扱う。V5で実行用Sceneのhandlerだけを入力処理の境界で呼び、例外は既存Playのエラー停止へつなぐ。編集中に呼ばず、クリック中の削除予約・Stop後に残りの入力を発火しない。イベント一覧やInspectorのメソッド選択UIは初期範囲に含めない。
+Button自身が `IUiButtonHandler` を実装し、更新境界で受けたクリックを `Clicked` イベントへ渡す。接続と実行の仕様は[実装済みのV5前半](#v5前半game表示とbutton操作)、登録例と現在の接続範囲は[README](../README.md#game表示とbutton操作)を参照する。Text・ObjectRefによる対象参照は後続の計画であり、現時点のクリック接続には要求しない。
 
 #### 保存形式・移行・Inspector
 
@@ -521,7 +517,7 @@ V3-a〜eは作業単位の識別子。直近はV3-dの配置計算部分を先�
 | V3-b | version 2と参照値型 | v1→v2往復、親が後ろにある文書、同じIDでもClone先へ解決、順序保持、不正構造拒否、コード再読み込み失敗時の旧Scene保持 |
 | V3-c | 素材取込・サイドカー・索引 | ファイル対の移動、Project移動、重複／欠落／種別違い、取込失敗、パス脱出／リンク拒否、読取だけで書換しないこと |
 | V3-d | Transform＋UiElementとUiLayout、Image／Text／Button | 固定／Stretch／Pivotの数値例、親の回転と拡縮、表示領域／DPI、0寸法。後続の表示・クリップ規則は仕様確定後に追加 |
-| V3-e | 共通Inspector・クリック契約 | 参照の設定／解除と保存、組み込み型の再登録、handler複数拒否、Cloneしたボタンの対象が編集用ラベルへ解決されないこと |
+| V3-e | 共通Inspector・クリック契約 | 参照の設定／解除と保存、組み込み型の再登録、Clickedの複数購読・解除・Clone時の購読分離、Cloneしたボタンの対象が編集用ラベルへ解決されないこと |
 
 Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Checksは参照編集・未保存表示・再読み込みを確認する。C#実装時は既存`tools/code-quality.ps1 -Check`を実行する。設計文書を追加しただけでは、上記の実装・検証を完了扱いにしない。
 
@@ -559,7 +555,7 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 - Buttonは普通のComponent（`PureEngine.Core.Components.Button`、typeId `core.button`）とし、TransformとUiElementで領域を決める。見た目は同じオブジェクトのImageを使う。Avalonia.Controls.Buttonとの衝突を避けるためComponents名前空間に置く。`Interactable = true` を既定とし、Inspector編集・保存・復元・Cloneへ接続する。一時的な押下・ホバー・フォーカス状態はComponentに持たず、保存やCloneで引き継がない。Add Componentの検索（"button"で一致）・既存factory・重複防止を使い、Transform／UiElementの不足は既存の `UiComponentRequirements`／Inspector警告で知らせる。Imageは必須にしない。
 - 状態表示は保存済みの `Image.Color` を書き換えず、実効色の読み取りと重ね描きで行う。通常はそのまま、ホバー・押下・無効はそれぞれ白・黒・灰色の半透明矩形を重ね、キーボードフォーカスは紫の枠を描く。ImageのないButtonもヒット対象とし、フォーカス時は枠だけを描く。
 - 入力は配置計算・座標変換・Orderによる順序を描画と共有する（`SceneViewMath.SortForRender`／`HitTest`、`UiLayout`）。Gameにパン／ズームはなく、Scene Viewの視点は影響しない。親の回転・拡縮は逆行列で戻し、DPIは論理座標とGPUターゲット寸法の境界で一度だけ適用する。表示領域のクリップ（領域外は対象外）を考慮し、見た目と判定を一致させる。重なったButtonは手前（Order降順、同値は後方が手前）の1つだけが入力を受ける。左ボタンで押し始めたButton上で離したときだけ1回通知し、外で離した場合はキャンセルする。ポインターキャプチャを使い、フォーカス喪失・キャプチャ喪失・タブ切替・無効化・削除・Stopで押下状態を解除する。Tab／Shift+TabはOrder昇順（描画順の背→手前）で移動し、Enter／Spaceでも操作できる。キーボードの長押しリピートは抑止する。他の起動キーの解放やTab移動では再発火させず、ポインター押下中のキー起動は受け付けない。Tab候補から画面外・退化変換・描画失敗のButtonを除き、無効化・削除時の押下とフォーカスは更新後に解除する。`Interactable=false`・0サイズ・判定不能な変換は対象外にする。親Buttonの無効化だけで子Buttonを無効化しない。ImageのないButtonも操作でき、ButtonでないImageはGame入力を遮らない。未実装のVisible／ClipChildren等は考慮せず、実装済みとして扱わない。
-- ゲームコードとの接続は`IUiButtonHandler.OnClick(UiClickContext context)`を採用する。同じSceneObjectのhandlerを呼び、contextに実行用SceneとButtonのSceneObject（実行インスタンス）を渡す。handlerは0個なら何もしない。複数は検証エラーとして理由を表示し、実行を開始しない（準備時の `UiButtonValidation.Validate` と実行中の再検証で停止する）。メソッド名やデリゲートは保存せず、既存のComponent保存・生成経路を使う。入力は `SceneRuntime.Step` 内の更新境界（Start済みバッチの後・Updateの前）で処理し、Start前や編集中のhandlerを呼ばない。同じ更新内で動的に追加したhandler宛てのクリックは、次のStartバッチが済むまで繰り越す。Enqueueは実行中でなければ古い入力として捨てる。クリック中の削除・停止・例外は既存Runtimeの終了規則へ接続する。例外は `Errors` へ報告してConsoleへ転送し、安全に停止する。Stopや削除後に残った入力から古いhandlerを呼ばない（停止時はキューを破棄する）。
+- Button自身が `IUiButtonHandler.OnClick(UiClickContext context)` を実装し、`event Action<UiClickContext>? Clicked` を発火する。Runtimeは同じSceneObjectから別のhandlerを検索せず、Button自身へ入力を届ける。購読なしは何もしない。複数の購読は通常のC#イベントとして登録順に呼び、解除は `-=` を使う。イベントの購読・メソッド名・デリゲートは保存・Cloneせず、Playごとに実行用Buttonへ登録する。入力は `SceneRuntime.Step` 内のStart済みバッチの後・Updateの前で処理し、Start前や停止後のEnqueueは捨てる。購読先の初期化と解除は登録側が管理し、別オブジェクトの購読先が削除される場合はDestroy等で解除する。購読先のStart待ちや自動検出は行わない。クリック中のButton削除・Stopは残りの入力を捨てるが、実行中のイベント通知は通常どおり完了する。購読処理が例外を投げると後続の購読は呼ばず、`Button.OnClick` のエラーとしてConsoleへ報告して安全に停止する。contextには実行用SceneとButtonのSceneObjectを渡す。
 
 ## マルチプレイ・Steam：将来の構想
 

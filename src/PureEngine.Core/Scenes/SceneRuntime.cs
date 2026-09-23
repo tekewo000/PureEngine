@@ -84,7 +84,6 @@ public sealed class SceneRuntime : IDisposable
         Errors = _errors.AsReadOnly();
         try
         {
-            UiButtonValidation.Validate(Scene);
             foreach (var item in Scene.Objects)
             {
                 RegisterObject(item);
@@ -297,8 +296,8 @@ public sealed class SceneRuntime : IDisposable
         if (_updates.Count > updatesBefore && _updates.Count > 1) _updates.Sort(UpdateOrder);
     }
 
-    /// <summary>予約されたクリックを更新境界で同じSceneObjectのhandlerへ1回ずつ届ける。</summary>
-    /// <remarks>Start後のStep内でのみ呼ぶ。0個は何もせず、複数は検証エラーとして停止する。削除・停止後の残りは呼ばない。</remarks>
+    /// <summary>予約されたクリックを更新境界でButton自身へ1回ずつ届ける。</summary>
+    /// <remarks>Start後のStep内でのみ呼ぶ。購読なしは何もしない。削除・停止後の残りの入力は呼ばない。</remarks>
     private void DispatchButtonClicks()
     {
         if (_buttonClicks.Count == 0)
@@ -319,37 +318,15 @@ public sealed class SceneRuntime : IDisposable
             if (owner is null || owner.Removed)
                 continue;
             var item = owner.Item;
-            if (item.GetComponent<Components.Button>() is not { Interactable: true })
+            if (item.GetComponent<Components.Button>() is not { Interactable: true } button)
                 continue;
-            List<object> handlers = [];
-            foreach (var component in item.Components)
-            {
-                if (component is IUiButtonHandler)
-                    handlers.Add(component);
-            }
-            if (handlers.Count == 0)
-                continue;
-            if (handlers.Count > 1)
-            {
-                _errors.Add(new SceneRuntimeError(item.Id, item.Name, typeof(Components.Button),
-                    nameof(IUiButtonHandler.OnClick),
-                    new InvalidOperationException($"{item.Name}: Button has {handlers.Count} handlers, at most one is allowed.")));
-                _stopRequested = true;
-                continue;
-            }
-            // Attach during this frame joins the next Start batch, including handlers added by another click.
-            if (_pendingStarts.Any(entry => ReferenceEquals(entry.Component, handlers[0])))
-            {
-                _buttonClicks.Enqueue(id);
-                continue;
-            }
             try
             {
-                ((IUiButtonHandler)handlers[0]).OnClick(new UiClickContext(Scene, item));
+                ((IUiButtonHandler)button).OnClick(new UiClickContext(Scene, item));
             }
             catch (Exception error)
             {
-                _errors.Add(new SceneRuntimeError(item.Id, item.Name, handlers[0].GetType(),
+                _errors.Add(new SceneRuntimeError(item.Id, item.Name, button.GetType(),
                     nameof(IUiButtonHandler.OnClick), error));
                 _stopRequested = true;
             }

@@ -5,8 +5,13 @@ namespace PureEngine.Core.Components;
 /// 保存されるのは <see cref="Button.Interactable"/> だけ。一時的な押下・ホバー・フォーカス状態は持たない。
 /// Avalonia.Controls.Button との衝突を避けるため Components 名前空間に置く。typeId は core.button。
 /// </remarks>
-public sealed class Button
+public sealed class Button : IUiButtonHandler
 {
     [Inspector]
     public bool Interactable { get; set; } = true;
+
+    /// <summary>実行用インスタンスへ登録するクリック処理。保存・Cloneでは引き継がない。</summary>
+    public event Action<UiClickContext>? Clicked;
+
+    public void OnClick(UiClickContext context) => Clicked?.Invoke(context);
 }

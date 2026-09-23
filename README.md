@@ -34,7 +34,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
-- GameタブはPlay中の実行用Sceneを描く。自作C#の `IUiButtonHandler` を同じオブジェクトへ付けると、Buttonのクリック・Tab移動後のEnter／Spaceで呼ばれ、Consoleにログが出る。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。
+- GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -411,28 +411,23 @@ Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を
 
 Play中のGameタブに実行用Sceneを描き、Buttonを押すと自作C#が呼ばれてConsoleにログが出る。Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は今回の対象外。確定した仕様は[設計書](docs/EngineArchitecture.md#v5前半game表示とbutton操作)、検証状況は[実装計画](docs/ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
 
-操作手順：StuffsでEmptyを作る → Add Componentで `Transform`・`UiElement`・`Image`・`Button` を検索して付ける → 画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置と `Interactable` を整える → 下の自作C#例をProjectへ作って同じオブジェクトへアタッチする → 保存 → 開き直して同じ表示になることを確認 → Gameタブを開いてPlay → Buttonをクリック（またはTab移動後にEnter／Space） → Consoleに回数が増える → Stop → 再Playで初期状態になる。
+Stuffsで作ったオブジェクトへ `Transform`・`UiElement`・`Image`・`Button` を付け、Inspectorで配置と `Interactable` を設定する。クリック処理はButton自身の `Clicked` イベントへコードから登録する。専用のHandlerコンポーネントは不要。
 
-自作C#の最小例（クリック回数をConsoleへ出す）：
+実行用Sceneを持つ呼び出し側での接続例（`source` は編集用Scene、`registry` はComponent登録、`buttonId` は対象ID）：
 
 ```csharp
-using PureEngine.Core;
-
-namespace MyGame;
-
-public class ClickCounter : IUiButtonHandler
-{
-    private int _count;
-
-    public void OnClick(UiClickContext context)
-    {
-        _count++;
-        Log.Info($"Clicked {context.ButtonObject.Name} x{_count}");
-    }
-}
+using var runtime = new SceneRuntime(source, registry);
+var button = runtime.Scene.Objects.Single(item => item.Id == buttonId)
+    .GetComponent<PureEngine.Core.Components.Button>()!;
+var count = 0;
+button.Clicked += context => Log.Info($"Clicked {context.ButtonObject.Name} x{++count}");
+runtime.Start();
+// 入力側で runtime.EnqueueButtonClick(buttonId)、更新側で runtime.Step(dt) を呼ぶ。
 ```
+
+`PlaySession` を使う場合も `Prepare` 後の `session.Runtime.Scene` に対して登録する。購読は保存・Cloneされないので、Playごとに実行用インスタンスへ登録し直す。解除は `button.Clicked -= callback`。EditorのInspectorからメソッドを選ぶ機能や、ゲームComponentへ実行用Sceneを自動注入する機能は未実装であり、上の例は実行用Sceneを取得できる呼び出し側向け。以前の `IUiButtonHandler` 実装Componentは自動では呼ばれないため、`Clicked` への明示登録へ移行する。
 
 - `Button`（`core.button`）は同じオブジェクトの `Transform`・`UiElement` で領域を決め、見た目は同じオブジェクトの `Image` を使う。`Interactable` だけを保存し、押下・ホバー・フォーカスは保存しない。
 - 通常・ホバー・押下・無効・キーボードフォーカスを重ね表示で区別する。保存済みの `Image.Color` は書き換えない。
 - 重なったButtonは手前の1つだけが反応する。左ボタンで押したButton上で左ボタンを離したときだけ1回通知し、外で離すとキャンセルする。`Interactable=false`・0サイズ・判定不能な変換は対象外。親の無効化は子へ波及しない。
-- 同じオブジェクトのhandlerは最大1個（0個は無反応、複数は理由を表示してPlayを開始しない）。クリックは更新境界で届き、例外はConsoleへ報告して安全に停止する。
+- 購読なしは無反応、複数の購読は登録順に呼ばれる。クリックは更新境界で届き、例外はConsoleへ報告して安全に停止する。

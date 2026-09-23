@@ -1,6 +1,6 @@
 namespace PureEngine.Core;
 
-/// <summary>Buttonと同じSceneObjectに付けてクリック処理を受ける契約。基底クラスは不要。</summary>
+/// <summary>Button自身が実装するクリック入力の契約。</summary>
 public interface IUiButtonHandler
 {
     void OnClick(UiClickContext context);

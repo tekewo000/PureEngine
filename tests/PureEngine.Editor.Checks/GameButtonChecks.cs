@@ -82,11 +82,24 @@ internal static class GameButtonChecks
         Dispatcher.UIThread.RunJobs();
     }
 
+    private static void StartPlayWithCallbacks(MainWindow editor)
+    {
+        Call(editor, "StartPlay");
+        var runtime = Field<PlaySession>(editor, "_play").Runtime;
+        foreach (var item in runtime.Scene.Objects)
+        {
+            if (item.GetComponent<PureEngine.Core.Components.Button>() is not { } button) continue;
+            if (item.GetComponent<GameClickCounter>() is { } counter) button.Clicked += counter.OnClick;
+            if (item.GetComponent<GameThrower>() is not null) button.Clicked += GameThrower.OnClick;
+            if (item.GetComponent<GameRemover>() is not null) button.Clicked += GameRemover.OnClick;
+        }
+    }
+
     private static void EnsureHandlers(MainWindow editor)
     {
         var components = Field<ProjectComponents>(editor, "_components");
         foreach (var (type, id) in new[] { (typeof(GameClickCounter), "checks.game-click"), (typeof(GameThrower), "checks.game-throw"),
-            (typeof(GameRemover), "checks.game-remove"), (typeof(GameStopper), "checks.game-stop") })
+            (typeof(GameRemover), "checks.game-remove") })
         {
             if (!components.Registry.Ids.Contains(id))
                 components.Registry.RegisterType(type, id);
@@ -309,7 +322,7 @@ internal static class GameButtonChecks
             var item = AddCard(editor, scene, "Click me", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true, true);
             Check(owner.TryAttach(item, typeof(GameClickCounter), services.Factory), "Handler must attach beside the Button.");
             Dispatcher.UIThread.RunJobs();
-            Call(editor, "StartPlay");
+            StartPlayWithCallbacks(editor);
             StopTimer(editor);
             Check((bool)Call(editor, "get_IsPlaying")!, "Play is required for Game input.");
             ShowGameTab(editor);
@@ -408,7 +421,7 @@ internal static class GameButtonChecks
             cover.GetComponent<global::Image>()!.Order = 100;
             Dispatcher.UIThread.RunJobs();
 
-            Call(editor, "StartPlay");
+            StartPlayWithCallbacks(editor);
             StopTimer(editor);
             ShowGameTab(editor);
             Check((bool)Call(editor, "TryGamePressForTest", new Vector2(50, 40))!, "Overlap press must start.");
@@ -482,7 +495,7 @@ internal static class GameButtonChecks
             var off = AddCard(editor, scene, "Off", new Vector3(10, 140, 0), new Vector2(100, 40), 9, false, true);
             owner.TryAttach(off, typeof(GameClickCounter), services.Factory);
             Dispatcher.UIThread.RunJobs();
-            Call(editor, "StartPlay");
+            StartPlayWithCallbacks(editor);
             StopTimer(editor);
             ShowGameTab(editor);
             Control<Grid>(editor, "GameViewport").Focus();
@@ -537,7 +550,7 @@ internal static class GameButtonChecks
             EnsureHandlers(editor);
             var item = AddCard(editor, EditScene(editor), "Input", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true, false);
             item.Attach(new GameClickCounter());
-            Call(editor, "StartPlay");
+            StartPlayWithCallbacks(editor);
             StopTimer(editor);
             ShowGameTab(editor);
             var game = Control<Grid>(editor, "GameViewport");
@@ -633,7 +646,7 @@ internal static class GameButtonChecks
             var total = 0;
             for (var i = 0; i < 20; i++)
             {
-                Call(editor, "StartPlay");
+                StartPlayWithCallbacks(editor);
                 StopTimer(editor);
                 ShowGameTab(editor);
                 Check(Field<Guid?>(editor, "GameFocusedForTest") is null && Field<Guid?>(editor, "GamePressedForTest") is null,
@@ -657,7 +670,7 @@ internal static class GameButtonChecks
             owner.TryAttach(bad, typeof(PureEngine.Core.Components.Button), services.Factory);
             owner.TryAttach(bad, typeof(GameThrower), services.Factory);
             Dispatcher.UIThread.RunJobs();
-            Call(editor, "StartPlay");
+            StartPlayWithCallbacks(editor);
             StopTimer(editor);
             ShowGameTab(editor);
             Check((bool)Call(editor, "TryGamePressForTest", new Vector2(50, 40))!, "Error-case press must start.");
@@ -683,7 +696,7 @@ internal static class GameButtonChecks
             owner.TryAttach(remover, typeof(PureEngine.Core.Components.Button), services.Factory);
             owner.TryAttach(remover, typeof(GameRemover), services.Factory);
             Dispatcher.UIThread.RunJobs();
-            Call(editor, "StartPlay");
+            StartPlayWithCallbacks(editor);
             StopTimer(editor);
             ShowGameTab(editor);
             Check((bool)Call(editor, "TryGamePressForTest", new Vector2(50, 120))!, "Remover press must start.");
@@ -699,7 +712,7 @@ internal static class GameButtonChecks
         }
     }
 
-    public sealed class GameClickCounter : IUiButtonHandler
+    public sealed class GameClickCounter
     {
         public static void Reset() { }
         public int Calls;
@@ -712,18 +725,14 @@ internal static class GameButtonChecks
         }
     }
 
-    public sealed class GameThrower : IUiButtonHandler
+    public sealed class GameThrower
     {
-        public void OnClick(UiClickContext _) => throw new ApplicationException("click boom");
+        public static void OnClick(UiClickContext _) => throw new ApplicationException("click boom");
     }
 
-    public sealed class GameRemover : IUiButtonHandler
+    public sealed class GameRemover
     {
-        public void OnClick(UiClickContext context) => context.Scene.Remove(context.ButtonObject);
+        public static void OnClick(UiClickContext context) => context.Scene.Remove(context.ButtonObject);
     }
 
-    public sealed class GameStopper : IUiButtonHandler
-    {
-        public void OnClick(UiClickContext _) { }
-    }
 }
