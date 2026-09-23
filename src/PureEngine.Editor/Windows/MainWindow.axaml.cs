@@ -764,6 +764,39 @@ public partial class MainWindow : Window
         SelectSceneObject(FindHierarchyNode(e.Source as Avalonia.Visual)?.Ref, focus: true);
     }
 
+    private void OnAddUiImage(object? sender, RoutedEventArgs e) =>
+        AddUiObject("Image", [typeof(Core.Transform), typeof(UiElement), typeof(global::Image)]);
+
+    private void OnAddUiButton(object? sender, RoutedEventArgs e) =>
+        AddUiObject("Button", [typeof(Core.Transform), typeof(UiElement), typeof(global::Image), typeof(Core.Components.Button)]);
+
+    /// <summary>現在の親選択とComponent生成経路を使い、必要なUI構成を揃えて作成する。</summary>
+    private void AddUiObject(string baseName, Type[] componentTypes)
+    {
+        if (RejectWhenPlaying("Add")) return;
+        var parent = GetSelectedSceneObject();
+        var item = _editScene.Current.AddNamed(baseName);
+        try
+        {
+            foreach (var type in componentTypes)
+                if (!_components.TryAttach(item, type, EditSession.Factory))
+                    throw new InvalidOperationException($"Could not attach {type.Name}.");
+            if (parent is not null) item.SetParent(parent);
+        }
+        catch (Exception error)
+        {
+            _editScene.Current.Remove(item);
+            try { ComponentAssets.DisposeComponents(item.Components); }
+            catch (Exception cleanupError) { Log.Engine.Error(cleanupError); }
+            SetFileStatus($"Could not create UI: {error.GetBaseException().Message}", true);
+            return;
+        }
+        MarkSceneChanged();
+        RefreshHierarchy(item.Id, expandId: parent?.Id);
+        RefreshObjectInspector();
+        SceneObjects.Focus();
+    }
+
     private void OnAddObject(object? sender, RoutedEventArgs e)
     {
         if (RejectWhenPlaying("Add")) return;

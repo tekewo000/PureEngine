@@ -22,6 +22,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - Stuffsは親子をツリー表示する。子は親の下にインデントして並び、折りたたみ・展開ができる。名前の変更はツリーへ即時反映する。
 - Stuffsの行をドラッグ＆ドロップして親子付けと並べ替えができる。見出し行の中央50%へ落とすとその子に、上端／下端の25%へ落とすと青線の示す前後に移動する。展開済みの親も見出し行を基準に判定し、青線で行の高さは変わらない。折りたたまれた親の中央に500ms留まると自動展開する。空の余白へ落とすとルートに戻る。自分自身・自分の子孫へのドロップとPlay中の付け替えは受け付けない。
 - Stuffsの右クリックメニュー「Add Empty」は選択中があればその子として追加し、なければルートに追加する。追加後は親を展開して追加分を選択する。
+- 同じメニューの「UI → Image」はTransform・UiElement・Image、「UI → Button」はさらにButtonを付けて作成する。親への追加と選択はAdd Emptyと同じで、名前は連番で重複を避ける。Spriteは作成後にInspectorで指定する。Play中は作成できない。
 - Inspectorの「Name」で名前を編集する。ツリー表示へ即時反映し、未保存になる。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。削除後は兄弟内の次の対象へ選択を移す。
 - Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
