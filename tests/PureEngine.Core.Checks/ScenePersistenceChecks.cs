@@ -25,7 +25,8 @@ static class ScenePersistenceChecks
         var serializer = new SceneSerializer(registry);
         var scene = new Scene();
         var item = scene.AddEmpty();
-        item.Rename("Player: #1");
+        // Preserve Japanese object-name and YAML punctuation round-trip coverage.
+        item.Rename("\u30D7\u30EC\u30A4\u30E4\u30FC: #1");
         var sample = new PersistenceProbe { Title = "001", Count = -25, Seconds = 0.125f, Enabled = true, Hidden = 123 };
         item.Attach(sample);
         scene.AddEmpty().Rename(item.Name);

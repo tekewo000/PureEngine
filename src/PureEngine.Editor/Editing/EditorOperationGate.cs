@@ -4,7 +4,7 @@ namespace PureEngine.Editor;
 /// Decides conflicts between save, play, reload, and file operations without referencing UI controls.
 /// Passes view-derived state (playing, file-busy, input errors, unsaved changes) as bool values.
 /// MainWindow aggregates <c>_invalidFields.Count &gt; 0 || NameError.IsVisible</c> and similar state
-/// <c>hasInputErrors</c> and only handles displaying the resulting reason.
+/// into <c>hasInputErrors</c> and only handles displaying the resulting reason.
 /// Applies the same constraints when adopting async compilation results.
 /// </summary>
 public static class EditorOperationGate

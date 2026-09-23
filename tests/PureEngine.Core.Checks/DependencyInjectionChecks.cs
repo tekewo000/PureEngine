@@ -2,7 +2,7 @@ using PureEngine.Core;
 using PureEngine.Editor;
 
 /// <summary>
-/// Verifies Core factory support for constructor injection without MS DI. Core only knows Func<Type, object>.
+/// Verifies Core factory support for constructor injection without MS DI. Core only knows <see cref="Func{T, TResult}"/>.
 /// </summary>
 static class DependencyInjectionChecks
 {

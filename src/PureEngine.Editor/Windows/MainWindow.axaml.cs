@@ -265,7 +265,7 @@ public partial class MainWindow : Window
     private static readonly SolidColorBrush CollapseToggleWashBrush = new(Color.Parse("#2E2A4A"));
 
     /// <summary>Collapse toggle shared by Component cards and collection editors. Keeps state in <paramref name="store"/>.</summary>
-    /// <remarks>Uses a Button base. ToggleButton would paint accent directly on template parts in its Fluent theme checked state,</remarks>
+    /// <remarks>Uses a Button base. ToggleButton would paint accent directly on template parts in its Fluent theme checked state,
     /// which the transparent style cannot fully remove.</remarks>
     private static Button BuildCollapseToggle(string automationName, string collapseKey, Dictionary<string, bool> store, Action<bool> apply)
     {
