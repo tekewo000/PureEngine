@@ -53,7 +53,8 @@ internal static class SceneViewEditorChecks
         SaveClonePreserveZ();
         HierarchyTreeAndDrop();
         HierarchyRoutedDrag();
-        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, Order save/clone/front pick, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, and save/clone.");
+        BareParentGizmo();
+        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, Order save/clone/front pick, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, bare-parent gizmo, and save/clone.");
     }
 
     private static MainWindow CreateEditor()
@@ -640,6 +641,65 @@ internal static class SceneViewEditorChecks
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         static WeakReference buildWeakNode(Scene scene) => new(StuffsHierarchy.Build(scene)[0]);
+    }
+
+    private static void BareParentGizmo()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            var scene = EditScene(editor);
+            var parent = scene.AddEmpty();
+            parent.Rename("Group");
+            parent.Attach(new Transform { LocalPosition = new Vector3(100, 50, 3) });
+            var child = AddCard(editor, scene, new Vector3(10, 20, 0));
+            child.SetParent(parent);
+            Call(editor, "SyncHierarchyForTest");
+            Select(editor, parent);
+            Dispatcher.UIThread.RunJobs();
+            EditStore(editor).MarkClean();
+
+            // Stuffs selection of a Transform-only parent must expose a gizmo frame (no rect, pivot + axes).
+            var tryFrame = typeof(MainWindow).GetMethod("TrySceneFrame", AnyInstance)!;
+            var viewport = new Vector2(400, 200);
+            object?[] parentFrame = [parent, viewport, null, Vector2.Zero, Vector2.UnitX, Vector2.UnitY, false];
+            Check((bool)tryFrame.Invoke(editor, parentFrame)! && (bool)parentFrame[6]!
+                && ((Vector2[])parentFrame[2]!).Length == 0 && (Vector2)parentFrame[3]! == new Vector2(100, 50),
+                "Transform-only parent must expose a gizmo pivot without a selection rect.");
+            object?[] childFrame = [child, viewport, null, Vector2.Zero, Vector2.UnitX, Vector2.UnitY, false];
+            Check((bool)tryFrame.Invoke(editor, childFrame)! && ((Vector2[])childFrame[2]!).Length == 4,
+                "UI child must keep its four-corner selection frame.");
+
+            // The gizmo drag path must move the parent and carry the child layout along.
+            var press = new Vector2(200, 100);
+            Check((bool)Call(editor, "TryBeginMoveForTest", parent, SceneViewMath.GizmoKind.XY, press)!, "Transform-only parent must begin a gizmo move.");
+            var movedView = press + new Vector2(10, 15);
+            Check((bool)Call(editor, "TryUpdateMoveForTest", movedView)!, "Bare parent move must stay active.");
+            var transform = parent.GetComponent<Transform>()!;
+            Check(transform.LocalPosition == new Vector3(110, 65, 3),
+                $"Bare XY move must preserve Z, got {transform.LocalPosition}.");
+            Check((bool)Call(editor, "TryConfirmMoveForTest", movedView)!, "Bare confirm must report a change.");
+            Check(EditStore(editor).IsDirty, "Confirmed bare moves must dirty the scene.");
+            var entries = SceneViewMath.EnumerateLayouts(scene, viewport);
+            var childEntry = entries.Single(entry => ReferenceEquals(entry.Object, child));
+            Check(SceneViewMath.TryGetSceneCorners(childEntry, out var corners) && corners[0] == new Vector2(120, 85),
+                $"Child layout must follow the moved parent, got {corners[0]}.");
+
+            // Ancestor edits mid-drag cancel instead of landing on a stale layout.
+            EditStore(editor).MarkClean();
+            Check((bool)Call(editor, "TryBeginMoveForTest", parent, SceneViewMath.GizmoKind.X, press)!, "Second bare move must begin.");
+            Call(editor, "TryUpdateMoveForTest", press + new Vector2(7, 9));
+            transform.LocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 4);
+            Check(!(bool)Call(editor, "TryUpdateMoveForTest", press + new Vector2(8, 9))!,
+                "Rotation edits mid-drag must cancel the bare move.");
+            Check(transform.LocalPosition == new Vector3(110, 65, 3), "Cancelled bare move must restore the start position.");
+            Check(!EditStore(editor).IsDirty, "Cancelled bare move must not dirty.");
+            Call(editor, "CancelSceneViewDrag");
+        }
+        finally
+        {
+            CloseEditor(editor);
+        }
     }
 
     private static byte[] CreatePng(SKColor color)

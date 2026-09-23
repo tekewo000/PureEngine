@@ -86,7 +86,37 @@ internal static class EditPreviewChecks
         Check(diagnostics.Any(entry => entry.ObjectId == broken.Id), "Missing Transform/UiElement must be diagnosed.");
 
         OrderDraws(images);
+        BareParentLayouts(images);
         Console.WriteLine("PASS: edit preview reflects add/remove/placement/sprite/color, Order front-back/same-order/parent layout, diagnoses gaps, and skips lifecycle.");
+    }
+
+    private static void BareParentLayouts(IReadOnlyDictionary<Guid, byte[]> images)
+    {
+        var scene = new Scene();
+        var parent = scene.AddEmpty();
+        parent.Attach(new Transform { LocalPosition = new Vector3(100, 50, 0) });
+        var child = scene.AddEmpty();
+        child.SetParent(parent);
+        child.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
+        child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(40, 30) });
+        child.Attach(new global::Image { Sprite = new Sprite(images.Keys.First()) });
+        var viewport = new Vector2(400, 200);
+        using var draw = new DrawList();
+        Check(EditSceneRenderer.Build(draw, scene, images, viewport).Count == 0
+            && draw.Vertices[0].Position == new Vector2(110, 70), "Edit rendering must propagate bare parents without diagnostics.");
+        Check(GameSceneRenderer.Build(draw, scene, images, viewport).Count == 0
+            && draw.Vertices[0].Position == new Vector2(110, 70), "Game rendering must propagate bare parents without diagnostics.");
+
+        parent.Attach(new UiElement { SizeDelta = new Vector2(-1, 30) });
+        Check(!SceneViewMath.TryGetTransformFrame(scene, parent, viewport, out _, out _, out _),
+            "An invalid UI parent must not fall back to a bare transform frame.");
+        var entry = SceneViewMath.EnumerateLayouts(scene, viewport).Single();
+        Check(SceneViewMath.TryGetSceneCorners(entry, out var corners) && corners[0] == new Vector2(10, 20),
+            "Children of invalid UI parents must inherit the preceding valid frame.");
+        Check(EditSceneRenderer.Build(draw, scene, images, viewport).Count == 1 && draw.Vertices[0].Position == corners[0],
+            "Edit rendering and selection must agree below invalid UI parents.");
+        Check(GameSceneRenderer.Build(draw, scene, images, viewport).Count == 1 && draw.Vertices[0].Position == corners[0],
+            "Game rendering and hit testing must agree below invalid UI parents.");
     }
 
     private static void OrderDraws(IReadOnlyDictionary<Guid, byte[]> images)

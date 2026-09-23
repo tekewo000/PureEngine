@@ -62,18 +62,31 @@ public static class GameSceneRenderer
     {
         var size = parentSize;
         var world = parentWorld;
-        try
+        var transform = item.GetComponent<Transform>();
+        var element = item.GetComponent<UiElement>();
+        if (transform is not null && element is not null)
         {
-            var transform = item.GetComponent<Transform>()
-                ?? throw new InvalidOperationException($"{item.Name}: Transform is required.");
-            var element = item.GetComponent<UiElement>()
-                ?? throw new InvalidOperationException($"{item.Name}: UiElement is required.");
-            (size, world) = UiLayout.Calculate(parentSize, parentWorld, transform, element);
-            collected.Add(new SceneViewMath.LayoutEntry(item, size, world, parentSize, parentWorld));
+            try
+            {
+                (size, world) = UiLayout.Calculate(parentSize, parentWorld, transform, element);
+                collected.Add(new SceneViewMath.LayoutEntry(item, size, world, parentSize, parentWorld));
+            }
+            catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
+            {
+                diagnostics.Add(new Diagnostic(item.Id, item.Name, error.GetBaseException().Message));
+            }
         }
-        catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
+        else if (transform is not null)
         {
-            diagnostics.Add(new Diagnostic(item.Id, item.Name, error.GetBaseException().Message));
+            // Transformのみのグループノードは描画対象ではないが、子の配置に変換を受け渡す。
+            if (!SceneViewMath.TryPropagateBareTransform(parentWorld, transform, out var bareWorld))
+                diagnostics.Add(new Diagnostic(item.Id, item.Name, $"{item.Name}: Transform produced a non-finite matrix."));
+            else
+                world = bareWorld;
+        }
+        else
+        {
+            diagnostics.Add(new Diagnostic(item.Id, item.Name, $"{item.Name}: Transform is required."));
         }
         foreach (var child in item.Children)
             CollectRecursive(child, size, world, collected, diagnostics);
