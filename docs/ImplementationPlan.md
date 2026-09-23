@@ -90,7 +90,7 @@
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
-| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・Sprite・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Components/InspectorValueTypes.cs) |
+| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・Sprite・自作クラス・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Components/InspectorValueTypes.cs) |
 | UI部品の追加 | InspectorのAdd Componentから当該Projectの登録型を検索し、既存のアタッチ処理・factoryで追加。重複防止・削除・未保存・Play禁止を維持。`Transform`・`UiElement`・`Image` は組み込み登録 | [ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.ComponentAdd](../src/PureEngine.Editor/Windows/MainWindow.ComponentAdd.cs) |
 | UI組み合わせ診断 | `Image` に必要な `Transform`／`UiElement` の不足を通知し、揃うと解除する。自動追加はしない | [UiComponentRequirements](../src/PureEngine.Core/Components/UiComponentRequirements.cs)、[MainWindow.UiDiagnostics](../src/PureEngine.Editor/Windows/MainWindow.UiDiagnostics.cs) |
 | 画像素材 | `Assets/` への取り込み、隣接登録情報、Project Open・Refreshでの索引再走査、Sprite欄の選択・None解除、欠落IDの保持と診断 | [ProjectAssets](../src/PureEngine.Editor/Assets/ProjectAssets.cs)、[Sprite](../src/PureEngine.Core/Assets/Sprite.cs) |
@@ -116,7 +116,7 @@
 - 親子関係・兄弟順・Sprite参照・描画順（`Order`）・Buttonの`Interactable`の保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・Text・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
-- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
+- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。自作クラスは単体・配列・リスト要素・辞書値・入れ子で対応する。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
 - ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで実装済みで、Text・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
@@ -544,3 +544,12 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 - Button自身に `IUiButtonHandler` と `Clicked` を実装し、同一オブジェクトのhandler検索と個数検証を削除した。接続仕様は[設計書](EngineArchitecture.md#v5前半game表示とbutton操作)、移行・登録例は[README](../README.md#game表示とbutton操作)を参照する。
 - Coreチェックを購読・解除・複数購読・Clone／保存分離・再Play・例外／削除／停止の回帰確認へ更新。Editorチェックは実行用Buttonへ明示登録して、既存の入力経路を確認する。
 - ローカルの `./tools/code-quality.ps1 -Check`（提案レベル解析・警告をエラー扱いにしたビルド・Core／Editorチェック）を通常の出力先で通過。実画面・実GPU・CIは未確認。
+
+### 自作クラスのInspector対応（2026-09-23）
+
+- `public AClass Foo { get; set; }` のような自作クラスをInspector値として扱う。条件は参照型のclass（`string`・配列・`List`・`Dictionary`・`Nullable`・enum・`Transform`・`Sprite`を除く）、抽象・ジェネリック・struct・`object`自体を除き、publicな引数なしコンストラクタを持ち、すべての `[Inspector]` メンバーが対応型であること。再帰（自分を直接・間接に含む）は未対応。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する。
+- 単体・`T[]`・`List<T>`・`Dictionary<string, TValue>`・入れ子の自作クラスで同じ変換を使う。YAMLではメンバー名のマッピング、nullは `null`。欠けた項目はクラスの初期値を維持し、未知の項目は読み飛ばす（ベクトル・Transform・Sprite内部は従来どおり厳格）。`Clone` では深く複製する。対応型の正本は[設計書](EngineArchitecture.md)のInspector節とYAML節。
+- Editorは入れ子カード（Null表示＋Create／Set Null＋折りたたみ＋`親.子`のAutomation名）で編集する。単体・配列／リスト要素・辞書値に対応し、無効表示・保存拒否・Esc復元・未保存化は既存の仕組みに合わせる。
+- 追加分（Core・InspectorValueChecks）：自作クラスの単体・二重入れ子・配列・リスト・辞書のYAML往復とClone分離、null・初期値維持・未知項目の読み飛ばし、再帰・抽象・ジェネリック・struct・引数なしコンストラクタなし・派生型混入の拒否を確認。
+- 追加分（Editor・InspectorValueEditorChecks）：入れ子エディタのUnsupported表示なし、Create→入れ子編集→Set Null、二重入れ子・折りたたみ、リスト・辞書のAdd／Removeと値編集、無効表示・Esc復元・未保存化をHeadlessで確認。
+- ローカルの形式検証（提案レベル解析）・警告をエラー扱いにしたビルド・Coreチェック全件を通過。EditorはInspector系3スイート（Priority・InspectorValue・UiImage）を単独実行で通過。Editor全件は `ConsoleChecks.CloseReopen` の `First window must intake` で中断するが、変更なしの pristine な main でも同一箇所で失敗する環境依存の既存不具合であり、本差分の影響ではない。実画面・実GPU・CIは未確認。

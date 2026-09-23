@@ -1,15 +1,21 @@
 using System.Collections;
 using System.Globalization;
 using System.Numerics;
+using System.Reflection;
 
 namespace PureEngine.Core;
 
-/// <summary>Inspector・保存対象の値型。scalar・enum・ベクトル・Transform・配列・List・辞書を扱う。</summary>
+/// <summary>Inspector・保存対象の値型。scalar・enum・ベクトル・Transform・Sprite・配列・List・辞書・入れ子の自作クラスを扱う。</summary>
 public static class InspectorValueTypes
 {
     public static bool IsSupportedType(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
+        return IsSupportedTypeCore(type, []);
+    }
+
+    private static bool IsSupportedTypeCore(Type type, HashSet<Type> chain)
+    {
         if (type == typeof(string))
             return true;
         if (type == typeof(int) || type == typeof(float) || type == typeof(double) || type == typeof(bool))
@@ -28,15 +34,15 @@ public static class InspectorValueTypes
                 || underlying == typeof(Vector2) || underlying == typeof(Vector3) || underlying == typeof(Vector4) || underlying == typeof(Quaternion)
                 || underlying.IsEnum;
         if (type.IsArray)
-            return type.GetArrayRank() == 1 && IsSupportedElement(type.GetElementType()!);
+            return type.GetArrayRank() == 1 && IsSupportedElementCore(type.GetElementType()!, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
-            return IsSupportedElement(type.GetGenericArguments()[0]);
+            return IsSupportedElementCore(type.GetGenericArguments()[0], chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
         {
             var args = type.GetGenericArguments();
-            return args[0] == typeof(string) && IsSupportedElement(args[1]);
+            return args[0] == typeof(string) && IsSupportedElementCore(args[1], chain);
         }
-        return false;
+        return IsCustomInspectorObjectCore(type, chain);
     }
 
     public static void ValidateType(Type type)
@@ -46,7 +52,7 @@ public static class InspectorValueTypes
             throw new InvalidDataException($"Unsupported Inspector value type: {type.FullName}");
     }
 
-    private static bool IsSupportedElement(Type type)
+    private static bool IsSupportedElementCore(Type type, HashSet<Type> chain)
     {
         if (type == typeof(string))
             return true;
@@ -62,7 +68,77 @@ public static class InspectorValueTypes
         if (underlying is not null)
             return underlying == typeof(int) || underlying == typeof(float) || underlying == typeof(double) || underlying == typeof(bool)
                 || underlying.IsEnum;
-        return false;
+        return IsCustomInspectorObjectCore(type, chain);
+    }
+
+    /// <summary>
+    /// 組み込み変換ではなく <c>[Inspector]</c> メンバーの入れ子として扱う自作クラスかどうか。
+    /// Editorはこの判定で入れ子エディタを出す。派生型の代入は扱わず、宣言型と実行時型の一致を要求する。
+    /// </summary>
+    /// <remarks>
+    /// 条件：参照型のclass（string・配列・List・Dictionary・Nullable・enum・Transform・Spriteを除く）、
+    /// 抽象・ジェネリック・struct・object自体を除き、publicな引数なしコンストラクタを持ち、
+    /// すべての <c>[Inspector]</c> メンバーが対応型であること。再帰（自分を直接・間接に含む）は未対応。
+    /// </remarks>
+    public static bool IsCustomInspectorObject(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return IsCustomInspectorObjectCore(type, []);
+    }
+
+    private static bool IsCustomInspectorObjectCore(Type type, HashSet<Type> chain)
+    {
+        if (!IsCustomObjectShape(type))
+            return false;
+        if (!chain.Add(type))
+            return false; // 自分を含む再帰型はYAML・Clone・Inspectorのいずれでも有限に扱えない。
+        try
+        {
+            foreach (var member in ComponentSchema.GetInspectorMembers(type))
+            {
+                if (!IsSupportedTypeCore(MemberType(member), chain))
+                    return false;
+            }
+            return true;
+        }
+        finally
+        {
+            chain.Remove(type);
+        }
+    }
+
+    /// <summary>完全な対応判定なしで、自作クラスの形だけを見る。変換本体の分岐用。検証は呼び出し側が行う。</summary>
+    private static bool IsCustomObjectShape(Type type)
+    {
+        if (type == typeof(object) || type == typeof(string))
+            return false;
+        if (!type.IsClass || type.IsAbstract || type.IsValueType || type.IsEnum)
+            return false;
+        if (type.IsArray || type.IsGenericType)
+            return false;
+        if (type == typeof(Transform) || type == typeof(Sprite))
+            return false;
+        return type.GetConstructor(Type.EmptyTypes) is not null;
+    }
+
+    private static Type MemberType(MemberInfo member) => member is FieldInfo field
+        ? field.FieldType : ((PropertyInfo)member).PropertyType;
+
+    private static object? GetObjectMember(object owner, MemberInfo member) => member switch
+    {
+        FieldInfo field => field.GetValue(owner),
+        PropertyInfo property => property.GetValue(owner),
+        _ => throw new NotSupportedException($"Unsupported member: {member.Name}"),
+    };
+
+    private static void SetObjectMember(object owner, MemberInfo member, object? value)
+    {
+        switch (member)
+        {
+            case FieldInfo field: field.SetValue(owner, value); break;
+            case PropertyInfo property: property.SetValue(owner, value); break;
+            default: throw new NotSupportedException($"Unsupported member: {member.Name}");
+        }
     }
 
     /// <summary>Capture用にYAMLへ安定して書ける形へ変換する。参照型は深く複製する。</summary>
@@ -70,6 +146,11 @@ public static class InspectorValueTypes
     {
         ArgumentNullException.ThrowIfNull(type);
         ValidateType(type);
+        return ToStorableCore(value, type, []);
+    }
+
+    private static object? ToStorableCore(object? value, Type type, List<object> seen)
+    {
         if (value is null)
         {
             if (type == typeof(string) || type == typeof(Transform) || type.IsArray
@@ -80,7 +161,7 @@ public static class InspectorValueTypes
         }
         var nullableUnderlying = Nullable.GetUnderlyingType(type);
         if (nullableUnderlying is not null)
-            return ToStorable(value, nullableUnderlying);
+            return ToStorableCore(value, nullableUnderlying, seen);
         if (type == typeof(string))
         {
             if (value is not string)
@@ -159,9 +240,9 @@ public static class InspectorValueTypes
                 throw new InvalidDataException($"Invalid Transform value: {value.GetType().FullName}.");
             return new Dictionary<string, object?>
             {
-                ["LocalPosition"] = ToStorable(transform.LocalPosition, typeof(Vector3)),
-                ["LocalRotation"] = ToStorable(transform.LocalRotation, typeof(Quaternion)),
-                ["LocalScale"] = ToStorable(transform.LocalScale, typeof(Vector3)),
+                ["LocalPosition"] = ToStorableCore(transform.LocalPosition, typeof(Vector3), seen),
+                ["LocalRotation"] = ToStorableCore(transform.LocalRotation, typeof(Quaternion), seen),
+                ["LocalScale"] = ToStorableCore(transform.LocalScale, typeof(Vector3), seen),
             };
         }
         if (type == typeof(Sprite))
@@ -190,7 +271,7 @@ public static class InspectorValueTypes
             var array = (Array)value;
             var storable = new List<object?>(array.Length);
             foreach (var element in array)
-                storable.Add(ToStorable(element, elementType));
+                storable.Add(ToStorableCore(element, elementType, seen));
             return storable;
         }
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
@@ -200,7 +281,7 @@ public static class InspectorValueTypes
                 throw new InvalidDataException($"Invalid List value: {value.GetType().FullName}.");
             var storable = new List<object?>();
             foreach (var element in (IEnumerable)value)
-                storable.Add(ToStorable(element, elementType));
+                storable.Add(ToStorableCore(element, elementType, seen));
             return storable;
         }
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
@@ -213,11 +294,38 @@ public static class InspectorValueTypes
             {
                 if (entry.Key is not string key)
                     throw new InvalidDataException("Dictionary keys must be strings.");
-                storable.Add(key, ToStorable(entry.Value, valueType));
+                storable.Add(key, ToStorableCore(entry.Value, valueType, seen));
             }
             return storable;
         }
+        if (IsCustomObjectShape(type))
+            return ToStorableObject(value, type, seen);
         throw new InvalidDataException($"Unsupported Inspector value type: {type.FullName}");
+    }
+
+    /// <summary>自作クラスをメンバー名→保存形の対応へ変換する。派生型の混入と循環参照を拒否する。</summary>
+    private static Dictionary<string, object?> ToStorableObject(object value, Type type, List<object> seen)
+    {
+        if (value.GetType() != type)
+            throw new InvalidDataException($"Invalid {type.Name} value: {value.GetType().FullName}.");
+        // 参照同一性で循環だけを検出する。値型のボックス化は毎回別参照になるため誤検出しない。
+        if (seen.Contains(value, ReferenceEqualityComparer.Instance))
+            throw new InvalidDataException($"Cyclic Inspector value: {type.FullName}.");
+        seen.Add(value);
+        try
+        {
+            var mapping = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var member in ComponentSchema.GetInspectorMembers(type))
+            {
+                var memberType = MemberType(member);
+                mapping.Add(member.Name, ToStorableCore(GetObjectMember(value, member), memberType, seen));
+            }
+            return mapping;
+        }
+        finally
+        {
+            seen.Remove(value);
+        }
     }
 
     /// <summary>Clone経路の型付き値とYAML経路の文字列・コレクションの両方から復元する。</summary>
@@ -364,7 +472,47 @@ public static class InspectorValueTypes
                 dictionary.Add(key, FromStorable(value, valueType, $"{path}.{key}"));
             return dictionary;
         }
+        if (IsCustomObjectShape(type))
+            return FromStorableObject(raw, type, path);
         throw new InvalidDataException($"{path}: unsupported type {type.FullName}.");
+    }
+
+    /// <summary>自作クラスを対応→新しいインスタンスへ復元する。欠けた項目は初期値を保ち、未知の項目は読み飛ばす。</summary>
+    private static object FromStorableObject(object? raw, Type type, string path)
+    {
+        if (raw is not null && raw.GetType() == type)
+        {
+            // Clone経路の型付き値：同じ型の新しいインスタンスへ深く複製する。
+            var copy = CreateCustomInstance(type, path);
+            foreach (var member in ComponentSchema.GetInspectorMembers(type))
+            {
+                var memberType = MemberType(member);
+                SetObjectMember(copy, member, FromStorable(GetObjectMember(raw, member), memberType, $"{path}.{member.Name}"));
+            }
+            return copy;
+        }
+        var mapping = ToStringKeyedMapping(raw, path);
+        var instance = CreateCustomInstance(type, path);
+        foreach (var member in ComponentSchema.GetInspectorMembers(type))
+        {
+            if (!mapping.TryGetValue(member.Name, out var itemRaw))
+                continue; // 後から追加されたメンバーはクラスの初期値を維持する。
+            SetObjectMember(instance, member, FromStorable(itemRaw, MemberType(member), $"{path}.{member.Name}"));
+        }
+        return instance;
+    }
+
+    private static object CreateCustomInstance(Type type, string path)
+    {
+        try
+        {
+            return Activator.CreateInstance(type)
+                ?? throw new InvalidDataException($"{path}: cannot create {type.Name}.");
+        }
+        catch (Exception error) when (error is not InvalidDataException)
+        {
+            throw new InvalidDataException($"{path}: cannot create {type.Name}.", error);
+        }
     }
 
     private static int ReadInt(object? raw, string path)

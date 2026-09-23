@@ -575,6 +575,8 @@ public partial class MainWindow
                 return BuildSequenceNullableEnumBox(component, member, elementType, underlying, index, elementName);
             return BuildSequenceNullableBox(component, member, elementType, underlying, index, elementName);
         }
+        if (InspectorValueTypes.IsCustomInspectorObject(elementType))
+            return BuildSequenceObjectBox(component, member, elementType, index, elementName);
         return UnsupportedBadge(elementType);
     }
 
@@ -775,6 +777,8 @@ public partial class MainWindow
                 return BuildDictionaryNullableEnumBox(component, member, valueType, underlying, key, valueName);
             return BuildDictionaryNullableBox(component, member, valueType, underlying, key, valueName);
         }
+        if (InspectorValueTypes.IsCustomInspectorObject(valueType))
+            return BuildDictionaryObjectBox(component, member, valueType, key, valueName);
         return UnsupportedBadge(valueType);
     }
 
@@ -1015,6 +1019,18 @@ public partial class MainWindow
         if (elementType == typeof(Quaternion)) return Quaternion.Identity;
         if (elementType.IsEnum) return Enum.ToObject(elementType, 0);
         if (Nullable.GetUnderlyingType(elementType) is not null) return null;
+        if (InspectorValueTypes.IsCustomInspectorObject(elementType))
+        {
+            try
+            {
+                return Activator.CreateInstance(elementType);
+            }
+            catch
+            {
+                // 生成に失敗した要素はNullで足し、カードのCreateから作り直せるようにする。
+                return null;
+            }
+        }
         return null;
     }
 

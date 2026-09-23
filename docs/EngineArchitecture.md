@@ -81,8 +81,9 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - ベクトル：`Vector2`・`Vector3`・`Vector4`・`Quaternion`（各成分は有限のfloat、対応する `Nullable<T>` を含む）
 - `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
 - `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する
-- 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種と `Nullable<int/float/double/bool/enum>`、null可）
+- 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種・`Sprite`・自作クラスと `Nullable<int/float/double/bool/enum>`、null可）
 - 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）
+- 自作クラス：publicな引数なしコンストラクタを持つclassで、すべての `[Inspector]` メンバーが対応型であるもの。単体・配列・リスト要素・辞書値・入れ子で同じ変換を使う。参照型のためnull可。抽象クラス・ジェネリック・struct・`object` 自体・再帰（自分を直接・間接に含む）は対象外。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する
 
 `Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
 
@@ -215,7 +216,7 @@ Update Priority    0
 - `SceneSerializer` はCoreに置き、Sceneと保存用データの変換・検証・YamlDotNetによるYAML処理を行う。Avaloniaに依存しない。`Clone`（Play時の複製を含む）では配列・リスト・辞書・`Transform`・`Sprite` を深く複製し、親子はClone先へ解決して編集用と実行用・編集用とClone先の共有を残さない。
 - ファイル選択、保存先、未保存状態、確認・エラー表示、ファイルの置き換えはEditorが担当する。
 - 読み込みでは保存時のオブジェクトIDを復元する。全体の復元に成功してから編集中のSceneを入れ替え、ライフサイクルは実行しない。素材欠落はIDを保持したまま警告とし、構造エラーと同じ理由で開けなくしない。
-- 未対応のversion、未知のtypeId、重複キー・ID・同型component、既存メンバーの不正な値を拒否する。values内の存在しないInspectorメンバーは読み飛ばし、次の保存時に削除する。文書構造やベクトル・Transform・Sprite内部の未知キーは引き続き拒否する。
+- 未対応のversion、未知のtypeId、重複キー・ID・同型component、既存メンバーの不正な値を拒否する。values内の存在しないInspectorメンバーは読み飛ばし、次の保存時に削除する。文書構造やベクトル・Transform・Sprite内部の未知キーは引き続き拒否する。自作クラス内部の未知キーは読み飛ばし（クラス側の追加・削除があっても旧シーンを開ける）、欠けた項目はクラスの初期値を維持する。
 - 保存値がない新しいメンバーはクラスの初期値を維持する。メンバー名の変更にはデータ移行が必要で、自動移行は未実装。
 - オブジェクト・componentの順番を維持し、valuesはメンバー名順で出力する。必要な文字列は引用し、独自タグ・アンカーは生成しない。コメントの保持は行わない。
 - 保存は同じフォルダの一時ファイルに書き込み、完了後に元ファイルと置き換える。
@@ -271,6 +272,20 @@ values:
   Cropped:
     imageId: ba6104ce-7234-4673-8bd0-cee380b505de
     sourceRect: {x: 16, y: 8, width: 32, height: 24}
+```
+
+- 自作クラスは `[Inspector]` メンバー名のマッピング。nullは `null`。例：
+
+```yaml
+values:
+  Boss:
+    Hp: 30
+    Name: Rex
+  Party:
+  - Hp: 1
+    Name: A
+  Ranks:
+    leader: {Hp: 9, Name: Z}
 ```
 
 #### Priorityの保存形式と互換性（実装済み）
@@ -505,7 +520,7 @@ version: 1は読み続け、全てルート・配列順の兄弟として復元�
 
 復元は、文書構造／ID／親／順序の検証→全オブジェクトの作成→親子接続→既存factoryでcomponent生成／値復元→UIの完成Scene検証→公開、の順。欠落Parent、循環、重複ID、未知typeIdはScene全体を不採用。生成途中の失敗は既存Serializerの逆順Disposeを維持し、編集中のSceneは置き換えない。保存時も同じ構造・UI検証を通す。素材欠落や通常ObjectRefの解決失敗は警告としてIDを保持し、構造エラーと同じ理由で編集データを開けなくしない。
 
-ObjectRef／ImageRef／FontRefはInspectorValueTypesの共通の対応型へ追加し、単体・Nullable・既存の一次元配列／List／stringキーDictionaryの葉で同じ変換を使う。任意class・任意structの反射シリアライズには広げない。Inspectorでは対象名＋ID＋欠落状態と選択／解除を用意する。候補は現在のSceneまたはProjectの期待種別のみ。SceneSerializer.CloneとSceneCodeMigratorは同じ保存経路で親子・順序・参照を運び、旧Scene／旧ユーザー型への参照を残さない。
+ObjectRef／ImageRef／FontRefはInspectorValueTypesの共通の対応型へ追加し、単体・Nullable・既存の一次元配列／List／stringキーDictionaryの葉で同じ変換を使う。参照型の解決を任意class・任意structの反射シリアライズには広げない（値の入れ子は上記のInspector節の自作クラス範囲で対応し、IDによる参照解決とは分ける）。Inspectorでは対象名＋ID＋欠落状態と選択／解除を用意する。候補は現在のSceneまたはProjectの期待種別のみ。SceneSerializer.CloneとSceneCodeMigratorは同じ保存経路で親子・順序・参照を運び、旧Scene／旧ユーザー型への参照を残さない。
 
 #### 実装順と受入チェック
 

@@ -51,6 +51,10 @@ static class InspectorValueEditorChecks
         valueObject.Rename("Values");
         var probe = new InspectorValueProbe();
         valueObject.Attach(probe);
+        var nestedObject = scene.AddEmpty();
+        nestedObject.Rename("Nested");
+        var nested = new InspectorNestedProbe();
+        nestedObject.Attach(nested);
         var moverObject = scene.AddEmpty();
         moverObject.Rename("Mover");
         var mover = new Transform { LocalPosition = new Vector3(1, 2, 3) };
@@ -220,7 +224,79 @@ static class InspectorValueEditorChecks
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeLevel.Null"));
         Check(probe.MaybeLevel is null, "Nullable enum Set Null must clear the member.");
 
-        Console.WriteLine("PASS: extended Inspector display, vector/double/enum/list/dictionary/Transform edit, validation, Esc revert, and dirty.");
+        // Custom classes render nested editors, not Unsupported badges.
+        Select(editor, nestedObject);
+        Dispatcher.UIThread.RunJobs();
+        var nestedBadges = editor.GetVisualDescendants().OfType<TextBlock>()
+            .Where(block => (block.Text ?? "").StartsWith("Unsupported:", StringComparison.Ordinal)).ToList();
+        Check(nestedBadges.Count == 0, $"Custom class members must not show Unsupported badges, got {nestedBadges.Count}.");
+
+        // Custom member null -> Create -> nested edit -> Set Null.
+        Click(ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Boss.Create"));
+        Check(nested.Boss is not null, "Custom Create must assign a new instance.");
+        var bossHp = Box(editor, $"{nameof(InspectorNestedProbe)}.Boss.Hp");
+        Check(bossHp.Text == "10", $"Custom nested int must start from the initializer, got '{bossHp.Text}'.");
+        bossHp.Text = "42";
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Boss!.Hp == 42, "Custom nested edit did not reach the scene.");
+        Check(editor.Title!.StartsWith("* "), "Custom nested edit must mark the scene dirty.");
+        bossHp.Text = "abc";
+        Dispatcher.UIThread.RunJobs();
+        Check(errorBadge.IsVisible, "Invalid custom nested input must show an error badge.");
+        Check(nested.Boss.Hp == 42, "Invalid custom nested input must not change the scene.");
+        bossHp.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+        Dispatcher.UIThread.RunJobs();
+        Check(bossHp.Text == "42" && !errorBadge.IsVisible, "Esc must restore the custom nested value and clear the error.");
+        var bossName = Box(editor, $"{nameof(InspectorNestedProbe)}.Boss.Name");
+        bossName.Text = "Rex";
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Boss.Name == "Rex", "Custom nested string edit did not reach the scene.");
+        Click(ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Boss.Null"));
+        Check(nested.Boss is null, "Custom Set Null must clear the member.");
+
+        // Doubly nested custom classes stay editable and collapsible.
+        Click(ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Loadout.Create"));
+        var weapon = Box(editor, $"{nameof(InspectorNestedProbe)}.Loadout.Weapon");
+        weapon.Text = "Bow";
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Loadout!.Weapon == "Bow", "Doubly nested edit did not reach the scene.");
+        var kitHp = Box(editor, $"{nameof(InspectorNestedProbe)}.Loadout.Stats.Hp");
+        kitHp.Text = "5";
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Loadout.Stats.Hp == 5, "Second-level nested edit did not reach the scene.");
+        var loadoutToggle = ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Loadout.Collapse");
+        Click(loadoutToggle);
+        Dispatcher.UIThread.RunJobs();
+        Check(!Box(editor, $"{nameof(InspectorNestedProbe)}.Loadout.Weapon").IsEffectivelyVisible,
+            "Collapsed custom object must hide nested editors.");
+        Click(loadoutToggle);
+        Dispatcher.UIThread.RunJobs();
+        Check(Box(editor, $"{nameof(InspectorNestedProbe)}.Loadout.Weapon").IsEffectivelyVisible,
+            "Expanded custom object must show nested editors again.");
+
+        // Lists of custom classes grow and edit through nested rows.
+        Click(ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Party.Add"));
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Party.Count == 1 && nested.Party[0] is not null, "Custom list Add must append a new instance.");
+        var partyHp = Box(editor, $"{nameof(InspectorNestedProbe)}.Party[0].Hp");
+        partyHp.Text = "5";
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Party[0].Hp == 5, "Custom list element edit did not reach the scene.");
+        Click(ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Party.Remove[0]"));
+        Check(nested.Party.Count == 0, "Custom list Remove must shrink the scene list.");
+
+        // Dictionaries of custom classes add entries and edit their values.
+        Click(ButtonByName(editor, $"{nameof(InspectorNestedProbe)}.Lookup.Add"));
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Lookup.Count == 1, "Custom dictionary Add must grow the scene dictionary.");
+        var onlyKey = nested.Lookup.Keys.Single();
+        Check(nested.Lookup[onlyKey] is not null, "Custom dictionary Add must assign a new instance.");
+        var entryHp = Box(editor, $"{nameof(InspectorNestedProbe)}.Lookup.Value[0].Hp");
+        entryHp.Text = "77";
+        Dispatcher.UIThread.RunJobs();
+        Check(nested.Lookup[onlyKey]!.Hp == 77, "Custom dictionary value edit did not reach the scene.");
+
+        Console.WriteLine("PASS: extended Inspector display, vector/double/enum/list/dictionary/Transform/custom-class edit, validation, Esc revert, and dirty.");
     }
 
     public enum Difficulty
@@ -273,5 +349,25 @@ static class InspectorValueEditorChecks
         [Inspector] public List<Permissions> AccessList = [Permissions.ReadWrite];
         [Inspector] public Dictionary<string, Permissions> AccessMap = new() { ["key"] = Permissions.ReadWrite };
         [Inspector] public Difficulty? MaybeLevel { get; set; }
+    }
+
+    public sealed class SkillStats
+    {
+        [Inspector] public int Hp { get; set; } = 10;
+        [Inspector] public string Name = "fresh";
+    }
+
+    public sealed class SkillLoadout
+    {
+        [Inspector] public string Weapon = "sword";
+        [Inspector] public SkillStats Stats { get; set; } = new();
+    }
+
+    public sealed class InspectorNestedProbe
+    {
+        [Inspector] public SkillStats? Boss { get; set; }
+        [Inspector] public SkillLoadout? Loadout { get; set; }
+        [Inspector] public List<SkillStats> Party { get; set; } = [];
+        [Inspector] public Dictionary<string, SkillStats> Lookup { get; set; } = [];
     }
 }
