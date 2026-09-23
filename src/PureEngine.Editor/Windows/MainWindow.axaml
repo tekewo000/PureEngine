@@ -316,6 +316,9 @@
       <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="MaxDropDownHeight" Value="240" />
     </Style>
     <Style Selector="ComboBox.inspectorCombo:pointerover">
       <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
@@ -327,6 +330,36 @@
     </Style>
     <Style Selector="ComboBox.inspectorCombo:disabled">
       <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo:pointerover /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo:pressed /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo:focus-visible /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo:focus-visible /template/ Border#HighlightBackground">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo /template/ PathIcon#DropDownGlyph">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo:pointerover /template/ PathIcon#DropDownGlyph">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo:focus-visible /template/ PathIcon#DropDownGlyph">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo /template/ ContentControl#ContentPresenter">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ComboBox.inspectorCombo /template/ TextBlock#PlaceholderTextBlock">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextTertiaryBrush}" />
     </Style>
     <Style Selector="Grid.inspectorRow">
       <Setter Property="Margin" Value="0,1" />
