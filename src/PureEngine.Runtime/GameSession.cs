@@ -3,11 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace PureEngine.Runtime;
 
 /// <summary>
-/// 独立した一組のサービス群（provider＋明示 Scope）と Core 用の生成関数。
-/// 登録処理は外部から受け取り、編集と各 Play で別インスタンスを持つ。
-/// 編集と Play、異なる Play の間で Singleton も含めて状態を共有しない。
-/// Root provider から Scoped を直接解決せず、必ずこの Scope を通す。
-/// Editor・Avaloniaに依存しない。ゲーム側の登録処理はconfigureとして受け取る。
+/// An independent set of services (provider plus explicit Scope) and the factory for Core.
+/// Takes registration logic from outside and holds separate instances for editing and each Play run.
+/// Shares no state between editing and Play, or between different Play runs, including Singletons.
+/// Never resolves Scoped services directly from the root provider; always goes through this Scope.
+/// Does not depend on the Editor or Avalonia. Takes game-side registration as configure.
 /// </summary>
 public sealed class GameSession : IDisposable
 {
@@ -15,10 +15,10 @@ public sealed class GameSession : IDisposable
     private IServiceScope? _scope;
     private bool _disposed;
 
-    /// <summary>Core が知るのはこの生成関数のみ。MS DI への参照はここに留める。</summary>
+    /// <summary>Core only knows this factory. Keeps the MS DI reference here.</summary>
     public Func<Type, object> Factory { get; }
 
-    /// <summary>明示 Scope の provider。Scoped サービスの直接確認用。</summary>
+    /// <summary>Provider of the explicit Scope. For direct checks of Scoped services.</summary>
     public IServiceProvider Services => _scope?.ServiceProvider
         ?? throw new ObjectDisposedException(nameof(GameSession));
 
@@ -30,8 +30,8 @@ public sealed class GameSession : IDisposable
     }
 
     /// <summary>
-    /// 外部の登録処理から独立したサービス群を作る。
-    /// 呼び出し側が、そのゲーム／プロジェクトのサービス登録処理を渡す。
+    /// Creates an independent service set from external registration logic.
+    /// The caller passes the service registration for that game/project.
     /// </summary>
     public static GameSession Create(Action<IServiceCollection> configure)
     {
@@ -60,8 +60,8 @@ public sealed class GameSession : IDisposable
         var provider = _provider;
         _scope = null;
         _provider = null;
-        // Scope を先に、provider を後に終了する。Component の終了処理は所有者（PlaySession）が
-        // 先に完了させてからここを呼ぶ。
+        // Shuts down the Scope first and the provider second. The owner (PlaySession)
+        // completes Component shutdown first, then calls here.
         var errors = new List<Exception>();
         try { scope?.Dispose(); }
         catch (Exception error) { errors.Add(error); }

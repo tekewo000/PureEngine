@@ -95,9 +95,9 @@ static class TransformChecks
 
     private static void WorldComposesChildParentOrder()
     {
-        // 親がZ90度回転、子がX+1移動の場合:
-        // World = ChildLocal * ParentLocal なので原点は (1,0,0) を90度回転した (0,1,0) になる。
-        // 逆順 (Parent*Child) だと (1,0,0) のままなので順序を検出できる。
+        // Parent rotated 90 degrees around Z, child moved +1 on X:
+        // World = ChildLocal * ParentLocal, so the origin rotates from (1,0,0) to (0,1,0).
+        // Reversed order (Parent*Child) would leave (1,0,0), so this detects the order.
         var parent = new SceneObject("Parent");
         parent.Attach(new Transform
         {
@@ -118,7 +118,7 @@ static class TransformChecks
     {
         var root = new SceneObject("Root");
         root.Attach(new Transform { LocalPosition = new Vector3(10, 0, 0) });
-        var middle = new SceneObject("Middle"); // Transformなし = Identity扱い
+        var middle = new SceneObject("Middle"); // No Transform means Identity.
         middle.SetParent(root);
         var leaf = new SceneObject("Leaf");
         leaf.Attach(new Transform { LocalPosition = new Vector3(0, 5, 0) });
@@ -133,8 +133,8 @@ static class TransformChecks
 
     private static void ParentScaleAffectsChild()
     {
-        // 親が2倍拡縮、子がX+1移動の場合:
-        // World = ChildLocal * ParentLocal なので子の原点は (2,0,0) になる。
+        // Parent scaled by 2, child moved +1 on X:
+        // World = ChildLocal * ParentLocal, so the child origin becomes (2,0,0).
         var parent = new SceneObject("Parent");
         parent.Attach(new Transform { LocalScale = new Vector3(2, 2, 2) });
         var child = new SceneObject("Child");

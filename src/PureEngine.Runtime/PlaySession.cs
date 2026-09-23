@@ -4,10 +4,10 @@ using PureEngine.Core;
 namespace PureEngine.Runtime;
 
 /// <summary>
-/// 一回の Play（単体実行を含む）。Play 用 provider・Scope を作り、factory を SceneRuntime に渡す。
-/// 生成・復元・検証の成功後に Start し、Stop では Runtime の終了処理を完了してから Scope・provider を終了する。
-/// 準備失敗時も生成済みの所有資源を解放し、元の例外と後始末中の例外を保持する。
-/// Editor・Avaloniaに依存しない。Registryと登録処理は外部から受け取る。
+/// One Play run (including standalone runs). Creates a Play provider and Scope and passes factory to SceneRuntime.
+/// Starts after creation, restore, and validation succeed, and on Stop completes Runtime shutdown before shutting down Scope and provider.
+/// On preparation failure, still releases owned resources and preserves both the original and cleanup exceptions.
+/// Does not depend on the Editor or Avalonia. Takes the Registry and registration logic from outside.
 /// </summary>
 public sealed class PlaySession : IDisposable
 {
@@ -22,8 +22,8 @@ public sealed class PlaySession : IDisposable
     }
 
     /// <summary>
-    /// Play 用の独立したサービス群で準備する。Start は呼ばない。
-    /// registryは呼び出し側のプロジェクト所有から渡し、configureはゲーム用サービス登録を受け取る。
+    /// Prepares with an independent service set for Play. Does not call Start.
+    /// Takes registry from the calling project owner and game service registration as configure.
     /// </summary>
     public static PlaySession Prepare(Scene source, ComponentRegistry registry, Action<IServiceCollection> configure)
     {
@@ -38,8 +38,8 @@ public sealed class PlaySession : IDisposable
         }
         catch (Exception preparationError)
         {
-            // Clone 時の生成済み Component は serializer／runtime が逆順で解放済み。
-            // ここでは Play 用 Scope・provider を終了し、例外を保持する。
+            // Components created during Clone were already released in reverse order by serializer/runtime.
+            // Here shuts down the Play Scope and provider while preserving the exception.
             try
             {
                 services.Dispose();

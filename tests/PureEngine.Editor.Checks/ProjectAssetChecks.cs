@@ -37,20 +37,20 @@ internal static class ProjectAssetChecks
         File.WriteAllText(orphanSidecar, "version: 1\nid: " + Guid.NewGuid().ToString("D") + "\nkind: image\n");
         File.Delete(orphanImage);
         scanned = ProjectAssets.Scan(projectDir);
-        Check(scanned.Diagnostics.Any(text => text.Contains("登録情報だけ")),
+        Check(scanned.Diagnostics.Any(text => text.Contains("only the registration remains")),
             "Sidecars without images must be reported.");
 
         File.WriteAllBytes(orphanImage, CreatePng(4, 4, SKColors.Green));
         File.WriteAllText(orphanSidecar, "not: yaml: :");
         scanned = ProjectAssets.Scan(projectDir);
-        Check(scanned.Diagnostics.Any(text => text.Contains("壊れています")),
+        Check(scanned.Diagnostics.Any(text => text.Contains("corrupted")),
             "Broken sidecars must be reported without resolving.");
 
         var duplicateId = entry.Id.ToString("D");
         File.WriteAllText(orphanSidecar, $"version: 1\nid: {duplicateId}\nkind: image\n");
         scanned = ProjectAssets.Scan(projectDir);
         Check(!scanned.Images.ContainsKey(entry.Id)
-            && scanned.Diagnostics.Any(text => text.Contains("重複")),
+            && scanned.Diagnostics.Any(text => text.Contains("duplicated")),
             "Duplicate IDs must resolve to neither file and be reported.");
 
         Reject(() => ProjectAssets.ImportImage(projectDir, Path.Combine(projectDir, "missing.png")),

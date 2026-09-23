@@ -49,9 +49,9 @@ public sealed class ImageRenderingSample
         draw.Rectangle(new(viewportSize.X - 40, 270), Matrix3x2.CreateTranslation(20, 60), new(.1f, .13f, .2f, 1), clip);
         Draw(_root, viewportSize, Matrix4x4.Identity);
         draw.Text("Image + Sprite + UiLayout", 24, 700, 1.2f, Matrix3x2.CreateTranslation(20, 15), Vector4.One, clip);
-        draw.Text("全体", 18, 160, 1.2f, Matrix3x2.CreateTranslation(20, 230), Vector4.One, clip);
-        draw.Text("切り出し・色・透明度", 18, 230, 1.2f, Matrix3x2.CreateTranslation(210, 230), Vector4.One, clip);
-        draw.Text("親の回転・子の追従", 18, 230, 1.2f, Matrix3x2.CreateTranslation(430, 230), Vector4.One, clip);
+        draw.Text("Overview", 18, 160, 1.2f, Matrix3x2.CreateTranslation(20, 230), Vector4.One, clip);
+        draw.Text("Crop/Color/Opacity", 18, 230, 1.2f, Matrix3x2.CreateTranslation(210, 230), Vector4.One, clip);
+        draw.Text("Parent rotation/Child follow", 18, 230, 1.2f, Matrix3x2.CreateTranslation(430, 230), Vector4.One, clip);
 
         void Draw(SceneObject item, Vector2 parentSize, Matrix4x4 parentWorld)
         {

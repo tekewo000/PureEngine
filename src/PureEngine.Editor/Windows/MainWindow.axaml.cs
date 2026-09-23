@@ -15,11 +15,11 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow : Window
 {
-    /// <summary>編集Scene・パス・Dirtyの所有者。partial間の編集状態の変更経路を集約する。</summary>
+    /// <summary>Owner of the edit scene, path, and dirty state. Centralizes edit-state changes across partials.</summary>
     private readonly EditSceneStore _editScene = new(new Scene());
-    /// <summary>コード再読み込みの準備・採用・後片付けと保留状態の所有者。画面なしで検証できる。</summary>
+    /// <summary>Owner of code-reload preparation, adoption, cleanup, and pending state. Verifiable without a UI.</summary>
     private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
-    /// <summary>このウィンドウ（プロジェクト）の型所有者。Serializer・アタッチ・Play・再読み込みはここを明示的に使う。</summary>
+    /// <summary>Type owner for this window (project). Serializer, attach, Play, and reload all use it explicitly.</summary>
     internal ProjectComponents _components;
     private static readonly DataFormat<Type> ComponentFormat =
         DataFormat.CreateInProcessFormat<Type>("PureEngine.ComponentType");
@@ -29,13 +29,13 @@ public partial class MainWindow : Window
     private Point _assetPressPosition;
     private IReadOnlyList<Type>? _dragTypes;
     private readonly HashSet<TextBox> _invalidFields = [];
-    /// <summary>Componentカードの折りたたみ状態。型単位で保持し、選択切替をまたいで維持する。</summary>
+    /// <summary>Collapsed state of Component cards. Kept per type and preserved across selection changes.</summary>
     private readonly Dictionary<string, bool> _collapsedCards = [with(StringComparer.Ordinal)];
-    /// <summary>収集メンバー（List／Dictionary）の要素一覧の折りたたみ状態。メンバー単位で保持する。</summary>
+    /// <summary>Collapsed state of collection-member (List/Dictionary) element lists. Kept per member.</summary>
     private readonly Dictionary<string, bool> _collapsedMembers = [with(StringComparer.Ordinal)];
     private bool _viewportFitted;
 
-    /// <summary>画面由来の入力エラー有無。Gate判定へ値として渡す。</summary>
+    /// <summary>Whether UI-driven input errors exist. Passed as a value to gate decisions.</summary>
     internal bool HasInputErrors => _invalidFields.Count > 0 || (NameError?.IsVisible == true);
 
     internal EditSceneStore EditSceneStore => _editScene;
@@ -48,7 +48,7 @@ public partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(session);
         _editScene.ReplaceServices(session.EditServices).Dispose();
-        // Sessionの所有権（ComponentsとScene）をこのウィンドウへ移す。移したSessionは破棄しない。
+        // Transfers Session ownership (Components and Scene) to this window. The transferred Session is not disposed.
         var placeholder = _components;
         _components = session.Components;
         session.TransferOwnership();
@@ -74,12 +74,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        // 起動時1回だけ、Scene View/Gameの実幅から16:9になるよう下ペイン高さを初期調整する。
+        // Only once at startup, adjusts the bottom pane height from the live Scene View/Game width so it is 16:9.
         CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
-        // プロジェクト単位の型所有者。空プロジェクト（テスト・未オープン）でも独立して持つ。
+        // Per-project type owner. Held independently even for empty projects (tests, unopened).
         _components = new ProjectComponents();
         _sceneSerializer = new SceneSerializer(_components.Registry);
-        // 編集期間の専用サービス群。同じ登録から作り、Play 用とは独立させる。
+        // Dedicated service set for the editing lifetime. Built from the same registrations, kept independent from Play.
         Closed += (_, _) => CloseEditSession();
         Closing += OnEditorClosing;
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);
@@ -128,8 +128,8 @@ public partial class MainWindow : Window
         else if (entry.Kind == ProjectExplorerKind.File && entry.FullPath is not null
             && entry.FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
         {
-            // Project欄のC#ファイルからアタッチ対象のクラスをD&Dできる。
-            // 1ファイルに複数クラスがある場合はそのファイルの未アタッチ分をすべて付ける。
+            // C# files in the Project column can drag in attachable classes via D&D.
+            // When one file holds multiple classes, attaches all unattached classes from that file.
             var types = _components.GetTypesForFile(entry.FullPath);
             if (types.Count == 0) return;
             _dragTypes = types;
@@ -264,9 +264,9 @@ public partial class MainWindow : Window
     private static readonly SolidColorBrush CollapseToggleBrush = new(Color.Parse("#8B7CF6"));
     private static readonly SolidColorBrush CollapseToggleWashBrush = new(Color.Parse("#2E2A4A"));
 
-    /// <summary>Componentカードと収集エディタで共有する折りたたみトグル。状態は <paramref name="store"/> に保持する。</summary>
-    /// <remarks>Button ベースにする。ToggleButton は Fluent テーマの checked 状態で
-    /// テンプレート部品に直接アクセント塗りが付くため、透明化スタイルでは消し切れない。</remarks>
+    /// <summary>Collapse toggle shared by Component cards and collection editors. Keeps state in <paramref name="store"/>.</summary>
+    /// <remarks>Uses a Button base. ToggleButton would paint accent directly on template parts in its Fluent theme checked state,</remarks>
+    /// which the transparent style cannot fully remove.</remarks>
     private static Button BuildCollapseToggle(string automationName, string collapseKey, Dictionary<string, bool> store, Action<bool> apply)
     {
         var expandedState = !store.TryGetValue(collapseKey, out var collapsed) || !collapsed;
@@ -503,7 +503,7 @@ public partial class MainWindow : Window
             BuildMemberEditor(component, member));
     }
 
-    /// <summary>入れ子の自作クラス用に、明示したAutomation名でメンバー行を作る。見た目は <see cref="BuildMemberRow"/> と同じ。</summary>
+    /// <summary>Builds a member row with an explicit Automation name for nested custom classes. Looks the same as <see cref="BuildMemberRow"/>.</summary>
     private Grid BuildNestedMemberRow(object owner, MemberInfo member, string automationName)
     {
         var memberType = GetMemberType(member);
@@ -709,7 +709,7 @@ public partial class MainWindow : Window
         QueuePendingUserCodeReload();
     }
 
-    /// <summary>Escで編集中の数値欄を最後の正常値へ戻す。TextChanged経由で無効表示も解除される。</summary>
+    /// <summary>Reverts an editing numeric field to its last valid value on Esc. Invalid display is also cleared via TextChanged.</summary>
     private static void AttachEscapeRevert(TextBox box, object component, MemberInfo member) =>
         box.KeyDown += (_, e) =>
         {
@@ -733,7 +733,7 @@ public partial class MainWindow : Window
             _ => throw new NotSupportedException($"Unsupported member: {member.Name}"),
         };
 
-    /// <summary>CLR名漏れ（Int32・List`1・Dictionary`2・Nullable`1）を人が読める表記に直す。表示専用。</summary>
+    /// <summary>Rewrites leaked CLR names (Int32, List`1, Dictionary`2, Nullable`1) into human-readable form. Display only.</summary>
     private static string FriendlyTypeName(Type type) =>
         type == typeof(string) ? "string" :
         type == typeof(int) ? "int" :
@@ -786,7 +786,7 @@ public partial class MainWindow : Window
     private void OnAddUiButton(object? sender, RoutedEventArgs e) =>
         AddUiObject("Button", [typeof(Core.Transform), typeof(UiElement), typeof(global::Image), typeof(Core.Components.Button)]);
 
-    /// <summary>現在の親選択とComponent生成経路を使い、必要なUI構成を揃えて作成する。</summary>
+    /// <summary>Creates the required UI setup using the current parent selection and the Component creation path.</summary>
     private void AddUiObject(string baseName, Type[] componentTypes)
     {
         if (RejectWhenPlaying("Add")) return;
@@ -917,8 +917,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 起動時1回だけ、Scene View/Gameビューポートの横幅を変えずに映像エリアが16:9になるよう
-    /// 下ペインの高さを調整する。タブヘッダー等のクローム分は実測から差し引く。以後はスプリッターで自由に変更できる。
+    /// Only once at startup, keeps the Scene View/Game viewport width fixed so the video area becomes 16:9,
+    /// by adjusting the bottom pane height. Subtracts measured chrome such as tab headers. Afterwards the splitter can be moved freely.
     /// </summary>
     private void FitViewportToSixteenNine()
     {

@@ -32,7 +32,7 @@ public sealed class VulkanViewport : Control
     public string? DeviceName => _renderer?.DeviceName;
     public string? Failure => _failure;
 
-    /// <summary>編集Sceneの描画入口。未設定なら検証用サンプルを描く。例外は投げず、失敗時は描画を止めて通知する。</summary>
+    /// <summary>Draw entry for the edit scene. Draws the verification sample when unset. Never throws; stops drawing and reports on failure.</summary>
     public Action<DrawList, Vector2>? SceneBuilder { get; set; }
 
     public VulkanViewport() => _timer.Tick += Tick;

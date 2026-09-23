@@ -44,7 +44,7 @@ static class PlayConnectionChecks
 
     private static void EnsureChecks(MainWindow editor)
     {
-        // A4: 各ウィンドウの所有者に明示登録する。
+        // A4: Register explicitly with each window's owner.
         var components = Field<ProjectComponents>(editor, "_components");
         components.Registry.Register<PlayCounter>("checks.play-counter");
         components.Registry.Register<PlayBadLifecycle>("checks.play-bad");
@@ -63,7 +63,7 @@ static class PlayConnectionChecks
 
     private static void CloseEditor(MainWindow editor)
     {
-        // Inspector検証で付けたDirtyを落として閉じる。確認ダイアログが出たらDiscardする。
+        // Clear the Dirty flag set by Inspector verification before closing. Discard the confirmation dialog if it appears.
         EditStore(editor).MarkClean();
         editor.Close();
         Dispatcher.UIThread.RunJobs();
@@ -78,7 +78,7 @@ static class PlayConnectionChecks
 
     private static void StopTimer(MainWindow editor)
     {
-        // タイマーの実Tickを止め、手動Stepで決定的に検証する。配線自体はIsEnabledで確認する。
+        // Stop the real timer ticks and verify deterministically with manual steps. Verify the wiring itself via IsEnabled.
         var timer = Field<DispatcherTimer?>(editor, "_playTimer");
         timer?.Stop();
         Dispatcher.UIThread.RunJobs();
@@ -136,7 +136,7 @@ static class PlayConnectionChecks
             Dispatcher.UIThread.RunJobs();
             Check(PlayCounter.Updates == frozen, "Update must stop after Stop.");
 
-            // 二重停止はno-opで操作可能な状態を保つ。
+            // A double stop is a no-op that keeps the editor operable.
             Call(editor, "StopPlay");
             Dispatcher.UIThread.RunJobs();
             Check(PlayCounter.Destroys == 1, "Double stop must not destroy twice.");
@@ -240,7 +240,7 @@ static class PlayConnectionChecks
         {
             var scene = EditScene(editor);
             var item = scene.AddEmpty();
-            // 不正なライフサイクル宣言で準備失敗させる。編集時のAttach自体は通る。
+            // Fail preparation with an invalid lifecycle declaration. The edit-time attach itself succeeds.
             item.Attach(new PlayBadLifecycle());
             Dispatcher.UIThread.RunJobs();
 

@@ -78,8 +78,8 @@ public sealed class SceneRuntime : IDisposable
             foreach (var component in item.Components)
                 ComponentSchema.GetLifecycle(component.GetType());
 
-        // Component 生成箇所 (Play 用): 編集データの複製経由で実行用インスタンスを作る。
-        // factory 未指定時は従来のパラメータレス生成、指定時はその factory でコンストラクタ注入する。
+        // Component creation point (for Play): creates runtime instances via a copy of the authoring data.
+        // Without a factory, uses the legacy parameterless creation; with a factory, uses it for constructor injection.
         Scene = new SceneSerializer(registry).Clone(source, factory);
         Errors = _errors.AsReadOnly();
         try
@@ -157,8 +157,8 @@ public sealed class SceneRuntime : IDisposable
     /// <summary>Equivalent to Stop; Destroy and Dispose remain single-shot.</summary>
     public void Dispose() => Stop();
 
-    /// <summary>Game入力からのクリックを次の更新境界へ予約する。実行中でなければ古い入力として捨てる。</summary>
-    /// <remarks>Start前・編集中・停止後のEnqueueはhandlerを呼ばず捨てる。呼び出しは単一スレッドで行う。</remarks>
+    /// <summary>Queues a click from game input for the next update boundary. Drops it as stale input when not running.</summary>
+    /// <remarks>Enqueues before Start, during authoring, or after Stop are dropped without calling the handler. Calls must be made on a single thread.</remarks>
     public void EnqueueButtonClick(Guid buttonObjectId)
     {
         if (buttonObjectId == Guid.Empty)
@@ -296,8 +296,8 @@ public sealed class SceneRuntime : IDisposable
         if (_updates.Count > updatesBefore && _updates.Count > 1) _updates.Sort(UpdateOrder);
     }
 
-    /// <summary>予約されたクリックを更新境界でButton自身へ1回ずつ届ける。</summary>
-    /// <remarks>Start後のStep内でのみ呼ぶ。購読なしは何もしない。削除・停止後の残りの入力は呼ばない。</remarks>
+    /// <summary>Delivers each queued click once to its Button at the update boundary.</summary>
+    /// <remarks>Call only inside Step after Start. Does nothing without subscribers. Remaining input after removal or Stop is not delivered.</remarks>
     private void DispatchButtonClicks()
     {
         if (_buttonClicks.Count == 0)

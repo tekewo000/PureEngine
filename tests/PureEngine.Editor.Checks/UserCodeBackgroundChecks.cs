@@ -19,7 +19,7 @@ static class UserCodeBackgroundChecks
 
     private static void Pump() => Dispatcher.UIThread.RunJobs();
 
-    /// <summary>プール側の進行を待つ。成功経路は時刻に依存せず、打切りは失敗扱いの上限である。</summary>
+    /// <summary>Waits for pool-side progress. The success path does not depend on time; the cutoff is an upper bound treated as failure.</summary>
     private static void SpinUntil(Func<bool> condition, string message)
     {
         var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -40,7 +40,7 @@ static class UserCodeBackgroundChecks
 
     private const string TinyTemplate = "public class {0} {{ public int Value; }}";
 
-    /// <summary>実コンパイルの結果。読み込みコードを持つため、不採用時の解放検証に使える。</summary>
+    /// <summary>A real compilation result. It holds loaded code, so it can verify release when not adopted.</summary>
     private static UserCodeCompileResult RealCompile(string directory)
     {
         var result = UserCodeCompiler.CompileProject(directory);
@@ -49,7 +49,7 @@ static class UserCodeBackgroundChecks
         return result;
     }
 
-    /// <summary>完了順をテスト側で制御する門。開くまでプール上で待機し、実コンパイルを返す。</summary>
+    /// <summary>A gate that lets tests control completion order. It waits on the pool until opened, then returns a real compilation.</summary>
     private sealed class Gate
     {
         public readonly TaskCompletionSource<bool> Open =
@@ -66,7 +66,7 @@ static class UserCodeBackgroundChecks
         return UserCodeCompiler.CompileProject(directory);
     }
 
-    /// <summary>文書化した採用手順の検査用再現。生成管理の重複実装ではなく、呼び出し側の契約確認である。</summary>
+    /// <summary>Test-only reproduction of the documented adoption procedure. It verifies the caller contract, not a duplicate of creation management.</summary>
     private static bool TryAdopt(UserCodeCompileTracker tracker, UserCodeCompileAttempt attempt,
         Action<UserCodeCompileResult> adopted)
     {
@@ -89,8 +89,8 @@ static class UserCodeBackgroundChecks
 
     private static void CheckUnloaded(WeakReference reference, string message)
     {
-        // 時刻待ちではなく、参照切断後の回収を繰り返し要求する。
-        // 読込から解放までの作業は別メソッドに隔離し、戻り後は弱参照以外が残らないようにする。
+        // Request collection repeatedly after dropping references instead of waiting on time.
+        // Isolate load-to-release work in a separate method so only the weak reference remains after returning.
         for (var i = 0; i < 100 && reference.IsAlive; i++)
         {
             GC.Collect();
@@ -168,7 +168,7 @@ static class UserCodeBackgroundChecks
 
     private static WeakReference[] ReverseOverlapAndRelease(string directory)
     {
-        // 起動順に門を割り当てる。起動自体を直列化して対応付けを決定論にする。
+        // Assign gates in start order. Serialize the starts themselves to keep the mapping deterministic.
         var queue = new ConcurrentQueue<Gate>([new Gate(), new Gate(), new Gate()]);
         var order = new ConcurrentQueue<Gate>();
         using var tracker = new UserCodeCompileTracker(directory, (root, cancellationToken) =>
@@ -189,7 +189,7 @@ static class UserCodeBackgroundChecks
         var started = order.ToArray();
         Check(started.Length == 3, "Three overlapped compiles must be in flight.");
 
-        // 完了順を逆転させる：最新から完了し、古い順に後から完了する。
+        // Reverse the completion order: complete the latest first, then the older ones.
         var adopted = new List<UserCodeCompileResult>();
         started[2].Open.SetResult(true);
         var attempt3 = run3.GetAwaiter().GetResult();
@@ -272,7 +272,7 @@ static class UserCodeBackgroundChecks
         var ticketA = trackerA.Request();
         var compileA = trackerA.CompileAsync(ticketA);
         SpinUntil(() => Volatile.Read(ref gateA.Invocations) == 1, "Previous project compile must start.");
-        // プロジェクト切替：旧束縛を破棄し、新しい束縛を作る。
+        // Project switch: dispose the old binding and create a new binding.
         trackerA.Dispose();
         using var trackerB = new UserCodeCompileTracker(directoryB);
         gateA.Open.SetResult(true);
@@ -312,14 +312,14 @@ static class UserCodeBackgroundChecks
         var ticket = tracker.Request();
         var compile = tracker.CompileAsync(ticket);
         SpinUntil(() => Volatile.Read(ref gate.Invocations) == 1, "Shutdown probe compile must start.");
-        // 終了：画面が閉じた後に完了通知が来ても、閉じた画面や別プロジェクトを変更しない。
+        // Shutdown: even if a completion arrives after the window closed, do not touch the closed window or another project.
         tracker.Dispose();
         var adoptedCount = 0;
         gate.Open.SetResult(true);
         var attempt = compile.GetAwaiter().GetResult();
         Check(!tracker.IsCurrent(attempt.Ticket), "Shutdown must invalidate every pending ticket.");
         var unload = TrackForUnload(attempt.Result!);
-        // 閉じた画面の採用コールバックは呼ばない。結果だけ解放する。
+        // Do not call the closed window's adoption callback. Release only the result.
         Check(!TryAdopt(tracker, attempt, _ => adoptedCount++),
             "Completion after shutdown must be rejected, not adopted.");
         Check(adoptedCount == 0, "Completion after shutdown must not touch closed UI.");
@@ -385,13 +385,13 @@ static class UserCodeBackgroundChecks
         using var services = GameSession.Create(GameServices.Configure);
         var first = tracker.CompileAsync(tracker.Request()).GetAwaiter().GetResult();
         Check(first.Result?.Success == true, "Live-edit fixture must compile.");
-        // 全体登録は変えず、採用時と同じ候補Registryの組立てで移行する。
+        // Keep the global registration unchanged and migrate by building the same candidate registry as adoption.
         var oldRegistry = owner.CreateCandidateRegistry(first.Result);
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Player");
         var oldType = first.Result!.AttachableTypes.Single();
-        // 全体登録を汚さないため、採用時と同じ生成で直接アタッチする（CanAttachの事前確認は全体登録を見る）。
+        // Attach directly with the same creation as adoption to avoid polluting the global registration (the CanAttach precheck reads the global registration).
         item.Attach(services.Factory(oldType));
         oldType.GetField("Health")!.SetValue(item.Components.Single(), 73);
 
@@ -399,7 +399,7 @@ static class UserCodeBackgroundChecks
             "using PureEngine.Core;\nnamespace Game;\npublic class Player\n{\n    [Inspector] public int Health = 10;\n    [Inspector] public int Added = 42;\n}\n");
         var ticket = tracker.Request();
         var compile = tracker.CompileAsync(ticket);
-        // コンパイル中にInspector値を変更する。採用は現在のSceneから行う。
+        // Change Inspector values during compilation. Adopt from the current scene.
         oldType.GetField("Health")!.SetValue(item.Components.Single(), 81);
         var attempt = compile.GetAwaiter().GetResult();
         Check(attempt.Result?.Success == true && tracker.IsCurrent(attempt.Ticket),
@@ -434,7 +434,7 @@ static class UserCodeBackgroundChecks
         var pending = tracker.CompileAsync(tracker.Request());
         SpinUntil(() => Volatile.Read(ref gate.Invocations) == 1, "Responsiveness probe must start.");
         Check(!pending.IsCompleted, "The compile must stay in flight while its gate is closed.");
-        // 応答確認の方法：処理中のバックグラウンド作業とは別にUIへ投稿した作業が先に実行されること。
+        // Responsiveness check: work posted to the UI must run ahead of the in-flight background work.
         var uiRan = false;
         Dispatcher.UIThread.Post(() => uiRan = true);
         Pump();

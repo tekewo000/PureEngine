@@ -2,7 +2,7 @@ using PureEngine.Core;
 using PureEngine.Editor;
 
 /// <summary>
-/// Core の生成用 factory 対応を MS DI なしで確認する。Core が知るのは Func&lt;Type, object&gt; のみ。
+/// Verifies Core factory support for constructor injection without MS DI. Core only knows Func<Type, object>.
 /// </summary>
 static class DependencyInjectionChecks
 {

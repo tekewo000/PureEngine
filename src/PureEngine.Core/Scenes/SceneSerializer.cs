@@ -236,11 +236,11 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     }
 
     /// <summary>
-    /// Component 生成箇所 (復元/Clone): 型から新しい実行用・編集用インスタンスを作る。
-    /// factory 未指定時は従来のパラメータレス生成を使い、指定時は factory の結果を使う。
-    /// factory の失敗時はそのエラーを報告し、パラメータレス生成で再試行して隠さない。
-    /// factory は null でない要求どおりの exact type の新しいインスタンスを返す契約とし、
-    /// 共有したいものは注入するサービス側に置く。
+    /// Component creation point (restore/Clone): creates new runtime and authoring instances from the type.
+    /// Without a factory, uses the legacy parameterless creation; with a factory, uses the factory result.
+    /// A factory failure is reported as-is without retrying parameterless creation to hide it.
+    /// The factory contract is to return a new non-null instance of the exact requested type;
+    /// shared dependencies belong on the injected service side.
     /// </summary>
     private static object CreateComponent(Type type, Func<Type, object>? factory, string typeId, string objectName)
     {

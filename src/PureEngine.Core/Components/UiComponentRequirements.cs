@@ -1,9 +1,9 @@
 namespace PureEngine.Core;
 
-/// <summary>Image／Button／UiElementに必要な組み合わせの確認。自動追加はせず、不足の通知に使う。</summary>
+/// <summary>Checks the required Image/Button/UiElement combinations. Never auto-adds; used to report what is missing.</summary>
 public static class UiComponentRequirements
 {
-    /// <summary>指定オブジェクトで不足しているUIの組み合わせを返す。揃っていれば空。</summary>
+    /// <summary>Returns the missing UI combinations for the given object. Empty when everything is present.</summary>
     public static IReadOnlyList<string> GetMissing(SceneObject item)
     {
         ArgumentNullException.ThrowIfNull(item);

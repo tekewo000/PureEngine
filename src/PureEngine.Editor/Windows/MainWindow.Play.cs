@@ -7,8 +7,8 @@ using PureEngine.Core;
 namespace PureEngine.Editor;
 
 /// <summary>
-/// EditorのPlay／Stop接続。編集中のSceneから独立したSceneRuntimeを作り、
-/// Start→一定間隔のStep→Stop（Destroy＋Dispose）を行う。既存APIに従い二重終了を避ける。
+/// Editor Play/Stop wiring. Builds a SceneRuntime independent of the scene being edited,
+/// and runs Start, then Steps at fixed intervals, then Stop (Destroy + Dispose). Follows the existing API to avoid double shutdown.
 /// </summary>
 public partial class MainWindow
 {
@@ -17,7 +17,7 @@ public partial class MainWindow
     private Stopwatch? _playClock;
     private TimeSpan _playLast;
 
-    /// <summary>実行中かどうか。Playボタンの有効化・編集ガード・終了処理で使う。</summary>
+    /// <summary>Whether a run is active. Used for Play button state, edit guards, and shutdown.</summary>
     public bool IsPlaying => _play is not null;
 
     internal PlaySession? ActivePlay => _play;
@@ -34,8 +34,8 @@ public partial class MainWindow
     private void OnStopClicked(object? sender, RoutedEventArgs e) => StopPlay();
 
     /// <summary>
-    /// Play開始。Inspectorエラー時は開始せず理由を表示する。
-    /// 編集中Sceneの複製で開始し、編集側は変更しない。失敗後も操作可能な状態へ戻す。
+    /// Starts Play. Shows the reason instead of starting while Inspector errors exist.
+    /// Starts from a copy of the scene being edited without modifying the edit side. Restores an operable state after failures.
     /// </summary>
     internal void StartPlay()
     {
@@ -51,7 +51,7 @@ public partial class MainWindow
             return;
         }
 
-        // Clear on PlayはStart前に実施し、そのPlayの開始ログを消さない。
+        // Runs Clear on Play before Start without clearing that Play run start log.
         if (ConsoleClearOnPlay.IsChecked == true)
             ClearConsole();
 
@@ -94,7 +94,7 @@ public partial class MainWindow
         SetFileStatus("Play started.");
     }
 
-    /// <summary>手動停止。更新を止め、既存APIに従って終了・解放する。二重終了はno-op。</summary>
+    /// <summary>Manual stop. Halts updates and shuts down and releases following the existing API. Double shutdown is a no-op.</summary>
     internal bool StopPlay()
     {
         var session = _play;
@@ -127,7 +127,7 @@ public partial class MainWindow
             UpdatePlayUI();
         }
 
-        // 同じRuntimeエラーを重複出力しないよう、未記録分だけConsoleへ取り込む。
+        // Pulls only unlogged entries into the Console so the same runtime errors are not logged twice.
         LogPendingRuntimeErrors(session);
         var errors = session.Runtime.Errors;
         if (stopError is not null)
@@ -145,13 +145,13 @@ public partial class MainWindow
             Log.Engine.Info("Stopped Play.");
             SetFileStatus("Stopped Play.");
         }
-        // Play中の変更は保留し、Stop後に反映する。
+        // Defers changes made during Play and applies them after Stop.
         FlushPendingUserCodeReload();
         ResetGameInput();
         return stopError is null && errors.Count == 0;
     }
 
-    /// <summary>タイマー／テスト共用の1ステップ。実測の経過秒を渡す。</summary>
+    /// <summary>One shared step for the timer and tests. Takes measured elapsed seconds.</summary>
     internal void StepPlayOnce(float dt)
     {
         var session = _play;
@@ -293,7 +293,7 @@ public partial class MainWindow
         ResetGameInput();
     }
 
-    /// <summary>ウィンドウ終了時など、確実に終了・解放するための内部停止。表示は呼び出し側に任せる。</summary>
+    /// <summary>Internal stop that reliably shuts down and releases on window shutdown and similar paths. Leaves display to the caller.</summary>
     private void ForceStopPlayForShutdown()
     {
         var session = _play;
@@ -311,7 +311,7 @@ public partial class MainWindow
             _playClock = null;
             UpdatePlayUI();
             ResetGameInput();
-            try { LogPendingRuntimeErrors(session); } catch { /* 終了時の記録失敗で終了を妨げない。 */ }
+            try { LogPendingRuntimeErrors(session); } catch { /* Do not let shutdown-time logging failures block shutdown. */ }
         }
     }
 
@@ -330,7 +330,7 @@ public partial class MainWindow
         SetEditingEnabled(!playing);
     }
 
-    /// <summary>実行中はシーン編集・切り替えを無効化し、Stop後に戻す。終了（Close）は無効化しない。</summary>
+    /// <summary>Disables scene editing and switching while running, then restores them after Stop. Never disables closing (Close).</summary>
     private void SetEditingEnabled(bool enabled)
     {
         SceneObjects.IsEnabled = enabled;

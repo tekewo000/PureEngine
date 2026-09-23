@@ -24,7 +24,7 @@ static class ProjectImportChecks
             var outside = Path.Combine(testRoot, "outside");
             Directory.CreateDirectory(outside);
 
-            // 重複なしはそのまま、重複時は連番になる（拡張子あり／なし両対応）。
+            // Keep fresh names as-is; number duplicates (with and without extensions).
             var first = Path.Combine(target, "a.txt");
             File.WriteAllText(first, "a");
             Check(ProjectFileImporter.GetUniqueDestinationPath(target, "b.txt") == Path.Combine(target, "b.txt"), "Unique path must keep a fresh name.");
@@ -41,7 +41,7 @@ static class ProjectImportChecks
             Check(ProjectFileImporter.GetUniqueDestinationPath(target, "Assets.v1", isDirectory: true)
                 == Path.Combine(target, "Assets.v1 (2)"), "Dotted folder names must keep their suffix.");
 
-            // 単一ファイルのコピーと同一フォルダのno-op。
+            // Single-file copy and same-folder no-op.
             var sourceFile = Path.Combine(outside, "logo.png");
             File.WriteAllBytes(sourceFile, [1, 2, 3]);
             var copied = ProjectFileImporter.CopyFileInto(sourceFile, target);
@@ -53,7 +53,7 @@ static class ProjectImportChecks
             Check(ProjectFileImporter.ImportLocalPaths(target + Path.DirectorySeparatorChar, [first]).Count == 0,
                 "A trailing separator must not turn a same-folder file drop into a duplicate.");
 
-            // フォルダの再帰コピーと自己配下への拒否。
+            // Recursive folder copy and rejection of copies into their own subtree.
             var sourceDir = Path.Combine(outside, "Assets");
             Directory.CreateDirectory(Path.Combine(sourceDir, "Sub"));
             File.WriteAllText(Path.Combine(sourceDir, "root.txt"), "root");
@@ -67,7 +67,7 @@ static class ProjectImportChecks
             Check(ProjectFileImporter.ImportLocalPaths(target + Path.DirectorySeparatorChar,
                 [copiedDir + Path.DirectorySeparatorChar]).Count == 0, "Same-parent folder drops must ignore trailing separators.");
 
-            // 複数パスの取り込み（重複排除・欠損拒否）。
+            // Multi-path import (deduplication and missing-source rejection).
             var extra = Path.Combine(outside, "extra.txt");
             File.WriteAllText(extra, "extra");
             var imported = ProjectFileImporter.ImportLocalPaths(target, [sourceFile, extra, sourceFile]);

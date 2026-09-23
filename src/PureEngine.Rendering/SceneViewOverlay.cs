@@ -3,8 +3,8 @@ using PureEngine.Core;
 
 namespace PureEngine.Rendering;
 
-/// <summary>V4前半のScene View表示要素。グリッド・原点・軸・選択枠・Pivot・移動GizmoをDrawListへ描く。</summary>
-/// <remarks>配置はSceneViewMathと同じUiLayout結果とビュー変換を使う。ゲームのComponentや保存データにはしない。</remarks>
+/// <summary>Scene View display elements for the first half of V4. Draws the grid, origin, axes, selection frame, Pivot, and move gizmo into the DrawList.</summary>
+/// <remarks>Uses the same UiLayout results and view transform as SceneViewMath. Never becomes game Components or saved data.</remarks>
 public static class SceneViewOverlay
 {
     private static readonly Vector4 GridColor = new(0.23f, 0.25f, 0.29f, 1f);
@@ -14,7 +14,7 @@ public static class SceneViewOverlay
     private static readonly Vector4 SelectionColor = new(0.55f, 0.49f, 0.96f, 1f);
     private static readonly Vector4 PivotColor = new(1f, 1f, 1f, 1f);
 
-    /// <summary>背景グリッド・原点・X／Y軸を描く。画像より先に呼んで背後にする。無効値はno-op。</summary>
+    /// <summary>Draws the background grid, origin, and X/Y axes. Call before images to stay behind. Invalid values are a no-op.</summary>
     public static void DrawGrid(DrawList draw, Vector2 viewportSize, Vector2 pan, float zoom)
     {
         ArgumentNullException.ThrowIfNull(draw);
@@ -28,7 +28,7 @@ public static class SceneViewOverlay
         var maxScene = SceneViewMath.ViewToScene(viewportSize, pan, zoom);
         if (!float.IsFinite(minScene.X + minScene.Y + maxScene.X + maxScene.Y))
             return;
-        // 過密描画や無制限の列挙を起こさない。画面48px以上を保つ間隔でも上限を設ける。
+        // Avoids dense drawing and unbounded enumeration. Caps counts even at spacing that keeps 48px on screen.
         var verticalCount = (int)Math.Ceiling((maxScene.X - minScene.X) / step) + 2;
         var horizontalCount = (int)Math.Ceiling((maxScene.Y - minScene.Y) / step) + 2;
         if (verticalCount is < 0 or > 500 || horizontalCount is < 0 or > 500)
@@ -70,7 +70,7 @@ public static class SceneViewOverlay
             OriginColor, clip);
     }
 
-    /// <summary>選択枠（変形後の四隅）とPivotを描く。画像の後に呼んで手前にする。</summary>
+    /// <summary>Draws the selection frame (transformed corners) and Pivot. Call after images to stay in front.</summary>
     public static void DrawSelection(DrawList draw, Vector2[] cornersView, Vector2 pivotView, Vector4 clip)
     {
         ArgumentNullException.ThrowIfNull(draw);
@@ -96,7 +96,7 @@ public static class SceneViewOverlay
             PivotColor, clip);
     }
 
-    /// <summary>移動Gizmo（X／Y矢印と中央ハンドル）をPivotに描く。見かけは画面の論理ピクセル基準。</summary>
+    /// <summary>Draws the move gizmo (X/Y arrows and center handle) at the Pivot. Appearance follows screen logical pixels.</summary>
     public static void DrawGizmo(
         DrawList draw, Vector2 pivotView, Vector2 xAxis, Vector2 yAxis, Vector4 clip)
     {
