@@ -6,7 +6,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace PureEngine.Core;
 
-/// <summary>Version 1 reads as roots, version 2 saves parentId and siblingIndex. Restoring never mutates the caller's current scene.</summary>
+/// <summary>Version 3 saves component IDs and ID references. Version 1/2 remain readable with migration protection. Restoring never mutates the caller's current scene.</summary>
 public sealed class SceneSerializer(ComponentRegistry registry)
 {
     private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = [];
@@ -18,19 +18,30 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .WithDuplicateKeyChecking().Build());
 
-    public string Serialize(Scene scene) => _writer.Value.Serialize(Capture(scene));
+    public string Serialize(Scene scene) => _writer.Value.Serialize(Capture(scene, forSave: true));
 
     /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
-    public Scene Clone(Scene scene, Func<Type, object>? factory = null) => Restore(Capture(scene), factory, out _);
+    public Scene Clone(Scene scene, Func<Type, object>? factory = null) => Restore(Capture(scene, forSave: false), factory, out _);
 
-    private SceneDocument Capture(Scene scene)
+    private SceneDocument Capture(Scene scene, bool forSave)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var document = new SceneDocument { Version = 2, Objects = [] };
+        var document = new SceneDocument { Version = 3, Objects = [] };
         var roots = scene.RootObjects;
         var rootIndex = new Dictionary<Guid, int>();
         for (var i = 0; i < roots.Count; i++)
             rootIndex.Add(roots[i].Id, i);
+        var componentToId = new Dictionary<object, Guid>(ReferenceEqualityComparer.Instance);
+        foreach (var item in scene.Objects)
+        {
+            foreach (var component in item.Components)
+            {
+                if (!item.TryGetComponentId(component, out var componentId))
+                    throw new InvalidDataException($"{item.Name}: component {component.GetType().Name} is missing its engine ID.");
+                if (!componentToId.TryAdd(component, componentId))
+                    throw new InvalidDataException($"{item.Name}: duplicate component instance.");
+            }
+        }
         foreach (var item in scene.Objects)
         {
             var parent = item.Parent;
@@ -61,16 +72,27 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             foreach (var component in item.Components)
             {
                 var type = component.GetType();
+                var ownerId = componentToId[component];
                 var values = new Dictionary<string, object?>();
                 foreach (var member in Members(type))
                 {
                     var value = member is FieldInfo field ? field.GetValue(component) : ((PropertyInfo)member).GetValue(component);
                     var memberType = MemberType(member);
-                    InspectorValueTypes.ValidateType(memberType);
-                    values.Add(member.Name, InspectorValueTypes.ToStorable(value, memberType));
+                    if (SceneReferenceTypes.ContainsReference(memberType, registry))
+                    {
+                        if (!SceneReferenceTypes.IsSupportedInspectorType(memberType, registry))
+                            throw new InvalidDataException($"{type.Name}.{member.Name}: unsupported Inspector value type {memberType.FullName}.");
+                        values.Add(member.Name, SceneReferenceCodec.Encode(value, memberType, registry, ownerId, member.Name, componentToId, scene, forSave));
+                    }
+                    else
+                    {
+                        InspectorValueTypes.ValidateType(memberType);
+                        values.Add(member.Name, InspectorValueTypes.ToStorable(value, memberType));
+                    }
                 }
                 saved.Components.Add(new ComponentDocument
                 {
+                    Id = ownerId,
                     TypeId = registry.GetId(type),
                     Values = values,
                     Priorities = CapturePriorities(item, component),
@@ -78,6 +100,8 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             }
             document.Objects.Add(saved);
         }
+        if (scene.References.HasLegacy)
+            throw new InvalidDataException("旧インライン値が残っています。再割り当てまたは明示破棄するまで保存・Cloneできません。");
         return document;
     }
 
@@ -102,13 +126,11 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     private Scene Restore(SceneDocument document, Func<Type, object>? factory, out bool membersChanged)
     {
         membersChanged = false;
-        if (document.Version is not (1 or 2))
+        if (document.Version is not (1 or 2 or 3))
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
 
         var scene = new Scene();
-        // Preparation release tracking: components created below are owned by this restore
-        // until it succeeds. On failure they are disposed reverse-creation without any Start/Destroy.
         var created = new List<object>();
         try
         {
@@ -118,54 +140,107 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                     throw new InvalidDataException("Each object requires a non-empty id, name and components list.");
                 if (document.Version == 1 && (saved.ParentId is not null || saved.SiblingIndex is not null))
                     throw new InvalidDataException($"{saved.Name}: version 1 must not contain parentId or siblingIndex.");
-                if (document.Version == 2 && saved.SiblingIndex is null)
-                    throw new InvalidDataException($"{saved.Name}: version 2 requires siblingIndex.");
+                if (document.Version is 2 or 3 && saved.SiblingIndex is null)
+                    throw new InvalidDataException($"{saved.Name}: version {document.Version} requires siblingIndex.");
                 _ = scene.RestoreObject(saved.Id, saved.Name);
             }
             RestoreParentLinks(document, scene);
+            var objectsById = scene.Objects.ToDictionary(item => item.Id);
+            var seenComponentIds = new HashSet<Guid>();
+            var pendingRefs = new List<PendingReference>();
+            var localChanged = false;
             foreach (var saved in document.Objects)
             {
                 if (saved is null || saved.Components is null)
                     throw new InvalidDataException("Each object requires a non-empty id, name and components list.");
-                var item = scene.Objects.First(candidate => candidate.Id == saved.Id);
+                var item = objectsById[saved.Id];
                 foreach (var data in saved.Components)
                 {
                     if (data is null || string.IsNullOrWhiteSpace(data.TypeId) || data.Values is null)
                         throw new InvalidDataException($"{saved.Name}: component typeId and values are required.");
                     var type = registry.GetType(data.TypeId);
+                    var componentId = data.Id;
+                    if (document.Version is 1 or 2)
+                    {
+                        componentId = Guid.NewGuid();
+                        localChanged = true;
+                    }
+                    else
+                    {
+                        if (componentId == Guid.Empty)
+                            throw new InvalidDataException($"{saved.Name}: component ID must not be empty.");
+                        if (!seenComponentIds.Add(componentId))
+                            throw new InvalidDataException($"{saved.Name}: duplicate component ID {componentId:D}.");
+                        if (scene.ContainsId(componentId))
+                            throw new InvalidDataException($"{saved.Name}: component ID {componentId:D} collides with an object ID.");
+                    }
                     var names = ComponentSchema.GetInspectorMemberNames(type);
                     Dictionary<MemberInfo, object?> values = [];
                     foreach (var (name, raw) in data.Values)
                     {
                         if (!names.TryGetValue(name, out var member))
                         {
-                            membersChanged = true;
-                            continue; // Removed or renamed Inspector members are discarded on the next save.
+                            localChanged = true;
+                            continue;
                         }
-                        if (name != member.Name) membersChanged = true;
+                        if (name != member.Name) localChanged = true;
                         if (!values.TryAdd(member, raw))
                             throw new InvalidDataException($"{data.TypeId}.{member.Name}: multiple saved names refer to the same Inspector member.");
                     }
                     var (start, update, destroy) = ReadPriorities(data, type);
                     var component = CreateComponent(type, factory, data.TypeId, saved.Name!);
                     created.Add(component);
+                    item.AttachWithId(component, componentId);
+                    item.RestorePriorities(component, start, update, destroy);
                     foreach (var member in Members(type))
                     {
-                        InspectorValueTypes.ValidateType(MemberType(member));
-                        // A newly added member keeps its class initializer when absent from older scenes.
+                        var memberType = MemberType(member);
+                        var containsRef = SceneReferenceTypes.ContainsReference(memberType, registry);
+                        if (!containsRef)
+                            InspectorValueTypes.ValidateType(memberType);
+                        else if (!SceneReferenceTypes.IsSupportedInspectorType(memberType, registry))
+                            throw new InvalidDataException($"{data.TypeId}.{member.Name}: unsupported Inspector value type {memberType.FullName}.");
                         if (!values.TryGetValue(member, out var raw))
                         {
-                            membersChanged = true;
+                            localChanged = true;
                             continue;
                         }
-                        var value = InspectorValueTypes.FromStorable(raw, MemberType(member), $"{data.TypeId}.{member.Name}");
+                        if (containsRef)
+                        {
+                            pendingRefs.Add(new PendingReference(item, component, componentId, member, raw, $"{data.TypeId}.{member.Name}"));
+                            continue;
+                        }
+                        var value = InspectorValueTypes.FromStorable(raw, memberType, $"{data.TypeId}.{member.Name}");
                         if (member is FieldInfo field) field.SetValue(component, value);
                         else ((PropertyInfo)member).SetValue(component, value);
                     }
-                    item.Attach(component);
-                    item.RestorePriorities(component, start, update, destroy);
                 }
             }
+            var componentsById = new Dictionary<Guid, object>();
+            foreach (var item in scene.Objects)
+            {
+                foreach (var component in item.Components)
+                {
+                    if (!item.TryGetComponentId(component, out var cid))
+                        throw new InvalidDataException($"{item.Name}: component is missing its engine ID.");
+                    if (!componentsById.TryAdd(cid, component))
+                        throw new InvalidDataException($"{item.Name}: duplicate component ID {cid:D}.");
+                    if (objectsById.ContainsKey(cid))
+                        throw new InvalidDataException($"{item.Name}: component ID {cid:D} collides with an object ID.");
+                }
+            }
+            foreach (var pending in pendingRefs)
+            {
+                var resolved = SceneReferenceCodec.Decode(
+                    pending.Raw, MemberType(pending.Member), registry,
+                    pending.ComponentId, pending.Member.Name,
+                    objectsById, componentsById, scene,
+                    document.Version, pending.DisplayPath, ref localChanged);
+                if (pending.Member is FieldInfo field) field.SetValue(pending.Component, resolved);
+                else ((PropertyInfo)pending.Member).SetValue(pending.Component, resolved);
+            }
+            membersChanged = localChanged || scene.References.HasLegacy;
+            return scene;
         }
         catch (Exception error)
         {
@@ -182,8 +257,9 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                 throw new AggregateException("Scene restoration and cleanup failed.", errors);
             throw;
         }
-        return scene;
     }
+
+    private sealed record PendingReference(SceneObject Owner, object Component, Guid ComponentId, MemberInfo Member, object? Raw, string DisplayPath);
 
     private static void RestoreParentLinks(SceneDocument document, Scene scene)
     {
@@ -290,7 +366,6 @@ public sealed class SceneSerializer(ComponentRegistry registry)
                 throw new InvalidDataException($"{path}: duplicate priority.");
             parsed.Add(key, value);
         }
-        // Invalid declarations are rejected when the runtime starts; loading keeps the data so it can be fixed.
         try
         {
             var lifecycles = ComponentSchema.GetLifecycle(type);
@@ -303,7 +378,6 @@ public sealed class SceneSerializer(ComponentRegistry registry)
         catch (InvalidOperationException error) when (error.Message.Contains("requires a", StringComparison.Ordinal)
             || error.Message.Contains("multiple", StringComparison.Ordinal))
         {
-            // Defer invalid declarations to runtime validation; keep priorities for editing.
         }
         parsed.TryGetValue("start", out var start);
         parsed.TryGetValue("update", out var update);

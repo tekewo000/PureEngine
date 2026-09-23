@@ -16,7 +16,7 @@ internal static class ImageRenderingChecks
         var item = new SceneObject("Image check");
         item.Attach(new Transform());
         item.Attach(new UiElement { SizeDelta = new(100, 40), AnchorMin = new(.5f), AnchorMax = new(.5f) });
-        var image = new global::Image { Sprite = new Sprite(id), Color = new(.4f, .6f, 1, .5f) };
+        var image = new PureEngine.Core.Image { Sprite = new Sprite(id), Color = new(.4f, .6f, 1, .5f) };
         item.Attach(image);
         Check(image.Order == 0, "New Images must start with Order 0.");
         using var draw = new DrawList();

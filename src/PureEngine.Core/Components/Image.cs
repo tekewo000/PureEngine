@@ -1,5 +1,6 @@
 using System.Numerics;
-using PureEngine.Core;
+
+namespace PureEngine.Core;
 
 public sealed class Image : RendererComponent
 {

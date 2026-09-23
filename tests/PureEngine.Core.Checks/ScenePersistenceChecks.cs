@@ -56,8 +56,8 @@ static class ScenePersistenceChecks
         sample.Title = "001";
         CheckFormerNames(scene, registry, yaml);
         Check(serializer.Deserialize(serializer.Serialize(new Scene())).Objects.Count == 0, "Empty scene failed.");
-        Reject(() => serializer.Deserialize(yaml.Replace("version: 2", "version: 99")), "Future version accepted.");
-        Check(serializer.Deserialize(yaml.Replace("version: 2", "version: 1")
+        Reject(() => serializer.Deserialize(yaml.Replace("version: 3", "version: 99")), "Future version accepted.");
+        Check(serializer.Deserialize(yaml.Replace("version: 3", "version: 1")
             .Replace("parentId: null", "# parentId omitted").Replace("siblingIndex", "# siblingIndex omitted")) is not null,
             "Version 1 scenes must remain readable.");
         Reject(() => serializer.Deserialize(yaml.Replace("checks.probe", "missing.type")), "Unknown component accepted.");
@@ -100,7 +100,7 @@ static class ScenePersistenceChecks
             && example.Objects[0].GetComponent<PureEngine.Editor.Samples.RoundSettings>()!.TurnSeconds == 30.5f,
             "The documented example must load using the Assets registry.");
         var duplicates = exampleSerializer.Serialize(example);
-        var componentStart = duplicates.IndexOf("  - typeId:", StringComparison.Ordinal);
+        var componentStart = duplicates.IndexOf("typeId:", StringComparison.Ordinal);
         Check(componentStart >= 0, "Expected component sequence in YAML.");
         Reject(() => exampleSerializer.Deserialize(duplicates + duplicates[componentStart..]), "Duplicate components accepted.");
 

@@ -198,7 +198,7 @@ public partial class MainWindow
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var (label, result) in new[] { ("Save", "save"), ("Discard", "discard"), ("Cancel", "cancel") })
         {
-            var button = new Button { Content = label, IsDefault = result == "save", IsCancel = result == "cancel" };
+            var button = new Avalonia.Controls.Button { Content = label, IsDefault = result == "save", IsCancel = result == "cancel" };
             button.Click += (_, _) => dialog.Close(result);
             buttons.Children.Add(button);
         }

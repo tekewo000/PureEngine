@@ -30,7 +30,7 @@ public static class UiImageRenderer
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(images);
-        if (item.GetComponent<global::Image>() is not { Sprite: { } sprite } image) return;
+        if (item.GetComponent<Image>() is not { Sprite: { } sprite } image) return;
         // Orthographic XY projection. Z is preserved by UiLayout, but does not change 2D submission order.
         // Editorのビュー変換は配置の後に合成し、Anchor用の親領域は変えない。
         var viewMatrix = view ?? Matrix4x4.Identity;

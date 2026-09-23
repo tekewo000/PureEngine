@@ -30,7 +30,7 @@ internal static class ComponentSearchChecks
         var imageType = registry.GetType("core.image");
         Check(components.CanAttach(target, imageType), "Unattached engine type must be attachable.");
         Check(components.TryAttach(target, imageType, services.Factory), "Engine attach must reuse the factory.");
-        Check(target.GetComponent<global::Image>() is not null, "Attached Image must be retrievable.");
+        Check(target.GetComponent<PureEngine.Core.Image>() is not null, "Attached Image must be retrievable.");
         Check(!components.CanAttach(target, imageType) && !components.TryAttach(target, imageType, services.Factory)
             && target.Components.Count == 1, "Duplicate engine attach must be rejected.");
         Check(!components.TryAttach(null, imageType, services.Factory), "Attach without a target must be rejected.");

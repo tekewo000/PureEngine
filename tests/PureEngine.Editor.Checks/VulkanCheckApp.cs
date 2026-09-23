@@ -117,7 +117,7 @@ internal sealed class VulkanCheckApp : App
         var id = Guid.NewGuid();
         item.Attach(new PureEngine.Core.Transform());
         item.Attach(new UiElement { Pivot = Vector2.Zero });
-        item.Attach(new global::Image { Sprite = new Sprite(id) });
+        item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(id) });
         var images = new Dictionary<Guid, byte[]> { [id] = Encode(SKColors.Red) };
         DrawList? observed = null;
         var previousBuilder = viewport.SceneBuilder;

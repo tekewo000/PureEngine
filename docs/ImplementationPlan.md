@@ -14,6 +14,98 @@
 
 ## 次に着手する作業
 
+### SceneObject・ComponentのID参照とInspector接続（2026-09-23合意・実装済み）
+
+**実装済み。全SceneObject・全ComponentにIDを付け、保存ではID参照、ゲーム実行中は解決済みの通常のC#参照を使う。** ユーザーが重視するのはエンジン自身とゲーム実行時の性能、および使う側のルールの単純さ。Inspectorに割り当てたときだけIDを発行する方式、ゲーム側に `ObjectRef<T>`／都度の `Resolve` を要求する方式は採用しない。ローカルの `./tools/code-quality.ps1 -Check` は通過。実画面のStuffs→欄D&D・保存→再Open・PlayでのButton接続の目視、CI実行は未確認として区別する。10,000件のローカル性能比較は下記レビュー修正後の測定で確認した。
+
+設計の正本は[SceneObject・Componentの直接参照](EngineArchitecture.md#sceneobjectcomponentの直接参照2026-09-23合意実装済み)。従来のV3のObjectRef案に優先する。過去の「ObjectRefは対象外」は過去工程の範囲を示し、今回の着手を禁止するものではない。
+
+#### 実装範囲と工程
+
+ゲーム側の完成形は次の通常のC#宣言・操作とする。Inspectorで選んだ対象と同じ実行用インスタンスへ接続し、detachedなButtonの埋め込みコピーを作らない。
+
+```csharp
+[Inspector]
+public Button? TestButton { get; set; }
+
+[Start]
+private void Start()
+{
+    if (TestButton is { } button)
+        button.Interactable = false;
+}
+```
+
+| 工程 | 実装内容・完了条件 |
+| --- | --- |
+| 0. 現行経路と型の区分 | `.codegraph/` があればCodeGraphから調査する。Componentの生成・Attach・Detach・実行中の追加削除、Inspector変換、Capture／Restore／Clone、SceneCodeMigrator、Project単位Registryを追う。登録Component型を参照として扱うことが既存の自作クラス値・Transform・自動型登録へ与える影響を列挙し、正本の区分と移行規則を確定してから編集する。Componentカードで自身の値を編集する操作と、他Component内の参照欄を区別する |
+| 1. IDとScene内の索引 | SceneObjectの既存Guidを再利用し、全Componentにエンジン所有のインスタンスGuidを付ける。普通の `new` 自体はフックせず、エンジンの生成／Attach共通経路でSceneへの公開前に必ず付与する。未参照Componentも対象。既存の所有権・重複型制約を維持し、同じ実物の多重所有を拒否する。復元時は保存IDを採用し、非空IDとScene内のObject／Componentを跨ぐ重複を検査する |
+| 2. 保存・復元・Clone | `version: 3` を書き出し、Componentの `id` と既存の `typeId` を分離、参照値を `{ ref: <Guid> }` とする。全対象の生成・登録後、全参照を解決し、すべてのStartより前に接続を完了する。前方参照・自己参照・相互参照を許可。CloneはIDを保持しClone先だけで接続する。既存factory、Priority、親子・兄弟順、失敗時の逆順Disposeと旧Scene保護を維持する |
+| 3. 旧データ・コード再読み込み | v1／v2は既存SceneObject IDを保持し、不足するComponent IDを一度発行、Editorを未保存化する。旧インラインComponent値を対象名や値の一致から推測して接続しない。移行不能な旧値は元データを保持して明示診断し、再割り当て／明示破棄するまで破壊的な上書き保存を拒否する。保持機構が成立しない場合は復元全体を拒否して元Scene・元ファイルを守る。コード再読み込みは同じ保存・参照解決経路を使い、IDとFormerlySerializedAsを維持し、旧インスタンス／Type／Assemblyを新Sceneの管理情報へ残さない |
+| 4. 欠落と変更時の接続更新 | 解決先なしはC#メンバーをnull、管理情報にはIDを保持しMissingとして保存可能にする。対象削除・取り外し・交換・Scene差し替えの変更境界で影響する接続を更新する。別対象への再設定と明示Clearは保持IDを更新／除去する。対象が後で同じIDで復元された場合も再接続する。毎フレーム全メンバーを走査しない。通常のC#からの代入、配列／List／辞書の変更と保持IDの整合、および既にゲーム側で別対象へ変更した欄を古い接続情報で上書きしない処理を検証する |
+| 5. Inspector | SceneObject・登録Component型の参照欄に対象名・ID・None／Missing・選択／解除を表示。Stuffs（Hierarchy）から参照欄へのD&Dを、既存のComponentアタッチ形式と分離して追加する。型・Scene所属を検査し、不適合／曖昧な候補を勝手に選ばない。Play中の編集拒否、変更時だけの未保存化、既存のAutomationProperties.Name規約を維持する |
+| 6. 検証・文書 | 下記のCore／Editor Checksと性能測定を実施し、問題を修正する。READMEに宣言・設定・Missing・旧値の付け直し手順、設計書に最終仕様、この計画書に検証証跡を記録。実装済み・ローカル自動検証済み・実画面／CI確認済みを区別する |
+
+主な対象は `SceneObject`／`Scene`／`SceneRuntime`、`SceneDocument`／`SceneSerializer`／`SceneCodeMigrator`、`ComponentRegistry`／`ComponentSchema`／`InspectorValueTypes`、Projectの型登録、`MainWindow.Inspector*.cs`／`MainWindow.Hierarchy.cs`、既存Core／Editor Checks。名前だけで変更範囲を固定せず実際の呼び出し元を追い、既存の共通経路へ接続する。
+
+対象はSceneObject・組み込み／自作Componentの単体参照と、既存の対応コンテナー（一次元配列・List・stringキーDictionary）および埋め込み値内の参照。コンテナーの入れ子等、既存の未対応範囲は広げない。参照型は `T?` によるnullを扱い、`Nullable<T>` をclassへ適用しない。Object／Component参照の相互循環と、埋め込み値・親子関係の禁止された循環を混同しない。
+
+Scene全体のCloneと同一Scene内への複製は分ける。同一Scene内にコピーを追加する経路が存在する場合は対象に新IDを発行し、コピー範囲内部の参照だけ新IDへ付け替え、範囲外への参照を維持する。新しい複製UIの追加は要求しない。画像・フォントの参照方式変更、シーンを跨ぐ参照、パス束縛、イベントバス、コード生成、Undo機構も今回の対象外。
+
+`D:\PureEngineProjects\TestProject` は再現例として扱う。本作業だけを根拠に外部Projectの `Test.cs` やシーンを上書きせず、まずリポジトリ内Checksで再現する。`init` の扱いは既存のInspector規約・検証と整合させ、参照実装のためだけに外部コードを `set` へ一括変更しない。
+
+#### 必須の動作検証
+
+- Core：SceneObject／Component双方の参照、型違い・別Scene・未アタッチ対象の拒否、空／重複／不正ID、前方・自己・相互参照、nullとMissingの区別、削除後のID保持と再保存・再接続を確認する。
+- 保存・移行：単体／配列／List／辞書／埋め込み値内の往復、FormerlySerializedAs、v1／v2移行と旧インライン値の保護、Clone後の実物の分離とID維持、コード再読み込み成功／失敗時の旧Scene保護を確認する。既存の同一Scene内複製経路がある場合は内部・外部参照の付け替えも検証する。
+- 実行：接続がStart前に完了すること、Testの参照先が実際のButtonと同一でクリック購読・Interactable変更がその実物に届くこと、Playから編集Sceneを変更しないこと、実行中の生成・削除境界を確認する。イベント購読そのものは保存・Cloneしない。
+- Editor Headless：選択・解除・有効／無効なD&D、対象削除後のMissing、未保存状態、Play中拒否、Scene切替・コード再読み込み後の接続と旧インスタンス解放を確認する。実画面ではStuffs→欄のD&D、保存→再Open、PlayでのButton接続を別途確認する。
+- C#／解析設定の実装後はルートの `./tools/code-quality.ps1 -Check` を必須とする。失敗は修正し、未実行・実画面やCIの未確認事項は完了報告へ明記する。
+
+#### 性能の受け入れ条件と測定
+
+性能は「IDがあるから軽い」と推測で完了扱いにしない。実装前後を同じ環境・Release設定で比較し、準備と定常実行を分ける。既存の `--runtime-benchmark` 経路を優先し、小さな測定ケースを追加する。新しいベンチマーク基盤や依存は導入しない。
+
+| 測定対象 | 記録するもの・受け入れ条件 |
+| --- | --- |
+| 準備と保存 | 対象数N・参照数Rを変え、Deserialize／Clone／Play準備の経過時間・割り当て量、生成後の保持メモリとYAMLサイズを別々に記録。辞書による参照索引構築・接続部分は概ねO(N＋R)を目標とし、参照一つごとの全対象走査を避ける。既存の他処理まで線形と主張しない |
+| 編集時 | 参照設定・解除、対象の削除／交換と影響参照数に対する更新時間を記録。変更イベント時だけ接続情報を処理し、アイドル時に全Sceneの参照を再構築しない |
+| 定常実行 | 参照なし／同数の直接参照ありでUpdateの時間・割り当て量を比較。例えば1,000／10,000Componentで複数回アクセスするケースを置く。通常のメンバーアクセスにはID検索・反射・接続再構築を挟まないことをコード経路と検索／再接続回数のチェックで確認し、参照維持だけを原因とする定常フレームのGC割り当てを0 Bにする |
+| 変更のある実行 | 生成・削除時の更新コストを定常実行から分離して測る。変更時の必要な処理・割り当てを定常0 Bと混同しない |
+
+時間はウォームアップ後の複数回測定の中央値と環境・件数・手順を記録し、不安定な固定ミリ秒しきい値をCIの合否に使わない。再現する悪化は原因を調べて修正または制約として報告する。任意にコピーされたローカル変数や `[Inspector]` 外のC#参照まで自動無効化できるとは説明しない。
+
+**完了条件：通常の `Button?` 欄へ実物を設定でき、IDで保存・復元・Clone・コード移行し、Missingを保持できること。全Start前に接続され、定常実行で参照のための検索・走査・割り当てが追加されず、必須チェックと性能比較の証跡が揃うこと。**
+
+#### ID参照の検証（2026-09-23）
+
+- ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェックがすべて通過した。
+- Core追加（`SceneReferenceChecks`）：SceneObject／Component双方の参照、型違い・別Scene・未アタッチ対象の拒否、空／重複／不正ID、前方・自己・相互参照、単体／配列／List／辞書／埋め込み値内の往復、nullとMissingの区別、削除後のID保持と再保存・同ID再接続、Clone後の実物分離とID維持、Start前接続とButton同一性（クリック購読・Interactable変更が実物へ届くこと、購読自体は保存・Cloneしないこと、Playから編集Sceneを変更しないこと）、旧インライン保持と破壊的保存拒否・明示破棄後の保存可を確認。同一Scene内複製経路は存在しないため、新ID発行・範囲内付け替えの分岐は未使用として区別する。FormerlySerializedAs・v1／v2移行・コード再読み込み成功／失敗時の旧Scene保護は既存経路（保存・参照解決の共有、ID維持、旧インスタンス残存なし）と既存チェックで確認する。
+- Editor追加（`ReferenceEditorChecks`）：参照欄の選択・解除、有効／無効なStuffs D&D解決（型・Scene所属検査、曖昧候補の非選択）、対象削除後のMissing表示、変更時だけの未保存化、Play中の編集拒否を確認。Scene切替・コード再読み込み後の接続と旧インスタンス解放は既存の分離・所有権チェックとCoreのClone／移行で確認し、Editor固有の追加断定はしない。レビュー修正で埋め込み内List／辞書の参照編集と、Missingを含む行削除・キー変更の追従を追加検証した。
+- 実画面確認：未実施。Headlessでの選択→保存相当→再Open相当→Play→Button接続→Stopは自動検証済みとして区別する。実EditorでのStuffs→欄のD&D、保存→再Open、PlayでのButton接続の目視は未確認。
+- CI：未実行。GitHub Actionsの結果確認は未実施。
+
+#### ID参照のレビュー修正・性能測定（2026-09-23）
+
+- 登録Component型の未アタッチ値が埋め込み保存へ戻る経路を除去。v3の不正ref・インライン値、Object／Component間の型違いを拒否し、v1／v2の旧インライン値を保持して保存・Cloneによる消失を防ぐ。再割り当て後に古いMissing IDが復活しないことも検証した。
+- 参照を一つ含むだけで未対応型・埋め込み再帰・コンテナー入れ子を許可していた型検証を修正。削除時の走査を共通化し、実行中の削除バッチに一度だけ適用する。Stopでは破棄済みComponentを再走査しない。1万件で未完了だった測定の原因には、停止時の反復全走査と、編集測定の重複名生成の入れ子走査が含まれていた。測定セットアップは一意名を使う。
+- Inspectorのプログラムによる選択肢更新とユーザー操作を分離。NoneへのClearは未保存化せず、Detached値も参照欄として再設定できる。入れ子の参照コレクション編集、Missing付き行の削除・辞書キー変更、記号を含む辞書キーの保持パス衝突を修正。Core／Editorの回帰チェックと、実際のRouted DragOver／Dropイベントで接続を確認した。
+- 合意どおり登録型を参照へ統一したため、既存のenum／埋め込み値のコード再読み込みテストは補助型を明示的にRegistryから外して値として検証する。通常Projectではpublic具象クラスが自動登録されることをREADMEに明記した。
+- 条件：`dotnet run --project tests/PureEngine.Core.Checks -c Release -- --runtime-benchmark`、Windows 10.0.26200・X64・.NET 11 RC1、時間は5標本の中央値、500msウォームアップ、10,000ステップ／標本。固定msしきい値を合否に使わない。以下は修正後の同一実装で参照の有無を比較した値であり、ID導入前との厳密なA/B測定ではない。
+
+| 対象数／参照数 | Play準備 ms | 準備中割り当て B | YAML文字数 | 定常Step μs | B／Step | Stop ms | 実行用グラフの保持量概算 B |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2,000／0 | 8.960 | 9,750,480 | 430,472 | 4.170 | 0 | 0.712 | 2,441,544 |
+| 2,000／1,000 | 23.384 | 10,062,480 | 480,472 | 4.596 | 0 | 0.851 | 1,827,008 |
+| 20,000／0 | 134.758 | 98,927,880 | 4,364,472 | 116.735 | 0 | 45.717 | 22,331,144 |
+| 20,000／10,000 | 159.760 | 102,047,880 | 4,864,472 | 161.093 | 0 | 42.386 | 22,331,144 |
+
+Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まない。割り当て量はスレッドの累積割り当て差分、保持量は別の非インライン測定フレーム内で実行用Sceneを生存させた `GC.GetTotalMemory(true)` 差分（1標本・キャッシュやGCの変動を含む概算）。YAML文字数を保持メモリとして扱わない。特に小さいケースの保持量差から、参照を増やすとメモリが減るとは結論しない。
+
+- 定常アクセスは通常のC#メンバーアクセスで、ID検索・反射・再接続を挟まない。10,000参照のケースまで定常GC割り当て0 B。参照ありでは対象の値を読むゲーム処理も加わるため、時間差をID検索の費用と解釈しない。
+- 編集側の直接代入／解除は1,000件で0.012／0.009μs毎件、10,000件で0.004／0.002μs毎件。共有参照先の削除は1,000件で1.609ms、10,000件で16.451ms。これはC#の編集データ操作の測定で、Avaloniaの描画・レイアウト時間を含まない。
+- 全計測は完走。実画面のD&D・別マシン／GPU・CIは未確認。通常のC#からMissingのnull要素を移動した場合は自動追跡できず、保持パスの明示操作が必要。ローカル変数やInspector外参照の自動無効化も保証しない。
+
 ### StuffsのUI作成メニュー（2026-09-23）
 
 「UI → Image／Button」を現在のComponent・Project所有権・親子ツリーへ統合。Transform・UiElementを含む必要な構成を揃え、選択中の親の子として追加する。旧ブランチのSpritePath／Text等の別仕様は導入しない。操作は[README](../README.md)を参照。
@@ -203,7 +295,7 @@ Steamなど設計書で保留している内容は、ここに載せたことを
 
 ### Game表示とButton操作（2026-09-23）
 
-Editorで画像とButtonを配置・保存し、Play中のGameで押すと自作C#が呼ばれ、Consoleにログが出る一連を接続した。今回はGame表示とButton操作までとし、Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は追加しない。この達成だけでV3〜V5全体を完了扱いにしない。確定した仕様は[設計書](EngineArchitecture.md#v5前半game表示とbutton操作)を正本とする。namespaceの名前・有無・宣言形式は変更していない（`Button`はAvaloniaとの衝突を避けて`PureEngine.Core.Components`に置き、typeIdは`core.button`）。
+Editorで画像とButtonを配置・保存し、Play中のGameで押すと自作C#が呼ばれ、Consoleにログが出る一連を接続した。今回はGame表示とButton操作までとし、Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は追加しない。この達成だけでV3〜V5全体を完了扱いにしない。確定した仕様は[設計書](EngineArchitecture.md#v5前半game表示とbutton操作)を正本とする。`Button`・`Image`は`PureEngine.Core`に統一し（typeIdは`core.button`／`core.image`のまま）、Editor・テスト側のAvaloniaとの衝突は完全修飾と`using`エイリアスで明示する。
 
 - ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェックがすべて通過した。
 - Core追加（`UiButtonChecks`）：Buttonの保存往復・Clone分離・既定値、UI組み合わせ要件、購読の登録・解除・複数通知・保存／Clone時の購読分離、tintの相違と`Image.Color`不変・解決優先度、重なり順・親変換・押下キャンセル・無効化・Imageなし・遮らない画像のヒット規則、更新境界ディスパッチ（0無反応・単発・実行Sceneのcontext・再通知なし・編集不変・例外停止・削除／停止／無効時のスキップ・Start前捨て）を確認。

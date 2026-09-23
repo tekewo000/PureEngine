@@ -71,12 +71,12 @@ internal static class SceneViewChecks
         back.Rename("Back");
         back.Attach(new Transform { LocalPosition = new Vector3(10, 10, 0) });
         back.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 100) });
-        back.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        back.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
         var front = scene.AddEmpty();
         front.Rename("Front");
         front.Attach(new Transform { LocalPosition = new Vector3(50, 50, 9) });
         front.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 100) });
-        front.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        front.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
         var viewport = new Vector2(400, 200);
         var entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         Check(entries.Count == 2, "Both UI objects must enumerate.");
@@ -91,7 +91,7 @@ internal static class SceneViewChecks
             LocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 4),
         });
         rotated.Attach(new UiElement { Pivot = new Vector2(0.5f, 0.5f), SizeDelta = new Vector2(100, 20) });
-        rotated.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        rotated.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
         entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         var rotatedEntry = entries.First(entry => ReferenceEquals(entry.Object, rotated));
         Check(SceneViewMath.TryGetSelectionFrame(rotatedEntry, Vector2.Zero, 1f, out var corners, out var pivot)
@@ -111,12 +111,12 @@ internal static class SceneViewChecks
         zero.Rename("Zero");
         zero.Attach(new Transform());
         zero.Attach(new UiElement { SizeDelta = Vector2.Zero });
-        zero.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        zero.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
         entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         var zeroHit = SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, Vector2.Zero, IsImage);
         Check(!ReferenceEquals(zeroHit, zero), "Zero-size objects must not be hittable.");
 
-        static bool IsImage(SceneObject item) => item.GetComponent<global::Image>() is { Sprite: not null };
+        static bool IsImage(SceneObject item) => item.GetComponent<Image>() is { Sprite: not null };
     }
 
     private static void RenderOrder()
@@ -129,17 +129,17 @@ internal static class SceneViewChecks
             item.Rename(name);
             item.Attach(new Transform { LocalPosition = position });
             item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 100) });
-            item.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+            item.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
             return item;
         }
         var back = Card(scene, "Back", new Vector3(10, 10, 0));
         var front = Card(scene, "Front", new Vector3(50, 50, 0));
-        static bool IsImage(SceneObject item) => item.GetComponent<global::Image>() is { Sprite: not null };
+        static bool IsImage(SceneObject item) => item.GetComponent<Image>() is { Sprite: not null };
 
         // Same Order keeps sibling order: later sibling stays in front.
         Check(SceneViewMath.GetRenderOrder(back) == 0 && SceneViewMath.GetRenderOrder(front) == 0,
             "New Images must start with Order 0.");
-        Check(back.GetComponent<RendererComponent>() == back.GetComponent<global::Image>(),
+        Check(back.GetComponent<RendererComponent>() == back.GetComponent<Image>(),
             "Image Order must be reachable through the RendererComponent base.");
         var entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         var ordered = SceneViewMath.SortForRender(entries);
@@ -149,22 +149,22 @@ internal static class SceneViewChecks
             "Same-Order overlap must pick the later sibling.");
 
         // Larger Order comes to front, even against sibling order. Negatives are allowed.
-        back.GetComponent<global::Image>()!.Order = 1;
+        back.GetComponent<Image>()!.Order = 1;
         entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         Check(ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), back),
             "Larger Order must come to front regardless of sibling order.");
         ordered = SceneViewMath.SortForRender(entries);
         Check(ReferenceEquals(ordered[0].Object, front) && ReferenceEquals(ordered[1].Object, back),
             "SortForRender must place larger Order later.");
-        var backImage = back.GetComponent<global::Image>()!;
+        var backImage = back.GetComponent<Image>()!;
         back.Detach(backImage);
         back.Attach(new RenderOrderLifecycle { Order = int.MinValue });
         back.Attach(backImage);
         Check(SceneViewMath.GetRenderOrder(back) == backImage.Order
             && ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), back),
             "Another renderer attached before Image must not override the displayed Image's Order or selection.");
-        front.GetComponent<global::Image>()!.Order = -1;
-        back.GetComponent<global::Image>()!.Order = -5;
+        front.GetComponent<Image>()!.Order = -1;
+        back.GetComponent<Image>()!.Order = -5;
         entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         Check(ReferenceEquals(SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(60, 60), IsImage), front),
             "Negative Orders must still compare ascending with larger values in front.");
@@ -176,12 +176,12 @@ internal static class SceneViewChecks
         var sibling = Card(scene, "Sibling", new Vector3(100, 50, 0));
         var before = SceneViewMath.EnumerateLayouts(scene, viewport)
             .First(entry => ReferenceEquals(entry.Object, child));
-        parent.GetComponent<global::Image>()!.Order = 10;
-        child.GetComponent<global::Image>()!.Order = 0;
-        sibling.GetComponent<global::Image>()!.Order = 5;
+        parent.GetComponent<Image>()!.Order = 10;
+        child.GetComponent<Image>()!.Order = 0;
+        sibling.GetComponent<Image>()!.Order = 5;
         // Reset overlapping cards so only the parent chain decides the frontmost pick.
-        back.GetComponent<global::Image>()!.Order = -10;
-        front.GetComponent<global::Image>()!.Order = -10;
+        back.GetComponent<Image>()!.Order = -10;
+        front.GetComponent<Image>()!.Order = -10;
         entries = SceneViewMath.EnumerateLayouts(scene, viewport);
         var after = entries.First(entry => ReferenceEquals(entry.Object, child));
         Check(after.Size == before.Size && after.WorldScene.Equals(before.WorldScene),
@@ -203,7 +203,7 @@ internal static class SceneViewChecks
         var lifecycle = new RenderOrderLifecycle();
         probe.Attach(lifecycle);
         probe.SetStartPriority(lifecycle, 100);
-        back.GetComponent<global::Image>()!.Order = 3;
+        back.GetComponent<Image>()!.Order = 3;
         Check(SceneViewMath.GetRenderOrder(back) == 3 && probe.GetStartPriority(lifecycle) == 100,
             "Render Order and lifecycle Priority must be stored independently.");
         Check(SceneViewMath.GetRenderOrder(probe) == 0,
@@ -275,7 +275,7 @@ internal static class SceneViewChecks
         child.SetParent(parent);
         child.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(40, 30) });
-        child.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        child.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
         var viewport = new Vector2(400, 200);
 
         // Grouping nodes have no rect, but their transform must scope children.

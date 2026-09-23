@@ -73,6 +73,7 @@ static class GameDependencyChecks
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Hero");
+        Check(target.Detach(added), "Edited instance must detach from its draft owner before reuse.");
         item.Attach(added);
         var yaml = serializer.Serialize(scene);
         Check(yaml.Contains("Hp: 37"), "Edited Inspector value must be saved.");

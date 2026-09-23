@@ -4,7 +4,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using PureEngine.Core;
 using PureEngine.Editor;
-using UiButton = PureEngine.Core.Components.Button;
+using UiButton = PureEngine.Core.Button;
 
 static class UiMenuChecks
 {
@@ -37,14 +37,14 @@ static class UiMenuChecks
                 "UI submenu must contain Image and Button.");
             Click(subs[0]);
             var image = scene.Objects.Single();
-            Check(image.Name == "Image" && image.Components.Count == 3 && image.GetComponent<global::Image>() is not null
+            Check(image.Name == "Image" && image.Components.Count == 3 && image.GetComponent<PureEngine.Core.Image>() is not null
                 && UiComponentRequirements.GetMissing(image).Count == 0, "Image creation must include its layout requirements.");
             Check(ReferenceEquals((objects.SelectedItem as HierarchyNode)?.Ref, image) && store.IsDirty,
                 "Creation must select the new tree node and dirty the scene.");
             Click(subs[1]);
             var button = scene.Objects[1];
             Check(button.Name == "Button" && button.Components.Count == 4 && button.GetComponent<UiButton>() is not null
-                && button.GetComponent<global::Image>() is not null && UiComponentRequirements.GetMissing(button).Count == 0,
+                && button.GetComponent<PureEngine.Core.Image>() is not null && UiComponentRequirements.GetMissing(button).Count == 0,
                 "Button creation must include its visuals and layout requirements.");
             Check(ReferenceEquals(button.Parent, image) && ReferenceEquals((objects.SelectedItem as HierarchyNode)?.Ref, button),
                 "UI creation must follow Add Empty's selected-parent rule and select the child.");

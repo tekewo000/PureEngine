@@ -244,7 +244,7 @@ public static class SceneViewMath
     {
         ArgumentNullException.ThrowIfNull(item);
         // 現在の描画経路はImageのみ。他の派生型のアタッチ順にImageの描画順を左右させない。
-        return item.GetComponent<global::Image>()?.Order ?? 0;
+        return item.GetComponent<Image>()?.Order ?? 0;
     }
 
     /// <summary>配置計算済みの列をOrder昇順へ安定並べ替えする。描画とヒット判定で同じ処理を使う。</summary>

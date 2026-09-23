@@ -400,11 +400,27 @@ UI用の値・コンポーネント・配置計算・クリック契約は`PureE
 
 #### ID参照と素材ファイル
 
+**2026-09-23更新：SceneObject／Component参照には、下記の[直接参照の合意](#sceneobjectcomponentの直接参照2026-09-23合意実装済み)を優先する。** 以下のObjectRefを公開値型として扱う記述、および後段のV3工程表・InspectorValueTypesへのObjectRef追加案は旧案。画像・フォントの計画はこの変更で実装・変更したことにはならない。
+
 提案する保存用の参照は`ObjectRef`・`ImageRef`・`FontRef`の3つの小さな不変値型。保持する値はGuidだけで、実オブジェクト・Type・デリゲート・GPUハンドルを持たない。YAMLではGuidのD形式文字列、未指定はnull（内部ではGuid.Empty）とする。汎用の`AssetRef<T>`や任意オブジェクトグラフのシリアライズは導入しない。
 
 - ObjectRefは渡されたScene内でのみ解決する。CloneではIDを保ち、解決先は必ずClone先のSceneとする。欠落した対象は解決結果null＋診断とし、保存済みIDは消さない。構造を壊す欠落Parent IDとは区別する。
 - ImageRefの未指定は画像なし。存在しない非空IDや不正な画像は、描画接続後に欠落表示＋診断。FontRefの未指定はV2同梱Noto、非空IDの欠落はIDを残して同梱フォントへ代替する。
 - 参照はプロジェクトローカル。同じIDが別Projectにあっても別の索引を使う。異なるProjectのオブジェクト／素材を暗黙に検索しない。
+
+##### SceneObject・Componentの直接参照（2026-09-23合意・実装済み）
+
+ゲーム側は `[Inspector] public Button? TestButton { get; set; }` のような通常のC#参照を宣言する。保存上の識別はID、実行中の操作対象は接続済みの実物とする。`ObjectRef<T>`／毎回の `Resolve`、専用基底クラス、IDメンバーの手書きは要求しない。工程・検証・性能測定は[実装計画](ImplementationPlan.md#sceneobjectcomponentのid参照とinspector接続2026-09-23合意実装済み)で管理する。
+
+- **IDの所有：** SceneObjectの既存Guidを維持し、全Componentにも参照の有無によらずインスタンスGuidを付ける。普通のC#クラスを維持するためIDはエンジンのアタッチ管理情報に保持し、生成／Attachの共通境界でSceneへの公開前に確定する。Scene内ではObjectとComponentを跨いで一意。型識別の既存 `typeId` とは別。Inspectorの各欄や数値・文字列などの値自体には固有IDを付けない。同じ実物の多重所有は拒否する。
+- **値と参照：** SceneObject型とProjectのRegistryに登録されたComponent型のInspectorメンバーは対象への参照として扱う。未登録の対応する自作クラスは既存の埋め込み値として扱う。Componentカードは自身のInspector値を編集し、他Componentの欄に現れる同型は参照スロットとする。登録型は現在値のアタッチ有無で値／参照の意味を切り替えず、未アタッチなら参照先不正として保存を拒否する。InspectorはDetached表示から再設定でき、埋め込み値のCreateへ戻さない。Spriteなどの素材値は今回変更しない。自動登録されるpublic具象ヘルパーも登録型なら参照になる。埋め込み値に参照が含まれていても、他のメンバーの未対応型・埋め込み再帰・未対応のコンテナー入れ子は拒否する。
+- **保存：** 新形式は `version: 3`。各Componentに `id` を保存し、参照は `{ ref: <GuidのD形式> }`、未指定はnullとする。参照先の値はそのComponent本体にだけ保存する。既存の親・兄弟順・Priority等は維持する。旧版（v1／v2）はSceneObject IDを保持し、不足するComponent IDを新規発行して未保存化する。登録Component型の旧インライン値はScene所有へ保持し、再割り当て／明示破棄まで保存・Cloneを拒否する。v3の参照欄でインライン値を受け付けない。旧版の参照先推測やデータの黙示破棄は行わない。
+- **解決：** SceneごとにID→実物の索引を持ち、全対象の生成・登録後に宣言型との互換性と所有Sceneを検査して接続する。異なるProject／Sceneへの暗黙の検索はしない。全Startより前に接続を完了する。ID参照の前方・自己・相互循環は許可し、親子や埋め込み値の循環拒否とは区別する。不正ID・重複ID・存在する対象との型不一致は明示的なエラーとする。未アタッチ・別Scene対象の保存は拒否する。
+- **欠落：** 対象不在はC#側をnullにして、保存IDをScene所有の参照管理情報へ保持し、InspectorはMissing表示とする。Missingのまま保存可能。明示Clearで初めてそのIDを除去する。元IDが復帰すれば再接続する。通常のC#代入・コレクション変更と管理情報の整合は編集／保存／構造変更の境界で処理し、毎フレーム反射監視しない。ゲームが非nullの別対象を代入した場合は実物の値を優先する。Missingで既にnullの欄への単なるnull再代入は観測できないので、Missing IDの破棄はInspectorのClearまたは対応するエンジンの明示操作で行う。配列／Listは位置、辞書はキー、埋め込み値はドット区切りで保持し、Inspectorの構造変更では付け替える。直接のC#並べ替えでずれたMissingの復元は保証しない。
+- **複製と寿命：** Play用Clone・コード再読み込みはIDを保持して新Sceneの実物へ接続し直す。同一Scene内への複製経路は存在しないため、新ID発行・範囲内付け替えの分岐は未使用とする。削除・取り外し・交換時は管理対象の参照欄を変更境界で更新する。任意のローカル変数、外部サービス、Inspector対象外のメンバーへコピーしたC#参照の自動失効は保証しない。イベント購読は保存・Cloneせず、実行側で行う。
+- **性能：** ID生成・索引構築・参照接続は準備／変更時へ寄せ、定常実行は通常のC#参照を使う。プロパティアクセスごとのID検索・反射、全Sceneの毎フレーム再接続を導入しない。準備時間・保持メモリ・保存サイズと、定常Updateの時間・割り当て量を分けて実装前後で測定する。速度の改善や無視できる負担を未測定のまま保証しない。埋め込み内List／辞書の入れ子参照のInspector編集は今回未対応とし、Coreの保存・復元は対応する。
+
+##### 素材ファイルの既存計画
 
 画像・フォントは`Assets/`以下へ明示的に取り込む。初期の対象はPNG／JPEGとTTF／OTF。素材ごとに隣接ファイル（例：`Assets/Cards/ace.png.pureasset.yaml`）を置き、`version: 1`・`id: <Guid>`・`kind: image|font`を保存する。素材の相対パスはサイドカーに重複保存せず、Project所有の索引が走査結果からID→パスを作る。既存の`.pureengine/types.json`はC#型ID専用のままとする。
 
@@ -569,7 +585,7 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 **合意した範囲：Game表示とButton操作まで。** Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は追加しない。この達成だけでV3〜V5全体を完了扱いにしない。検証の証跡は[実装計画](ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
 
 - GameはPlaySessionの実行用Sceneを描く。Scene Viewは編集用Sceneの表示を維持し、Play中の編集禁止を守る。実行中のTransformやImageの変更は次のフレームの配置再計算でGameへ反映する。描画は配置と画像投入だけを行い、Start／Updateを呼ばないため更新の二重実行は起きない。Gameタブ非表示時は描画・入力を止めるが、Playタイマーは独立しているためゲームの進行は維持する。Sceneの読み取りと更新はどちらもUIスレッドで直列化し、GPU側へは確定したDrawListを渡す。
-- Buttonは普通のComponent（`PureEngine.Core.Components.Button`、typeId `core.button`）とし、TransformとUiElementで領域を決める。見た目は同じオブジェクトのImageを使う。Avalonia.Controls.Buttonとの衝突を避けるためComponents名前空間に置く。`Interactable = true` を既定とし、Inspector編集・保存・復元・Cloneへ接続する。一時的な押下・ホバー・フォーカス状態はComponentに持たず、保存やCloneで引き継がない。Add Componentの検索（"button"で一致）・既存factory・重複防止を使い、Transform／UiElementの不足は既存の `UiComponentRequirements`／Inspector警告で知らせる。Imageは必須にしない。
+- Buttonは普通のComponent（`PureEngine.Core.Button`、typeId `core.button`）とし、TransformとUiElementで領域を決める。見た目は同じオブジェクトのImageを使う。`Image` も `PureEngine.Core` に置き、Avalonia.Controls.Button／Imageとの衝突はEditor・テスト側で完全修飾と `using` エイリアスにより明示する。`Interactable = true` を既定とし、Inspector編集・保存・復元・Cloneへ接続する。一時的な押下・ホバー・フォーカス状態はComponentに持たず、保存やCloneで引き継がない。Add Componentの検索（"button"で一致）・既存factory・重複防止を使い、Transform／UiElementの不足は既存の `UiComponentRequirements`／Inspector警告で知らせる。Imageは必須にしない。
 - 状態表示は保存済みの `Image.Color` を書き換えず、実効色の読み取りと重ね描きで行う。通常はそのまま、ホバー・押下・無効はそれぞれ白・黒・灰色の半透明矩形を重ね、キーボードフォーカスは紫の枠を描く。ImageのないButtonもヒット対象とし、フォーカス時は枠だけを描く。
 - 入力は配置計算・座標変換・Orderによる順序を描画と共有する（`SceneViewMath.SortForRender`／`HitTest`、`UiLayout`）。Gameにパン／ズームはなく、Scene Viewの視点は影響しない。親の回転・拡縮は逆行列で戻し、DPIは論理座標とGPUターゲット寸法の境界で一度だけ適用する。表示領域のクリップ（領域外は対象外）を考慮し、見た目と判定を一致させる。重なったButtonは手前（Order降順、同値は後方が手前）の1つだけが入力を受ける。左ボタンで押し始めたButton上で離したときだけ1回通知し、外で離した場合はキャンセルする。ポインターキャプチャを使い、フォーカス喪失・キャプチャ喪失・タブ切替・無効化・削除・Stopで押下状態を解除する。Tab／Shift+TabはOrder昇順（描画順の背→手前）で移動し、Enter／Spaceでも操作できる。キーボードの長押しリピートは抑止する。他の起動キーの解放やTab移動では再発火させず、ポインター押下中のキー起動は受け付けない。Tab候補から画面外・退化変換・描画失敗のButtonを除き、無効化・削除時の押下とフォーカスは更新後に解除する。`Interactable=false`・0サイズ・判定不能な変換は対象外にする。親Buttonの無効化だけで子Buttonを無効化しない。ImageのないButtonも操作でき、ButtonでないImageはGame入力を遮らない。未実装のVisible／ClipChildren等は考慮せず、実装済みとして扱わない。
 - Button自身が `IUiButtonHandler.OnClick(UiClickContext context)` を実装し、`event Action<UiClickContext>? Clicked` を発火する。Runtimeは同じSceneObjectから別のhandlerを検索せず、Button自身へ入力を届ける。購読なしは何もしない。複数の購読は通常のC#イベントとして登録順に呼び、解除は `-=` を使う。イベントの購読・メソッド名・デリゲートは保存・Cloneせず、Playごとに実行用Buttonへ登録する。入力は `SceneRuntime.Step` 内のStart済みバッチの後・Updateの前で処理し、Start前や停止後のEnqueueは捨てる。購読先の初期化と解除は登録側が管理し、別オブジェクトの購読先が削除される場合はDestroy等で解除する。購読先のStart待ちや自動検出は行わない。クリック中のButton削除・Stopは残りの入力を捨てるが、実行中のイベント通知は通常どおり完了する。購読処理が例外を投げると後続の購読は呼ばず、`Button.OnClick` のエラーとしてConsoleへ報告して安全に停止する。contextには実行用SceneとButtonのSceneObjectを渡す。

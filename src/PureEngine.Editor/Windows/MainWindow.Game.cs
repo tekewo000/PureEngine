@@ -53,7 +53,7 @@ public partial class MainWindow
         Dictionary<Guid, GameSceneRenderer.ButtonVisual> states = [];
         foreach (var item in runtime.Scene.Objects)
         {
-            if (item.GetComponent<PureEngine.Core.Components.Button>() is not { } button)
+            if (item.GetComponent<Core.Button>() is not { } button)
                 continue;
             var id = item.Id;
             var state = UiButtonVisuals.Resolve(
@@ -93,7 +93,7 @@ public partial class MainWindow
 
     private bool IsClickableButton(SceneObject item)
     {
-        if (item.GetComponent<PureEngine.Core.Components.Button>() is not { Interactable: true })
+        if (item.GetComponent<Core.Button>() is not { Interactable: true })
             return false;
         return !_gameDrawFailures.Contains(item.Id);
     }
@@ -204,7 +204,7 @@ public partial class MainWindow
             ? HitGameButton(viewportSize, viewPoint)
             : null;
         var clicked = hit is not null && hit.Id == pressedId
-            && FindRuntimeObject(pressedId)?.GetComponent<PureEngine.Core.Components.Button>() is { Interactable: true };
+            && FindRuntimeObject(pressedId)?.GetComponent<Core.Button>() is { Interactable: true };
         ClearGamePress(pointer);
         if (clicked)
             ActivePlay?.Runtime.EnqueueButtonClick(pressedId);
@@ -244,7 +244,7 @@ public partial class MainWindow
             return;
         if (_gameFocused is not { } focusedId)
             return;
-        if (FindRuntimeObject(focusedId)?.GetComponent<PureEngine.Core.Components.Button>() is not { Interactable: true })
+        if (FindRuntimeObject(focusedId)?.GetComponent<Core.Button>() is not { Interactable: true })
             return;
         if (!IsKeyboardActivatable(viewportSize, focusedId))
             return;
@@ -402,7 +402,7 @@ public partial class MainWindow
         }
         var hit = HitGameButton(viewportSize, viewPoint);
         var clicked = hit is not null && hit.Id == pressedId
-            && FindRuntimeObject(pressedId)?.GetComponent<PureEngine.Core.Components.Button>() is { Interactable: true };
+            && FindRuntimeObject(pressedId)?.GetComponent<Core.Button>() is { Interactable: true };
         _gamePressed = null;
         _gamePressedPointer = null;
         if (clicked)
@@ -425,7 +425,7 @@ public partial class MainWindow
             return false;
         if (_gameFocused is not { } focusedId)
             return false;
-        if (FindRuntimeObject(focusedId)?.GetComponent<PureEngine.Core.Components.Button>() is not { Interactable: true })
+        if (FindRuntimeObject(focusedId)?.GetComponent<Core.Button>() is not { Interactable: true })
             return false;
         if (!IsKeyboardActivatable(viewportSize, focusedId))
             return false;

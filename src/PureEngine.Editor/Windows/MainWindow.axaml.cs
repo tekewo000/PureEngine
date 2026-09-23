@@ -267,10 +267,10 @@ public partial class MainWindow : Window
     /// <summary>Componentカードと収集エディタで共有する折りたたみトグル。状態は <paramref name="store"/> に保持する。</summary>
     /// <remarks>Button ベースにする。ToggleButton は Fluent テーマの checked 状態で
     /// テンプレート部品に直接アクセント塗りが付くため、透明化スタイルでは消し切れない。</remarks>
-    private static Button BuildCollapseToggle(string automationName, string collapseKey, Dictionary<string, bool> store, Action<bool> apply)
+    private static Avalonia.Controls.Button BuildCollapseToggle(string automationName, string collapseKey, Dictionary<string, bool> store, Action<bool> apply)
     {
         var expandedState = !store.TryGetValue(collapseKey, out var collapsed) || !collapsed;
-        var toggle = new Button
+        var toggle = new Avalonia.Controls.Button
         {
             Content = expandedState ? "▾" : "▸",
             // Fixed square so the ▾/▸ swap never shifts the button, title, or header buttons.
@@ -504,12 +504,66 @@ public partial class MainWindow : Window
     }
 
     /// <summary>入れ子の自作クラス用に、明示したAutomation名でメンバー行を作る。見た目は <see cref="BuildMemberRow"/> と同じ。</summary>
-    private Grid BuildNestedMemberRow(object owner, MemberInfo member, string automationName)
+    private Grid BuildNestedMemberRow(object owner, MemberInfo member, string automationName, Guid? topOwnerId = null, string? storePath = null, Action? refreshParent = null)
     {
         var memberType = GetMemberType(member);
         var friendlyType = FriendlyTypeName(memberType);
-        return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType,
-            BuildMemberEditor(owner, member, automationName));
+        Control editor;
+        var effectiveOwnerId = topOwnerId;
+        var effectiveStore = storePath;
+        if (effectiveOwnerId is not null && effectiveStore is not null)
+        {
+            if (SceneReferenceTypes.IsSingleReference(memberType, _components.Registry))
+            {
+                var capturedOwner = owner;
+                var capturedMember = member;
+                var capturedPath = effectiveStore;
+                var capturedId = effectiveOwnerId.Value;
+                var capturedAutomation = automationName;
+                var capturedRefresh = refreshParent ?? RefreshComponents;
+                editor = BuildNestedReferenceEditor(capturedOwner, capturedMember, capturedId, capturedPath, capturedAutomation, capturedRefresh);
+                return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
+            }
+            if (SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
+                && (memberType.IsArray || (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(List<>))))
+            {
+                editor = BuildNestedCollectionEditor(owner, member, effectiveOwnerId.Value, effectiveStore, automationName);
+                return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
+            }
+            if (SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
+                && memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
+                editor = BuildNestedCollectionEditor(owner, member, effectiveOwnerId.Value, effectiveStore, automationName);
+                return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
+            }
+            if (InspectorValueTypes.IsCustomInspectorObject(memberType) || SceneReferenceTypes.ContainsReference(memberType, _components.Registry))
+            {
+                var objectType = memberType;
+                var capturedBase = effectiveStore;
+                var capturedId2 = effectiveOwnerId.Value;
+                var capturedAutomation2 = automationName;
+                var capturedRefresh2 = refreshParent ?? RefreshComponents;
+                editor = BuildObjectBox(
+                    () => GetMemberValue(owner, member),
+                    value =>
+                    {
+                        if (IsPlaying)
+                            return;
+                        switch (member)
+                        {
+                            case FieldInfo field: field.SetValue(owner, value); break;
+                            case PropertyInfo property: property.SetValue(owner, value); break;
+                            default: throw new NotSupportedException($"Unsupported member: {member.Name}");
+                        }
+                        MarkSceneChanged();
+                        capturedRefresh2();
+                    },
+                    objectType, capturedAutomation2, capturedId2, capturedBase);
+                return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
+            }
+        }
+        editor = BuildMemberEditor(owner, member, automationName);
+        return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
     }
 
     private static Grid BuildLabeledEditorRow(string label, string tooltip, string typeText, Control editor)
@@ -551,6 +605,15 @@ public partial class MainWindow : Window
     {
         var memberType = GetMemberType(member);
         automationName ??= $"{component.GetType().Name}.{member.Name}";
+
+        if (ShouldShowReferenceEditor(memberType))
+            return BuildMemberReferenceEditor(component, member, automationName);
+        if ((memberType.IsArray || memberType.IsGenericType)
+            && SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
+            && GetOwnerComponentId(component) is { } ownerId)
+            return SceneReferenceTypes.IsSupportedInspectorType(memberType, _components.Registry)
+                ? BuildNestedCollectionEditor(component, member, ownerId, member.Name, automationName)
+                : UnsupportedBadge(memberType);
 
         if (memberType == typeof(string))
         {
@@ -655,15 +718,15 @@ public partial class MainWindow : Window
             return BuildNullableEditor(component, member, automationName);
         if (memberType.IsArray || (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            if (InspectorValueTypes.IsSupportedType(memberType))
+            if (SceneReferenceTypes.IsSupportedInspectorType(memberType, _components.Registry))
                 return BuildSequenceEditor(component, member, automationName);
         }
         if (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
         {
-            if (InspectorValueTypes.IsSupportedType(memberType))
+            if (SceneReferenceTypes.IsSupportedInspectorType(memberType, _components.Registry))
                 return BuildDictionaryEditor(component, member, automationName);
         }
-        if (InspectorValueTypes.IsCustomInspectorObject(memberType))
+        if (InspectorValueTypes.IsCustomInspectorObject(memberType) || SceneReferenceTypes.ContainsReference(memberType, _components.Registry))
             return BuildObjectEditor(component, member, automationName);
 
         return UnsupportedBadge(memberType);
@@ -781,10 +844,10 @@ public partial class MainWindow : Window
     }
 
     private void OnAddUiImage(object? sender, RoutedEventArgs e) =>
-        AddUiObject("Image", [typeof(Core.Transform), typeof(UiElement), typeof(global::Image)]);
+        AddUiObject("Image", [typeof(Core.Transform), typeof(UiElement), typeof(Core.Image)]);
 
     private void OnAddUiButton(object? sender, RoutedEventArgs e) =>
-        AddUiObject("Button", [typeof(Core.Transform), typeof(UiElement), typeof(global::Image), typeof(Core.Components.Button)]);
+        AddUiObject("Button", [typeof(Core.Transform), typeof(UiElement), typeof(Core.Image), typeof(Core.Button)]);
 
     /// <summary>現在の親選択とComponent生成経路を使い、必要なUI構成を揃えて作成する。</summary>
     private void AddUiObject(string baseName, Type[] componentTypes)

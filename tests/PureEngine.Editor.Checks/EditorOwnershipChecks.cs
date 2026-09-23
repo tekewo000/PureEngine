@@ -7,6 +7,7 @@ using PureEngine.Core;
 using PureEngine.Editor;
 using PureEngine.Editor.Samples;
 using PureEngine.Runtime;
+using Button = Avalonia.Controls.Button;
 
 static class EditorOwnershipChecks
 {

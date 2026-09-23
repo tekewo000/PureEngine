@@ -35,7 +35,7 @@ static class UiComponentChecks
         var registry = new ComponentRegistry();
         registry.Register<Transform>("core.transform");
         registry.Register<UiElement>("core.ui-element");
-        registry.Register<global::Image>("core.image");
+        registry.Register<Image>("core.image");
         registry.Register<SpriteProbe>("checks.sprite");
         return registry;
     }
@@ -48,7 +48,7 @@ static class UiComponentChecks
         var item = scene.AddEmpty();
         item.Rename("Sprite holder");
         var id = Guid.NewGuid();
-        var image = new global::Image { Sprite = new Sprite(id, (8, 4, 16, 12)), Color = new Vector4(1, 0.5f, 0.25f, 0.75f) };
+        var image = new Image { Sprite = new Sprite(id, (8, 4, 16, 12)), Color = new Vector4(1, 0.5f, 0.25f, 0.75f) };
         item.Attach(new Transform());
         item.Attach(new UiElement());
         item.Attach(image);
@@ -58,10 +58,10 @@ static class UiComponentChecks
         probeItem.Attach(probe);
 
         var yaml = serializer.Serialize(scene);
-        Check(yaml.Contains("version: 2") && yaml.Contains("imageId") && yaml.Contains("sourceRect"),
-            "Sprite YAML must carry version 2 with imageId and sourceRect.");
+        Check(yaml.Contains("version: 3") && yaml.Contains("imageId") && yaml.Contains("sourceRect"),
+            "Sprite YAML must carry version 3 with imageId and sourceRect.");
         var restored = serializer.Deserialize(yaml);
-        var copy = restored.Objects[0].GetComponent<global::Image>()!;
+        var copy = restored.Objects[0].GetComponent<Image>()!;
         Check(copy.Sprite is not null && copy.Sprite.ImageId == id && copy.Sprite.SourceRect == (8, 4, 16, 12),
             "Sprite whole/crop did not survive.");
         Check(copy.Color == new Vector4(1, 0.5f, 0.25f, 0.75f), "Image color did not survive.");
@@ -72,7 +72,7 @@ static class UiComponentChecks
         Check(serializer.Serialize(restored) == yaml, "Sprite save/load changed output.");
 
         var clone = serializer.Clone(scene);
-        var cloneImage = clone.Objects[0].GetComponent<global::Image>()!;
+        var cloneImage = clone.Objects[0].GetComponent<Image>()!;
         Check(cloneImage.Sprite is not null && cloneImage.Sprite.ImageId == id
             && !ReferenceEquals(cloneImage.Sprite, image.Sprite), "Clone must separate Sprite instances.");
         image.Sprite = new Sprite(Guid.NewGuid());
@@ -87,7 +87,7 @@ static class UiComponentChecks
         var serializer = new SceneSerializer(registry);
         var scene = new Scene();
         var item = scene.AddEmpty();
-        item.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid(), (0, 0, 8, 8)) });
+        item.Attach(new Image { Sprite = new Sprite(Guid.NewGuid(), (0, 0, 8, 8)) });
         var yaml = serializer.Serialize(scene);
         Reject(() => serializer.Deserialize(yaml.Replace("imageId:", "imageId: not-a-guid")),
             "Invalid imageId accepted.");
@@ -96,12 +96,12 @@ static class UiComponentChecks
         Reject(() => serializer.Deserialize(yaml.Replace("sourceRect", "sourceRect: {x: 0}")),
             "Malformed sourceRect accepted.");
         var wholeItem = new SceneObject("Whole");
-        wholeItem.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()) });
+        wholeItem.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()) });
         var wholeScene = new Scene();
         // Attach order does not matter for validation; use a standalone scene for negative cases.
         Reject(() => _ = new Sprite(Guid.NewGuid(), (-1, 0, 1, 1)), "Negative sprite origin accepted.");
         Reject(() => _ = new Sprite(Guid.NewGuid(), (0, 0, 0, 1)), "Zero sprite width accepted.");
-        Check(wholeItem.GetComponent<global::Image>()!.Sprite is not null, "Whole sprite setup failed.");
+        Check(wholeItem.GetComponent<Image>()!.Sprite is not null, "Whole sprite setup failed.");
         Check(wholeScene.Objects.Count == 0, "Negative-case scene must stay empty.");
     }
 
@@ -109,24 +109,24 @@ static class UiComponentChecks
     {
         var registry = UiRegistry();
         var serializer = new SceneSerializer(registry);
-        Check(ComponentSchema.GetInspectorMembers(typeof(global::Image)).Any(member => member.Name == "Order"),
+        Check(ComponentSchema.GetInspectorMembers(typeof(Image)).Any(member => member.Name == "Order"),
             "Image must expose Order through the RendererComponent base.");
-        Check(new global::Image().Order == 0, "New Images must start with Order 0.");
+        Check(new Image().Order == 0, "New Images must start with Order 0.");
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Ordered");
         item.Attach(new Transform());
         item.Attach(new UiElement());
-        var image = new global::Image { Sprite = new Sprite(Guid.NewGuid()), Order = -7 };
+        var image = new Image { Sprite = new Sprite(Guid.NewGuid()), Order = -7 };
         item.Attach(image);
         var yaml = serializer.Serialize(scene);
         Check(yaml.Contains("Order:"), "Order must be saved through Inspector values.");
         var restored = serializer.Deserialize(yaml);
-        Check(restored.Objects[0].GetComponent<global::Image>()!.Order == -7,
+        Check(restored.Objects[0].GetComponent<Image>()!.Order == -7,
             "Negative Order did not survive save/load.");
         Check(serializer.Serialize(restored) == yaml, "Order save/load changed output.");
         var clone = serializer.Clone(scene);
-        var cloneImage = clone.Objects[0].GetComponent<global::Image>()!;
+        var cloneImage = clone.Objects[0].GetComponent<Image>()!;
         Check(cloneImage.Order == -7 && !ReferenceEquals(cloneImage, image),
             "Clone must carry Order to a separate Image instance.");
         image.Order = 4;
@@ -136,7 +136,7 @@ static class UiComponentChecks
         var legacyYaml = string.Join("\n", yaml.Split('\n').Where(line => !line.Contains("Order:", StringComparison.Ordinal)));
         Check(!legacyYaml.Contains("Order:"), "Legacy YAML setup failed.");
         var legacy = serializer.Deserialize(legacyYaml, out var membersChanged);
-        Check(legacy.Objects[0].GetComponent<global::Image>()!.Order == 0,
+        Check(legacy.Objects[0].GetComponent<Image>()!.Order == 0,
             "Old data without Order must load as Order 0.");
         Check(membersChanged, "Missing Order must be reported as added members.");
         Check(serializer.Serialize(legacy).Contains("Order:"), "Resaving legacy data must connect Order.");
@@ -145,7 +145,7 @@ static class UiComponentChecks
     private static void Requirements()
     {
         var imageOnly = new SceneObject("Image only");
-        imageOnly.Attach(new global::Image());
+        imageOnly.Attach(new Image());
         Check(UiComponentRequirements.GetMissing(imageOnly).SequenceEqual(["Transform", "UiElement"]),
             "Image alone must report Transform and UiElement.");
         imageOnly.Attach(new Transform());
@@ -185,7 +185,7 @@ static class UiComponentChecks
         var childImageId = Guid.NewGuid();
         child.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         child.Attach(new UiElement { SizeDelta = new Vector2(64, 32) });
-        child.Attach(new global::Image { Sprite = new Sprite(childImageId), Color = new Vector4(0, 1, 0, 1) });
+        child.Attach(new Image { Sprite = new Sprite(childImageId), Color = new Vector4(0, 1, 0, 1) });
         var sibling = scene.AddEmpty();
         sibling.Rename("Sibling");
         sibling.SetParent(parent);
@@ -204,7 +204,7 @@ static class UiComponentChecks
             && ReferenceEquals(restoredParent.Children[0], restoredChild)
             && ReferenceEquals(restoredParent.Children[1], restoredSibling),
             "Parent links or sibling order did not survive.");
-        Check(restoredChild.GetComponent<global::Image>()!.Sprite!.ImageId == childImageId
+        Check(restoredChild.GetComponent<Image>()!.Sprite!.ImageId == childImageId
             && restoredChild.GetComponent<Transform>()!.LocalPosition == new Vector3(10, 20, 0),
             "Child component values did not survive with parents.");
         Check(restored.RootObjects.Count == 1 && ReferenceEquals(restored.RootObjects[0], restoredParent),
@@ -216,7 +216,7 @@ static class UiComponentChecks
         var cloneChild = clone.Objects.First(item => item.Name == "Child");
         Check(ReferenceEquals(cloneChild.Parent, cloneParent) && !ReferenceEquals(cloneChild, child)
             && !ReferenceEquals(cloneParent, parent), "Clone must resolve parents to clone targets.");
-        Check(!ReferenceEquals(cloneChild.GetComponent<global::Image>()!.Sprite, child.GetComponent<global::Image>()!.Sprite),
+        Check(!ReferenceEquals(cloneChild.GetComponent<Image>()!.Sprite, child.GetComponent<Image>()!.Sprite),
             "Clone must separate Sprite references.");
     }
 
@@ -247,9 +247,9 @@ static class UiComponentChecks
         var duplicated = yaml[..lastIndex] + "siblingIndex: 0" + yaml[(lastIndex + "siblingIndex: 1".Length)..];
         Reject(() => serializer.Deserialize(duplicated),
             "Duplicate siblingIndex accepted.");
-        Reject(() => serializer.Deserialize(yaml.Replace("version: 2", "version: 99")),
+        Reject(() => serializer.Deserialize(yaml.Replace("version: 3", "version: 99")),
             "Future scene version accepted.");
-        Reject(() => serializer.Deserialize(yaml.Replace("version: 2", "version: 1")),
+        Reject(() => serializer.Deserialize(yaml.Replace("version: 3", "version: 1")),
             "Version 1 with parent fields accepted.");
     }
 

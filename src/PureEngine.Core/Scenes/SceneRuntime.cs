@@ -318,7 +318,7 @@ public sealed class SceneRuntime : IDisposable
             if (owner is null || owner.Removed)
                 continue;
             var item = owner.Item;
-            if (item.GetComponent<Components.Button>() is not { Interactable: true } button)
+            if (item.GetComponent<Button>() is not { Interactable: true } button)
                 continue;
             try
             {
@@ -378,6 +378,13 @@ public sealed class SceneRuntime : IDisposable
 
     private void DestroyRemoved()
     {
+        // Update references once at the removal boundary, before any target is disposed.
+        List<SceneObject> removedObjects = [.. _removals.Select(owner => owner.Item)];
+        List<(object Component, Guid Id)> removedComponents = [];
+        foreach (var item in removedObjects)
+            foreach (var component in item.Components)
+                removedComponents.Add((component, item.GetComponentId(component)));
+        SceneReferenceNuller.NullReferencesToSubtree(Scene, removedObjects, removedComponents);
         // Order the whole frame's deletions by Destroy Priority across objects.
         var targets = new List<Invocation>();
         foreach (var owner in _removals)

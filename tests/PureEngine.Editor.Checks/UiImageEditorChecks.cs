@@ -8,6 +8,7 @@ using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
 using SkiaSharp;
+using Button = Avalonia.Controls.Button;
 
 internal static class UiImageEditorChecks
 {
@@ -78,7 +79,7 @@ internal static class UiImageEditorChecks
         }
 
         AddThroughDialog("core.image");
-        var imageCard = editor.GetVisualDescendants().OfType<Border>().Single(card => ReferenceEquals(card.Tag, item.GetComponent<global::Image>()));
+        var imageCard = editor.GetVisualDescendants().OfType<Border>().Single(card => ReferenceEquals(card.Tag, item.GetComponent<PureEngine.Core.Image>()));
         imageCard.ContextMenu!.Items.OfType<MenuItem>().Single().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Dispatcher.UIThread.RunJobs();
         Check(item.Components.Count == 0 && addButton.IsEffectivelyVisible, "Removing the last component must keep Add Component visible.");
@@ -126,7 +127,7 @@ internal static class UiImageEditorChecks
 
         var combo = SpriteCombo(editor);
         Check(combo.Items.Count >= 1, "Sprite selector must list None at least.");
-        var image = item.GetComponent<global::Image>()!;
+        var image = item.GetComponent<PureEngine.Core.Image>()!;
         Check(image.Sprite is null, "New Image Sprite must start as None.");
         var project = (ProjectFile)typeof(MainWindow).GetField("_project",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;

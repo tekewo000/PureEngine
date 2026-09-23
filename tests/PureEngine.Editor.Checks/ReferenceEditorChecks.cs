@@ -1,0 +1,188 @@
+using System.Reflection;
+using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using PureEngine.Core;
+using PureEngine.Editor;
+using Button = Avalonia.Controls.Button;
+
+static class ReferenceEditorChecks
+{
+    public static void Run(MainWindow editor)
+    {
+        static void Check(bool condition, string message)
+        {
+            if (!condition)
+                throw new Exception(message);
+        }
+        static ComboBox Combo(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<ComboBox>()
+            .Single(combo => Equals(combo.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        static Button ButtonByName(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<Button>()
+            .Single(button => Equals(button.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        static void Click(Button button)
+        {
+            button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+        }
+        static void Select(MainWindow window, SceneObject item) =>
+            typeof(MainWindow).GetMethod("SelectSceneObjectForTest",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+                .Invoke(window, [item]);
+        var editStore = (EditSceneStore)typeof(MainWindow).GetField("_editScene", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        var components = (ProjectComponents)typeof(MainWindow).GetField("_components", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        if (!components.Registry.Ids.Contains("checks.test-holder"))
+            components.Registry.Register<TestRefHolder>("checks.test-holder");
+        var scene = editStore.Current;
+
+        var holderObject = scene.AddEmpty();
+        holderObject.Rename("RefHolder");
+        var holder = new TestRefHolder();
+        holderObject.Attach(holder);
+        var targetObject = scene.AddEmpty();
+        targetObject.Rename("RefTarget");
+        var targetButton = new PureEngine.Core.Button();
+        targetObject.Attach(targetButton);
+        typeof(MainWindow).GetMethod("SyncHierarchyForTest", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+            .Invoke(editor, []);
+        Dispatcher.UIThread.RunJobs();
+        Select(editor, holderObject);
+        Dispatcher.UIThread.RunJobs();
+
+        var combo = Combo(editor, $"{nameof(TestRefHolder)}.Target");
+        Check(combo.SelectedItem?.ToString() == "None", "Reference must start as None.");
+        var options = ((System.Collections.IEnumerable)combo.ItemsSource!).Cast<object>().ToList();
+        Check(options.Count >= 2, "Reference must list scene candidates.");
+        var targetOption = options.FirstOrDefault(option => option.ToString()!.Contains("RefTarget", StringComparison.Ordinal));
+        Check(targetOption is not null, "Reference candidates must include the scene Button.");
+        combo.SelectedItem = targetOption;
+        Dispatcher.UIThread.RunJobs();
+        Check(ReferenceEquals(holder.Target, targetButton), "ComboBox selection must connect the live Button.");
+        Check(editor.Title!.StartsWith("* "), "Reference edit must mark dirty.");
+        var info = editor.GetVisualDescendants().OfType<TextBlock>()
+            .Single(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, $"{nameof(TestRefHolder)}.Target.Info"));
+        Check(info.Text!.Contains("RefTarget", StringComparison.Ordinal), "Reference info must show the target name.");
+
+        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
+        Check(holder.Target is null, "Reference Clear must null the member.");
+        Check(!scene.References.TryGetMissing(holderObject.GetComponentId(holder), "Target", out _), "Clear must drop Missing IDs.");
+        editStore.MarkClean();
+        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
+        Check(!editStore.IsDirty, "Clearing None must not mark the scene dirty.");
+
+        holder.Target = new PureEngine.Core.Button();
+        Select(editor, targetObject);
+        Select(editor, holderObject);
+        Dispatcher.UIThread.RunJobs();
+        Check(Combo(editor, $"{nameof(TestRefHolder)}.Target").SelectedItem?.ToString()!.StartsWith("Detached:", StringComparison.Ordinal) == true,
+            "Detached Component must remain a reference slot so it can be reassigned.");
+        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
+
+        var freshOptions = ((System.Collections.IEnumerable)Combo(editor, $"{nameof(TestRefHolder)}.Target").ItemsSource!).Cast<object>().ToList();
+        var freshTarget = freshOptions.FirstOrDefault(option => option.ToString()!.Contains("RefTarget", StringComparison.Ordinal));
+        Check(freshTarget is not null, "Reference candidates must persist after Clear.");
+        Combo(editor, $"{nameof(TestRefHolder)}.Target").SelectedItem = freshTarget;
+        Dispatcher.UIThread.RunJobs();
+        Check(ReferenceEquals(holder.Target, targetButton), "Reassign must reconnect.");
+        var targetButtonId = targetObject.GetComponentId(targetButton);
+        var holderComponentId = holderObject.GetComponentId(holder);
+
+        var resolve = typeof(MainWindow).GetMethod("TryResolveDraggedReference", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object?[] resolveArgs = [targetObject.Id, typeof(PureEngine.Core.Button), null, null];
+        var valid = (bool)resolve.Invoke(editor, resolveArgs)!;
+        Check(valid && ReferenceEquals(resolveArgs[2], targetButton), "Drag resolution must find the dragged component.");
+        object?[] invalidArgs = [Guid.NewGuid(), typeof(PureEngine.Core.Button), null, null];
+        Check(!(bool)resolve.Invoke(editor, invalidArgs)!, "Unknown drag IDs must be rejected.");
+        var holderIdArgs = new object?[] { holderObject.Id, typeof(SceneObject), null, null };
+        Check((bool)resolve.Invoke(editor, holderIdArgs)! && ReferenceEquals(holderIdArgs[2], holderObject), "SceneObject drag must resolve.");
+        object?[] wrongTypeArgs = [holderObject.Id, typeof(PureEngine.Core.Button), null, null];
+        Check(!(bool)resolve.Invoke(editor, wrongTypeArgs)!, "Drag without the expected component must be rejected.");
+
+        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
+        using var dragData = new DataTransfer();
+        var dragFormat = (DataFormat<string>)typeof(MainWindow).GetField("SceneObjectIdFormat", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        dragData.Add(DataTransferItem.Create(dragFormat, targetObject.Id.ToString("D")));
+        var dropTarget = Combo(editor, $"{nameof(TestRefHolder)}.Target");
+        var dragOver = new DragEventArgs(DragDrop.DragOverEvent, dragData, dropTarget, default, KeyModifiers.None);
+        dropTarget.RaiseEvent(dragOver);
+        Check(dragOver.Handled && dragOver.DragEffects == DragDropEffects.Copy, "Reference DragOver must accept the Stuffs payload.");
+        dropTarget.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, dropTarget, default, KeyModifiers.None));
+        Dispatcher.UIThread.RunJobs();
+        Check(ReferenceEquals(holder.Target, targetButton), "Routed reference Drop must assign the live Button.");
+
+        holder.Config = new ReferenceConfig { Buttons = [targetButton, targetButton], Map = new() { ["button"] = targetButton } };
+        holder.Buttons = [targetButton, targetButton];
+
+        scene.Remove(targetObject);
+        Dispatcher.UIThread.RunJobs();
+        typeof(MainWindow).GetMethod("SyncHierarchyForTest", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+            .Invoke(editor, []);
+        Select(editor, holderObject);
+        Dispatcher.UIThread.RunJobs();
+        Check(holder.Target is null, "Target deletion must null the reference.");
+        Check(scene.References.TryGetMissing(holderComponentId, "Target", out var missing) && missing == targetButtonId,
+            "Deletion must keep the Missing ID.");
+        var missingCombo = Combo(editor, $"{nameof(TestRefHolder)}.Target");
+        Check(missingCombo.SelectedItem?.ToString()!.StartsWith("Missing:", StringComparison.Ordinal) == true,
+            "Missing must display as Missing, not None.");
+        Check(editor.Title!.StartsWith("* "), "Deletion must mark dirty.");
+
+        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Remove[0]"));
+        Check(holder.Config.Buttons.Count == 1
+            && scene.References.TryGetMissing(holderComponentId, "Config.Buttons[0]", out var nestedMissing) && nestedMissing == targetButtonId
+            && !scene.References.TryGetMissing(holderComponentId, "Config.Buttons[1]", out _), "Removing a nested list row must move its retained ID.");
+        var keyBox = editor.GetVisualDescendants().OfType<TextBox>().Single(box =>
+            Equals(box.GetValue(AutomationProperties.NameProperty), $"{nameof(TestRefHolder)}.Config.Map.Key[0]"));
+        keyBox.Text = "renamed";
+        Dispatcher.UIThread.RunJobs();
+        Check(scene.References.TryGetMissing(holderComponentId, "Config.Map[renamed]", out var renamedMissing) && renamedMissing == targetButtonId,
+            "Renaming a nested dictionary key must move its retained ID.");
+        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Buttons.Remove[0]"));
+        Check(holder.Buttons.Length == 1 && scene.References.TryGetMissing(holderComponentId, "Buttons[0]", out _)
+            && !scene.References.TryGetMissing(holderComponentId, "Buttons[1]", out _), "Removing an array row must move its retained ID.");
+
+        foreach (var item in scene.Objects.ToArray())
+        {
+            if (!ReferenceEquals(item, holderObject))
+                scene.Remove(item);
+        }
+        typeof(MainWindow).GetMethod("SyncHierarchyForTest", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+            .Invoke(editor, []);
+        Select(editor, holderObject);
+        Dispatcher.UIThread.RunJobs();
+
+        typeof(MainWindow).GetMethod("StartPlay", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.Invoke(editor, []);
+        Dispatcher.UIThread.RunJobs();
+        var playing = (bool)typeof(MainWindow).GetProperty("IsPlaying")!.GetValue(editor)!;
+        if (!playing)
+        {
+            var status = editor.GetVisualDescendants().OfType<TextBlock>()
+                .FirstOrDefault(block => block.Name == "FileStatus")?.Text ?? "<no status>";
+            throw new Exception($"Play must start with references. Status: {status}");
+        }
+        var duringPlay = holder.Target;
+        combo.SelectedItem = combo.ItemsSource!.Cast<object>().First();
+        Dispatcher.UIThread.RunJobs();
+        Check(ReferenceEquals(holder.Target, duringPlay), "Play must reject reference edits.");
+        Check((bool)typeof(MainWindow).GetMethod("StopPlay", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.Invoke(editor, [])!, "Stop must succeed.");
+        Dispatcher.UIThread.RunJobs();
+
+        Console.WriteLine("PASS: reference select/clear, Stuffs drag resolution, Missing display, dirty, and Play guard.");
+    }
+
+    public sealed class TestRefHolder
+    {
+        [Inspector] public PureEngine.Core.Button? Target { get; set; }
+        [Inspector] public SceneObject? Owner { get; set; }
+        [Inspector] public ReferenceConfig? Config { get; set; }
+        [Inspector] public PureEngine.Core.Button?[] Buttons { get; set; } = [];
+    }
+
+    public sealed class ReferenceConfig
+    {
+        [Inspector] public List<PureEngine.Core.Button?> Buttons { get; set; } = [];
+        [Inspector] public Dictionary<string, PureEngine.Core.Button?> Map { get; set; } = [];
+    }
+}

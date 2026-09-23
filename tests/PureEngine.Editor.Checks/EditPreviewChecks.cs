@@ -16,7 +16,7 @@ internal static class EditPreviewChecks
         item.Rename("Card");
         var transform = new Transform { LocalPosition = new Vector3(10, 20, 0) };
         var element = new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) };
-        var image = new global::Image { Sprite = new Sprite(imageId), Color = Vector4.One };
+        var image = new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = Vector4.One };
         item.Attach(transform);
         item.Attach(element);
         item.Attach(image);
@@ -64,7 +64,7 @@ internal static class EditPreviewChecks
         child.SetParent(item);
         child.Attach(new Transform());
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(20, 10) });
-        child.Attach(new global::Image { Sprite = new Sprite(imageId) });
+        child.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId) });
         EditSceneRenderer.Build(draw, scene, images, viewport);
         Check(draw.Vertices.Length == 12, "Children must follow their parent layout in sibling order.");
 
@@ -81,7 +81,7 @@ internal static class EditPreviewChecks
 
         var broken = scene.AddEmpty();
         broken.Rename("Broken");
-        broken.Attach(new global::Image { Sprite = new Sprite(imageId) });
+        broken.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId) });
         diagnostics = EditSceneRenderer.Build(draw, scene, images, viewport);
         Check(diagnostics.Any(entry => entry.ObjectId == broken.Id), "Missing Transform/UiElement must be diagnosed.");
 
@@ -99,7 +99,7 @@ internal static class EditPreviewChecks
         child.SetParent(parent);
         child.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(40, 30) });
-        child.Attach(new global::Image { Sprite = new Sprite(images.Keys.First()) });
+        child.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()) });
         var viewport = new Vector2(400, 200);
         using var draw = new DrawList();
         Check(EditSceneRenderer.Build(draw, scene, images, viewport).Count == 0
@@ -130,14 +130,14 @@ internal static class EditPreviewChecks
             item.Rename(name);
             item.Attach(new Transform { LocalPosition = position });
             item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
-            item.Attach(new global::Image { Sprite = new Sprite(imageId), Color = color, Order = order });
+            item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = color, Order = order });
             return item;
         }
         var red = new Vector4(1, 0, 0, 1);
         var blue = new Vector4(0, 0, 1, 1);
         var back = Card(scene, imageId, "Back", new Vector3(10, 20, 0), red, 0);
         var front = Card(scene, imageId, "Front", new Vector3(10, 20, 0), blue, 0);
-        Check(front.GetComponent<global::Image>()!.Order == 0, "Front setup must start with Order 0.");
+        Check(front.GetComponent<PureEngine.Core.Image>()!.Order == 0, "Front setup must start with Order 0.");
         using var draw = new DrawList();
         Check(EditSceneRenderer.Build(draw, scene, images, viewport).Count == 0, "Order setup must draw.");
         Check(draw.Vertices.Length == 12, "Order setup must draw two quads.");
@@ -145,12 +145,12 @@ internal static class EditPreviewChecks
             "Same Order must keep sibling order with later siblings in front.");
 
         // Larger Order comes to front regardless of sibling order.
-        back.GetComponent<global::Image>()!.Order = 5;
+        back.GetComponent<PureEngine.Core.Image>()!.Order = 5;
         EditSceneRenderer.Build(draw, scene, images, viewport);
         Check(draw.Vertices[0].Color == blue && draw.Vertices[6].Color == red,
             "Larger Order must be drawn later to stay in front.");
 
-        var backImage = back.GetComponent<global::Image>()!;
+        var backImage = back.GetComponent<PureEngine.Core.Image>()!;
         back.Detach(backImage);
         back.Attach(new PreviewLifecycle { Order = int.MinValue });
         back.Attach(backImage);
@@ -171,25 +171,25 @@ internal static class EditPreviewChecks
         parent.Rename("Parent");
         parent.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         parent.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
-        parent.Attach(new global::Image { Sprite = new Sprite(images.Keys.First()), Color = red, Order = 0 });
+        parent.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()), Color = red, Order = 0 });
         var child = parentScene.AddEmpty();
         child.Rename("Child");
         child.SetParent(parent);
         child.Attach(new Transform { LocalPosition = new Vector3(5, 5, 0) });
         child.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(20, 10) });
-        child.Attach(new global::Image { Sprite = new Sprite(images.Keys.First()), Color = blue, Order = 0 });
+        child.Attach(new PureEngine.Core.Image { Sprite = new Sprite(images.Keys.First()), Color = blue, Order = 0 });
         EditSceneRenderer.Build(draw, parentScene, images, viewport);
         var childBefore = draw.Vertices[6].Position;
         Check(childBefore == new Vector2(15, 25), $"Child layout setup failed, got {childBefore}.");
-        parent.GetComponent<global::Image>()!.Order = 10;
-        child.GetComponent<global::Image>()!.Order = -10;
+        parent.GetComponent<PureEngine.Core.Image>()!.Order = 10;
+        child.GetComponent<PureEngine.Core.Image>()!.Order = -10;
         EditSceneRenderer.Build(draw, parentScene, images, viewport);
         Check(draw.Vertices[0].Color == blue && draw.Vertices[6].Color == red,
             "Child with smaller Order must be drawn before its parent.");
         Check(draw.Vertices[0].Position == childBefore,
             "Changing Order must not change parent-child layout.");
 
-        parent.GetComponent<global::Image>()!.Sprite = new Sprite(Guid.NewGuid());
+        parent.GetComponent<PureEngine.Core.Image>()!.Sprite = new Sprite(Guid.NewGuid());
         var diagnostics = EditSceneRenderer.Build(draw, parentScene, images, viewport);
         Check(diagnostics.Count == 1 && diagnostics[0].ObjectId == parent.Id
             && draw.Vertices.Length == 6 && draw.Vertices[0].Position == childBefore,
@@ -202,7 +202,7 @@ internal static class EditPreviewChecks
             && draw.Vertices.Length == 6 && draw.Vertices[0].Position == new Vector2(5, 5)
             && entries.Count == 1 && ReferenceEquals(entries[0].Object, child)
             && SceneViewMath.HitTest(entries, viewport, Vector2.Zero, 1f, new Vector2(10, 10),
-                item => item.GetComponent<global::Image>() is { Sprite: not null }) == child,
+                item => item.GetComponent<PureEngine.Core.Image>() is { Sprite: not null }) == child,
             "Invalid parent layout must report its cause and use the same fallback for child drawing and selection.");
     }
 

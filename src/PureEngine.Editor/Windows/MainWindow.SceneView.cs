@@ -73,7 +73,7 @@ public partial class MainWindow
 
     private bool IsDrawableImage(SceneObject item)
     {
-        if (item.GetComponent<global::Image>() is not { Sprite: { } sprite })
+        if (item.GetComponent<Core.Image>() is not { Sprite: { } sprite })
             return false;
         return _previewImages.ContainsKey(sprite.ImageId) && !_sceneDrawFailures.Contains(item.Id);
     }

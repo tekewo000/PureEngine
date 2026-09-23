@@ -137,6 +137,7 @@ Check(projectOwner.TryAttach(dropTarget, typeof(PureEngine.Editor.Samples.RoundS
 
 ScenePersistenceChecks.Run();
 InspectorValueChecks.Run();
+SceneReferenceChecks.Run();
 UiComponentChecks.Run();
 UiButtonChecks.Run();
 SceneViewChecks.Run();

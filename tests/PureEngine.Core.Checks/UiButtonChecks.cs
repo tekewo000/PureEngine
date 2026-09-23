@@ -1,6 +1,5 @@
 using System.Numerics;
 using PureEngine.Core;
-using PureEngine.Core.Components;
 
 static class UiButtonChecks
 {
@@ -24,7 +23,7 @@ static class UiButtonChecks
         var registry = new ComponentRegistry();
         registry.Register<Transform>("core.transform");
         registry.Register<UiElement>("core.ui-element");
-        registry.Register<global::Image>("core.image");
+        registry.Register<Image>("core.image");
         registry.Register<Button>("core.button");
         return registry;
     }
@@ -35,7 +34,7 @@ static class UiButtonChecks
         item.Rename(name);
         item.Attach(new Transform { LocalPosition = position });
         item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = size });
-        item.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()), Color = Vector4.One, Order = order });
+        item.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()), Color = Vector4.One, Order = order });
         item.Attach(new Button { Interactable = interactable });
         return item;
     }
@@ -161,7 +160,7 @@ static class UiButtonChecks
         cover.Rename("Cover");
         cover.Attach(new Transform { LocalPosition = new Vector3(300, 50, 0) });
         cover.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(40, 20) });
-        cover.Attach(new global::Image { Sprite = new Sprite(Guid.NewGuid()), Order = 100 });
+        cover.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()), Order = 100 });
         Check(HitAt(scene, viewport, new Vector2(310, 55)) == imageless,
             "Non-button Images must not block Button input; only Buttons participate in Game hit testing.");
     }

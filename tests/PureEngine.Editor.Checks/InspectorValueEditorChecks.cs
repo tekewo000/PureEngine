@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
+using Button = Avalonia.Controls.Button;
 
 static class InspectorValueEditorChecks
 {
@@ -152,24 +153,18 @@ static class InspectorValueEditorChecks
         Dispatcher.UIThread.RunJobs();
         Check(valueBox.IsEffectivelyVisible, "Expanded dictionary must show entries again.");
 
-        // Transform member null -> Create -> edit -> Set Null.
-        var createTarget = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Target.Create");
-        Click(createTarget);
-        Check(probe.Target is not null, "Transform Create must assign a new instance.");
-        var targetX = Box(editor, $"{nameof(InspectorValueProbe)}.Target.LocalPosition.X");
-        targetX.Text = "5";
+        // Transform member is a reference slot: None -> select scene Transform -> Clear.
+        var targetCombo = Combo(editor, $"{nameof(InspectorValueProbe)}.Target");
+        Check(targetCombo.SelectedItem?.ToString() == "None", "Transform reference must start as None.");
+        var moverOption = ((System.Collections.IEnumerable)targetCombo.ItemsSource!).Cast<object>()
+            .FirstOrDefault(option => option.ToString()!.Contains(moverObject.Name, StringComparison.Ordinal));
+        Check(moverOption is not null, "Transform reference must list the scene Transform.");
+        targetCombo.SelectedItem = moverOption;
         Dispatcher.UIThread.RunJobs();
-        Check(probe.Target!.LocalPosition.X == 5f, "Transform nested edit did not reach the scene.");
-        var targetXBadge = AxisBadge(targetX);
-        Check(targetXBadge?.Text == "X", "Transform axis value must carry its axis badge.");
-        var targetW = Box(editor, $"{nameof(InspectorValueProbe)}.Target.LocalRotation.W");
-        var targetWBadge = AxisBadge(targetW);
-        Check(targetWBadge?.Text == "W", "Quaternion rotation must show X/Y/Z/W badges.");
-        var rotationGrid = targetW.Parent as Grid;
-        Check(rotationGrid is not null && targetW.Bounds.Right <= rotationGrid.Bounds.Width + 1,
-            "Quaternion row must fit without clipping the W box.");
-        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Target.Null"));
-        Check(probe.Target is null, "Transform Set Null must clear the member.");
+        Check(ReferenceEquals(probe.Target, mover), "Transform reference selection must connect the scene instance.");
+        Check(editor.Title!.StartsWith("* "), "Transform reference edit must mark the scene dirty.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Target.Clear"));
+        Check(probe.Target is null, "Transform Clear must clear the member.");
 
         // Transform component itself shows Local editors.
         Select(editor, moverObject);

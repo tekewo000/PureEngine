@@ -556,9 +556,9 @@ public partial class MainWindow
         };
         var name = new TextBox { Text = initial };
         name.SetValue(AutomationProperties.NameProperty, title);
-        var ok = new Button { Content = "OK", IsDefault = true };
+        var ok = new Avalonia.Controls.Button { Content = "OK", IsDefault = true };
         ok.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(name.Text)) dialog.Close(name.Text.Trim()); };
-        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var cancel = new Avalonia.Controls.Button { Content = "Cancel", IsCancel = true };
         cancel.Click += (_, _) => dialog.Close(null);
         dialog.Content = new StackPanel
         {
@@ -582,9 +582,9 @@ public partial class MainWindow
             Title = "Delete", Width = 420, SizeToContent = SizeToContent.Height,
             CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
-        var delete = new Button { Content = "Delete", IsDefault = true };
+        var delete = new Avalonia.Controls.Button { Content = "Delete", IsDefault = true };
         delete.Click += (_, _) => dialog.Close(true);
-        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var cancel = new Avalonia.Controls.Button { Content = "Cancel", IsCancel = true };
         cancel.Click += (_, _) => dialog.Close(false);
         dialog.Content = new StackPanel
         {

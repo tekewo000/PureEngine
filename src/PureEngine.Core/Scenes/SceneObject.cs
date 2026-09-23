@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace PureEngine.Core;
 
@@ -20,8 +21,12 @@ public sealed class SceneObject : INotifyPropertyChanged
     private string _name;
     private readonly List<object> _components = [];
     private readonly Dictionary<object, Priorities> _priorities = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, Guid> _componentIds = [with(ReferenceEqualityComparer.Instance)];
+    private static readonly ConditionalWeakTable<object, SceneObject> Owners = [];
     internal SceneRuntime? Runtime { get; set; }
     internal Scene? OwnerScene { get; set; }
+
+    internal static bool IsOwned(object component) => Owners.TryGetValue(component, out _);
 
     private sealed class Priorities
     {
@@ -90,8 +95,100 @@ public sealed class SceneObject : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(component);
         if (_components.Any(c => c.GetType() == component.GetType()))
             throw new InvalidOperationException($"Already attached: {component.GetType().Name}");
-        Runtime?.RegisterComponent(this, component);
-        _components.Add(component);
+        if (Owners.TryGetValue(component, out var existing) && !ReferenceEquals(existing, this))
+            throw new InvalidOperationException($"Component instance is already owned by '{existing.Name}'.");
+        var id = Guid.NewGuid();
+        OwnerScene?.RegisterComponentId(id);
+        _componentIds.Add(component, id);
+        try
+        {
+            Owners.Remove(component);
+            Owners.Add(component, this);
+        }
+        catch
+        {
+            _componentIds.Remove(component);
+            OwnerScene?.UnregisterComponentId(id);
+            throw;
+        }
+        try
+        {
+            Runtime?.RegisterComponent(this, component);
+            _components.Add(component);
+        }
+        catch
+        {
+            Owners.Remove(component);
+            _componentIds.Remove(component);
+            OwnerScene?.UnregisterComponentId(id);
+            throw;
+        }
+    }
+
+    internal void AttachWithId(object component, Guid id)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        if (id == Guid.Empty)
+            throw new ArgumentException("Component ID must not be empty.", nameof(id));
+        if (_components.Any(c => c.GetType() == component.GetType()))
+            throw new InvalidOperationException($"Already attached: {component.GetType().Name}");
+        if (Owners.TryGetValue(component, out var existing) && !ReferenceEquals(existing, this))
+            throw new InvalidOperationException($"Component instance is already owned by '{existing.Name}'.");
+        if (_componentIds.ContainsKey(component))
+            throw new InvalidOperationException("Component instance is already attached to this object.");
+        OwnerScene?.RegisterComponentId(id);
+        _componentIds.Add(component, id);
+        try
+        {
+            Owners.Remove(component);
+            Owners.Add(component, this);
+        }
+        catch
+        {
+            _componentIds.Remove(component);
+            OwnerScene?.UnregisterComponentId(id);
+            throw;
+        }
+        try
+        {
+            Runtime?.RegisterComponent(this, component);
+            _components.Add(component);
+        }
+        catch
+        {
+            Owners.Remove(component);
+            _componentIds.Remove(component);
+            OwnerScene?.UnregisterComponentId(id);
+            throw;
+        }
+    }
+
+    /// <summary>Engine-managed instance ID. Assigned at Attach before the Scene publishes it.</summary>
+    public Guid GetComponentId(object component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        if (_componentIds.TryGetValue(component, out var id))
+            return id;
+        throw new InvalidOperationException("Component is not attached to this object.");
+    }
+
+    public bool TryGetComponentId(object component, out Guid id)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        return _componentIds.TryGetValue(component, out id);
+    }
+
+    internal bool TryGetOwnedComponentId(object component, out Guid id) =>
+        _componentIds.TryGetValue(component, out id);
+
+    internal void ForgetComponentOwnership(object component)
+    {
+        Owners.Remove(component);
+        if (_componentIds.TryGetValue(component, out var id))
+        {
+            _componentIds.Remove(component);
+            OwnerScene?.UnregisterComponentId(id);
+        }
     }
 
     /// <summary>Detaches the exact editing instance and its priorities. The caller owns disposal.</summary>
@@ -103,8 +200,20 @@ public sealed class SceneObject : INotifyPropertyChanged
             throw new InvalidOperationException("Cannot detach components from a runtime scene.");
         var index = _components.FindIndex(candidate => ReferenceEquals(candidate, component));
         if (index < 0) return false;
+        if (_componentIds.TryGetValue(component, out var id))
+        {
+            OwnerScene?.OnComponentDetaching(this, component, id);
+            _components.RemoveAt(index);
+            _priorities.Remove(component);
+            _componentIds.Remove(component);
+            Owners.Remove(component);
+            OwnerScene?.UnregisterComponentId(id);
+            OwnerScene?.References.RemoveOwner(id);
+            return true;
+        }
         _components.RemoveAt(index);
         _priorities.Remove(component);
+        Owners.Remove(component);
         return true;
     }
 

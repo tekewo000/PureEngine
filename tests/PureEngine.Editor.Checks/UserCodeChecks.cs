@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
+using Button = Avalonia.Controls.Button;
 
 static class UserCodeChecks
 {
@@ -421,6 +422,8 @@ static class UserCodeChecks
         var first = UserCodeCompiler.CompileFiles([file]);
         Check(first.Success, "Enum fixture must compile.");
         original.Adopt(first);
+        // This fixture exercises embedded values; registered types now mean Component references.
+        original.Registry.Unregister(first.AttachableTypes.Single(type => type.Name == "Stats"));
         var scene = new Scene();
         var item = scene.AddEmpty();
         Check(original.TryAttach(item, first.AttachableTypes.Single(type => type.Name == "EnumComponent")), "Enum fixture must attach.");
@@ -440,6 +443,7 @@ static class UserCodeChecks
             var compiled = UserCodeCompiler.CompileFiles([file]);
             Check(compiled.Success, "Compatible enum fixture must compile.");
             candidate.Adopt(compiled);
+            candidate.Registry.Unregister(compiled.AttachableTypes.Single(type => type.Name == "Stats"));
             Check(compiled.AttachableTypes.Single(type => type.Name == "EnumComponent")
                 != first.AttachableTypes.Single(type => type.Name == "EnumComponent"), "Reload must use a new assembly.");
             var migrated = SceneCodeMigrator.Migrate(scene, original.Registry, candidate.Registry);
@@ -463,6 +467,8 @@ static class UserCodeChecks
             var compiled = UserCodeCompiler.CompileFiles([file]);
             Check(compiled.Success, "Incompatible enum fixture must still compile.");
             candidate.Adopt(compiled);
+            foreach (var type in compiled.AttachableTypes.Where(type => type.Name is "Stats" or "OtherStats"))
+                candidate.Registry.Unregister(type);
             try
             {
                 SceneCodeMigrator.Migrate(scene, original.Registry, candidate.Registry);

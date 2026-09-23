@@ -9,7 +9,11 @@ public sealed class Scene
 {
     private readonly ObservableCollection<SceneObject> _objects = [];
     private readonly HashSet<Guid> _ids = [];
+    private readonly HashSet<Guid> _componentIds = [];
     internal SceneRuntime? Runtime { get; set; }
+
+    /// <summary>Scene所有の参照管理情報。Missing IDと旧値保持を担い、定常実行では触らない。</summary>
+    public SceneReferenceStore References { get; } = new();
 
     public Scene() => Objects = new ReadOnlyObservableCollection<SceneObject>(_objects);
 
@@ -65,18 +69,80 @@ public sealed class Scene
     /// <remarks>Editing removal deletes the object with its current descendants at once.</remarks>
     public bool Remove(SceneObject item) => Runtime is null ? RemoveImmediately(item) : Runtime.Remove(item);
 
+    internal void RegisterComponentId(Guid id)
+    {
+        if (id == Guid.Empty)
+            throw new ArgumentException("Component ID must not be empty.", nameof(id));
+        if (_ids.Contains(id) || !_componentIds.Add(id))
+            throw new InvalidDataException($"Duplicate component ID: {id:D}");
+    }
+
+    internal void UnregisterComponentId(Guid id) => _componentIds.Remove(id);
+
+    internal bool ContainsId(Guid id) => _ids.Contains(id) || _componentIds.Contains(id);
+
+    internal bool TryGetObject(Guid id, out SceneObject? found)
+    {
+        foreach (var item in _objects)
+        {
+            if (item.Id == id)
+            {
+                found = item;
+                return true;
+            }
+        }
+        found = null;
+        return false;
+    }
+
+    internal bool TryGetComponent(Guid id, out SceneObject? owner, out object? component)
+    {
+        foreach (var item in _objects)
+        {
+            foreach (var candidate in item.Components)
+            {
+                if (item.TryGetComponentId(candidate, out var current) && current == id)
+                {
+                    owner = item;
+                    component = candidate;
+                    return true;
+                }
+            }
+        }
+        owner = null;
+        component = null;
+        return false;
+    }
+
+    internal void OnComponentDetaching(SceneObject _, object component, Guid removedId) => SceneReferenceNuller.NullReferencesToComponent(this, component, removedId);
+
     internal bool RemoveImmediately(SceneObject item)
     {
         ArgumentNullException.ThrowIfNull(item);
         if (!_objects.Contains(item)) return false;
         var targets = CollectSubtree(item);
+        var removedIds = new Dictionary<object, Guid>(ReferenceEqualityComparer.Instance);
+        foreach (var target in targets)
+        {
+            foreach (var component in target.Components.ToArray())
+            {
+                if (target.TryGetComponentId(component, out var componentId))
+                    removedIds.TryAdd(component, componentId);
+            }
+        }
+        List<(object Component, Guid Id)> removedComponents = [.. removedIds.Select(entry => (entry.Key, entry.Value))];
         item.DetachParentLink();
         foreach (var target in targets)
         {
             _objects.Remove(target);
             _ids.Remove(target.Id);
+            foreach (var component in target.Components.ToArray())
+                target.ForgetComponentOwnership(component);
             target.OwnerScene = null;
         }
+        foreach (var (_, id) in removedComponents)
+            References.RemoveOwner(id);
+        SceneReferenceNuller.NullReferencesToSubtree(this, targets, removedComponents);
         return true;
     }
 
@@ -85,6 +151,16 @@ public sealed class Scene
     {
         if (!_objects.Remove(item)) return;
         _ids.Remove(item.Id);
+        List<(object Component, Guid Id)> removedComponents = [];
+        foreach (var component in item.Components.ToArray())
+        {
+            if (item.TryGetComponentId(component, out var componentId))
+            {
+                removedComponents.Add((component, componentId));
+                References.RemoveOwner(componentId);
+            }
+            item.ForgetComponentOwnership(component);
+        }
         item.DetachParentLink();
         item.OwnerScene = null;
     }

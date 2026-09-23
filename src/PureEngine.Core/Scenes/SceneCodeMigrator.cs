@@ -22,7 +22,7 @@ public static class SceneCodeMigrator
             foreach (var oldMember in ComponentSchema.GetInspectorMembers(oldType))
             {
                 if (!members.TryGetValue(oldMember.Name, out var member)) continue;
-                if (!CompatibleType(MemberType(oldMember), MemberType(member)))
+                if (!CompatibleType(MemberType(oldMember), MemberType(member), oldRegistry, newRegistry))
                     throw new InvalidDataException(
                         $"{item.Name}/{id}.{oldMember.Name}: 型変更により値を引き継げません。元の定義を戻して再保存してください。編集データは保持しています。");
             }
@@ -37,10 +37,23 @@ public static class SceneCodeMigrator
     private static Type MemberType(MemberInfo member) => member is FieldInfo field
         ? field.FieldType : ((PropertyInfo)member).PropertyType;
 
-    private static bool CompatibleType(Type before, Type after)
+    private static bool CompatibleType(Type before, Type after, ComponentRegistry oldRegistry, ComponentRegistry newRegistry)
     {
         if (before == after) return true;
-        if (!InspectorValueTypes.IsSupportedType(before) || !InspectorValueTypes.IsSupportedType(after)) return false;
+        var beforeIsRef = before == typeof(SceneObject) || SceneReferenceTypes.IsSingleReference(before, oldRegistry);
+        var afterIsRef = after == typeof(SceneObject) || SceneReferenceTypes.IsSingleReference(after, newRegistry);
+        if (beforeIsRef || afterIsRef)
+            return beforeIsRef && afterIsRef && before.FullName == after.FullName;
+        if (before.IsArray && after.IsArray)
+            return before.IsSZArray == after.IsSZArray && CompatibleType(before.GetElementType()!, after.GetElementType()!, oldRegistry, newRegistry);
+        if (before.IsGenericType && after.IsGenericType
+            && before.GetGenericTypeDefinition() == after.GetGenericTypeDefinition()
+            && (before.GetGenericTypeDefinition() == typeof(List<>)
+                || (before.GetGenericTypeDefinition() == typeof(Dictionary<,>) && before.GetGenericArguments()[0] == typeof(string))))
+        {
+            return before.GetGenericArguments().Zip(after.GetGenericArguments()).All(pair => CompatibleType(pair.First, pair.Second, oldRegistry, newRegistry));
+        }
+        if (!IsSupportedForMigration(before, oldRegistry) || !IsSupportedForMigration(after, newRegistry)) return false;
         // Recompiled enums have new Type identities. Preserve existing names and numeric meanings.
         if (before.IsEnum && after.IsEnum)
             return before.FullName == after.FullName
@@ -48,18 +61,30 @@ public static class SceneCodeMigrator
                 && before.IsDefined(typeof(FlagsAttribute), false) == after.IsDefined(typeof(FlagsAttribute), false)
                 && before.GetFields(BindingFlags.Public | BindingFlags.Static).All(field =>
                     Equals(field.GetRawConstantValue(), after.GetField(field.Name)?.GetRawConstantValue()));
-        if (before.IsArray && after.IsArray)
-            return before.IsSZArray == after.IsSZArray && CompatibleType(before.GetElementType()!, after.GetElementType()!);
         if (InspectorValueTypes.IsCustomInspectorObject(before) && InspectorValueTypes.IsCustomInspectorObject(after))
         {
             var members = ComponentSchema.GetInspectorMemberNames(after);
             return before.FullName == after.FullName
                 && ComponentSchema.GetInspectorMembers(before).All(oldMember =>
                     !members.TryGetValue(oldMember.Name, out var member)
-                    || CompatibleType(MemberType(oldMember), MemberType(member)));
+                    || CompatibleType(MemberType(oldMember), MemberType(member), oldRegistry, newRegistry));
+        }
+        if (SceneReferenceTypes.ContainsReference(before, oldRegistry) || SceneReferenceTypes.ContainsReference(after, newRegistry))
+        {
+            if (!SceneReferenceTypes.ContainsReference(before, oldRegistry) || !SceneReferenceTypes.ContainsReference(after, newRegistry))
+                return false;
+            if (before.FullName != after.FullName)
+                return false;
+            var afterMembers = ComponentSchema.GetInspectorMemberNames(after);
+            return ComponentSchema.GetInspectorMembers(before).All(oldMember =>
+                !afterMembers.TryGetValue(oldMember.Name, out var member)
+                || CompatibleType(MemberType(oldMember), MemberType(member), oldRegistry, newRegistry));
         }
         return before.IsGenericType && after.IsGenericType
             && before.GetGenericTypeDefinition() == after.GetGenericTypeDefinition()
-            && before.GetGenericArguments().Zip(after.GetGenericArguments()).All(pair => CompatibleType(pair.First, pair.Second));
+            && before.GetGenericArguments().Zip(after.GetGenericArguments()).All(pair => CompatibleType(pair.First, pair.Second, oldRegistry, newRegistry));
     }
+
+    private static bool IsSupportedForMigration(Type type, ComponentRegistry registry) =>
+        InspectorValueTypes.IsSupportedType(type) || SceneReferenceTypes.IsSupportedInspectorType(type, registry);
 }

@@ -1,5 +1,4 @@
 using PureEngine.Core;
-using PureEngine.Core.Components;
 
 namespace PureEngine.Editor;
 
@@ -28,7 +27,7 @@ public static class ComponentAssets
         ArgumentNullException.ThrowIfNull(registry);
         registry.Register<Transform>("core.transform");
         registry.Register<UiElement>("core.ui-element");
-        registry.Register<global::Image>("core.image");
+        registry.Register<Image>("core.image");
         registry.Register<Button>("core.button");
         registry.Register<Samples.PlayerStats>("sample.player-stats");
         registry.Register<Samples.RoundSettings>("sample.round-settings");

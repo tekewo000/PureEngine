@@ -106,7 +106,7 @@ public partial class MainWindow
     private void UpdateUiWarning(TextBlock warning, SceneObject item, object component)
     {
         var missing = UiComponentRequirements.GetMissing(item);
-        var relevant = component is global::Image or PureEngine.Core.Components.Button
+        var relevant = component is Core.Image or Core.Button
             ? missing
             : component is PureEngine.Core.UiElement
                 ? missing.Where(name => name == "Transform").ToList()
@@ -117,7 +117,7 @@ public partial class MainWindow
             warning.IsVisible = true;
             return;
         }
-        if (component is global::Image image && image.Sprite is { } sprite && IsAssetMissing(sprite.ImageId))
+        if (component is Core.Image image && image.Sprite is { } sprite && IsAssetMissing(sprite.ImageId))
         {
             warning.Text = $"Missing image {sprite.ImageId:D}. ID is kept.";
             warning.IsVisible = true;

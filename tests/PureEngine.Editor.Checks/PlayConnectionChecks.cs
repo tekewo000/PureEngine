@@ -5,6 +5,7 @@ using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
 using PureEngine.Runtime;
+using Button = Avalonia.Controls.Button;
 
 static class PlayConnectionChecks
 {

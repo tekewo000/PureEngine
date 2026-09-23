@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
+using Button = Avalonia.Controls.Button;
 
 static class PriorityInspectorChecks
 {

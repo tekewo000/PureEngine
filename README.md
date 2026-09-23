@@ -58,9 +58,31 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - 未保存の変更はタイトルの `*` で示す。別シーンを開くときや終了時にSave／Discard／Cancelを選ぶ。
 - Inspectorに入力エラーがある間は保存しない。成否とエラー詳細は画面下部に表示する。
 
-保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority。組み込みは `core.transform`・`core.ui-element`・`core.image` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。`Image` の `Order`（`RendererComponent` の共通基底）もInspector値として保存・Cloneし、旧データは `Order: 0` として従来の表示を維持する。ライフサイクルのPriorityとは独立させる。
+保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority、ComponentごとのインスタンスIDと参照ID。組み込みは `core.transform`・`core.ui-element`・`core.image`・`core.button` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。`Image` の `Order`（`RendererComponent` の共通基底）もInspector値として保存・Cloneし、旧データは `Order: 0` として従来の表示を維持する。ライフサイクルのPriorityとは独立させる。
 読み込みは別のSceneへ復元し、成功してから現在のSceneと入れ替える。保存は同じフォルダの一時ファイルへ書き終えてから置き換える。
-現在の形式は `version: 2`。旧形式（`version: 1`）は全てルート・配列順の兄弟として読み込み、次の明示保存で2へ更新する。YAMLのコメントは再保存で失われる。オブジェクト参照、Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
+現在の形式は `version: 3`。旧形式（`version: 1` は全てルート・配列順の兄弟、`version: 2` は親子・兄弟順あり）として読み込み、次の明示保存で3へ更新する。YAMLのコメントは再保存で失われる。Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
+
+## SceneObject・Componentの参照
+
+ゲーム側は通常のC#参照を宣言し、Inspectorで同じSceneの対象を選ぶ。`ObjectRef<T>` や毎回の `Resolve` は不要で、実行中は解決済みの実物を直接触る。
+
+```csharp
+[Inspector]
+public Button? TestButton { get; set; }
+
+[Start]
+private void Start()
+{
+    if (TestButton is { } button)
+        button.Interactable = false;
+}
+```
+
+- 参照できるのは同じSceneのSceneObjectと、Projectに登録されたComponent型（`Transform`・`UiElement`・`Image`・`Button`・自作型）。未登録の対応する自作クラスは埋め込み値になる。登録Component型の欄に `new Button()`／`new Transform()` を直接入れても埋め込み値にはならず、別Scene・未アタッチの参照先の保存は拒否する。自作のpublic具象クラスは自動登録されるため、従来埋め込みに使った型も登録対象なら参照欄になる。
+- Inspectorの参照欄は対象名・ID・None／Missing・選択／解除を表示する。Stuffsの行を参照欄へドラッグ＆ドロップできる（Componentアタッチとは別形式）。型・Scene所属が合わない候補は選ばない。Play中は編集できない。変更したときだけ未保存になる。
+- 対象を削除・取り外すとC#はnullになり、IDはMissingとして保持される。Missingのまま保存・開き直しができ、同じIDが戻れば再接続する。別の対象を選び直すと実物の値を優先する。Missingを消すときは欄のClearを使う。単なるnull代入ではMissingは消えない。
+- 旧シーン（v1／v2）はSceneObject IDを保持し、Component IDを新規発行して未保存化する。登録Component型の旧インライン値は保持して診断し、欄の再割り当て／Clearまで上書き保存・Play用Cloneを拒否する。例えば旧Button値は実際にアタッチしたButtonを選び直す。復元に失敗したときは元Scene・元ファイルを置き換えない。
+- 参照を含む配列・List・stringキーDictionaryは、埋め込みクラスの中でも選択・解除・行の追加／削除ができる。Inspectorで行削除や辞書キー変更を行うとMissingのIDも移動する。Missingを含むコレクションを通常のC#から構造変更する場合は `Scene.References` の明示操作で保持パスも更新する（null同士の移動は通常のC#参照から判別できない）。
 
 ## Project
 
@@ -418,7 +440,7 @@ Stuffsで作ったオブジェクトへ `Transform`・`UiElement`・`Image`・`B
 ```csharp
 using var runtime = new SceneRuntime(source, registry);
 var button = runtime.Scene.Objects.Single(item => item.Id == buttonId)
-    .GetComponent<PureEngine.Core.Components.Button>()!;
+    .GetComponent<PureEngine.Core.Button>()!;
 var count = 0;
 button.Clicked += context => Log.Info($"Clicked {context.ButtonObject.Name} x{++count}");
 runtime.Start();

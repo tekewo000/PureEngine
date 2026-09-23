@@ -163,7 +163,7 @@ public partial class MainWindow
         var check = new CheckBox { IsChecked = GetMemberValue(component, member) is true, Content = NullableBoolLabel(GetMemberValue(component, member)) };
         check.Classes.Add("inspectorCheck");
         check.SetValue(AutomationProperties.NameProperty, automationName);
-        var clear = new Button { Content = "Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
+        var clear = new Avalonia.Controls.Button { Content = "Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
         clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
         check.IsCheckedChanged += (_, _) =>
         {
@@ -369,23 +369,23 @@ public partial class MainWindow
     }
 
     /// <summary>Header action button (Add/Clear/Set Null/Create) with unified sizing.</summary>
-    private static Button BuildHeaderButton(string content, string automationName)
+    private static Avalonia.Controls.Button BuildHeaderButton(string content, string automationName)
     {
-        var button = new Button { Content = content, FontSize = 11, Padding = new Avalonia.Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center };
+        var button = new Avalonia.Controls.Button { Content = content, FontSize = 11, Padding = new Avalonia.Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center };
         button.SetValue(AutomationProperties.NameProperty, automationName);
         return button;
     }
 
     /// <summary>Fixed-width remove button so collection rows align vertically.</summary>
-    private static Button BuildRemoveButton(string automationName)
+    private static Avalonia.Controls.Button BuildRemoveButton(string automationName)
     {
-        var remove = new Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), MinWidth = 28, VerticalAlignment = VerticalAlignment.Center };
+        var remove = new Avalonia.Controls.Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), MinWidth = 28, VerticalAlignment = VerticalAlignment.Center };
         remove.SetValue(AutomationProperties.NameProperty, automationName);
         return remove;
     }
 
     /// <summary>Split header: left status block, right action buttons. Grid keeps actions right-aligned in narrow panes.</summary>
-    private static Grid BuildSplitHeader(Control left, params Button[] actions)
+    private static Grid BuildSplitHeader(Control left, params Avalonia.Controls.Button[] actions)
     {
         var header = new Grid { ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
         header.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
@@ -554,6 +554,8 @@ public partial class MainWindow
     private Control BuildSequenceElementEditor(object component, MemberInfo member, Type elementType, int index, string automationName)
     {
         var elementName = $"{automationName}[{index}]";
+        if (SceneReferenceTypes.IsSingleReference(elementType, _components.Registry))
+            return BuildSequenceReferenceEditor(component, member, index, elementType, elementName);
         if (elementType == typeof(string))
             return BuildSequenceStringBox(component, member, index, elementName);
         if (elementType == typeof(int))
@@ -722,6 +724,8 @@ public partial class MainWindow
     private Control BuildDictionaryValueEditor(object component, MemberInfo member, Type valueType, string key, string automationName, int rowIndex)
     {
         var valueName = $"{automationName}.Value[{rowIndex}]";
+        if (SceneReferenceTypes.IsSingleReference(valueType, _components.Registry))
+            return BuildDictionaryReferenceEditor(component, member, key, valueType, valueName);
         if (valueType == typeof(string))
         {
             var box = new TextBox { Text = DictionaryStringValue(component, member, key), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
@@ -847,7 +851,7 @@ public partial class MainWindow
             checks.Add((check, flag));
             wrap.Children.Add(check);
         }
-        var clear = new Button { Content = "None", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        var clear = new Avalonia.Controls.Button { Content = "None", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
         clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Clear");
         clear.Click += (_, _) =>
         {
@@ -1006,8 +1010,10 @@ public partial class MainWindow
             boxes[i].Text = FormatFloat(vector.GetAxis(axes[i]));
     }
 
-    private static object? DefaultElementValue(Type elementType)
+    private object? DefaultElementValue(Type elementType)
     {
+        if (SceneReferenceTypes.IsSingleReference(elementType, _components.Registry))
+            return null;
         if (elementType == typeof(string)) return "";
         if (elementType == typeof(int)) return 0;
         if (elementType == typeof(float)) return 0f;

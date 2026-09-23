@@ -481,11 +481,11 @@ public partial class MainWindow
             var root = new StackPanel { Spacing = 4 };
             var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-            var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
+            var create = new Avalonia.Controls.Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
             create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
-            var clear = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
+            var clear = new Avalonia.Controls.Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
             clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
             root.Children.Add(nullRow);
             root.Children.Add(body);
@@ -579,11 +579,11 @@ public partial class MainWindow
             var root = new StackPanel { Spacing = 4 };
             var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-            var create = new Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
+            var create = new Avalonia.Controls.Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
             create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
-            var clear = new Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
+            var clear = new Avalonia.Controls.Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
             clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
             root.Children.Add(nullRow);
             root.Children.Add(body);

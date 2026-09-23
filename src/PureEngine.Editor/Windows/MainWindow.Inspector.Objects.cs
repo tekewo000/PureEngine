@@ -14,20 +14,31 @@ public partial class MainWindow
     private Control BuildObjectEditor(object owner, MemberInfo member, string automationName)
     {
         var objectType = GetMemberType(member);
+        var ownerId = GetOwnerComponentId(owner);
+        var baseStorePath = member.Name;
         return BuildObjectBox(
             () => GetMemberValue(owner, member),
             value => SetMemberValue(owner, member, value),
-            objectType, automationName);
+            objectType, automationName, ownerId, baseStorePath);
     }
 
     /// <summary>配列・List要素の自作クラスを入れ子カードで編集する。</summary>
-    private Control BuildSequenceObjectBox(object component, MemberInfo member, Type elementType, int index, string automationName) => BuildObjectBox(
+    private Control BuildSequenceObjectBox(object component, MemberInfo member, Type elementType, int index, string automationName)
+    {
+        var ownerId = GetOwnerComponentId(component);
+        var baseStorePath = $"{member.Name}[{index}]";
+        return BuildObjectBox(
             () => SequenceElement(component, member, index),
             value => SetSequenceElement(component, member, index, value),
-            elementType, automationName);
+            elementType, automationName, ownerId, baseStorePath);
+    }
 
     /// <summary>Dictionary値の自作クラスを入れ子カードで編集する。キーが消えたらNull表示になる。</summary>
-    private Control BuildDictionaryObjectBox(object component, MemberInfo member, Type valueType, string key, string automationName) => BuildObjectBox(
+    private Control BuildDictionaryObjectBox(object component, MemberInfo member, Type valueType, string key, string automationName)
+    {
+        var ownerId = GetOwnerComponentId(component);
+        var baseStorePath = SceneReferenceStore.DictionaryPath(member.Name, key);
+        return BuildObjectBox(
             () => DictionaryObjectValue(component, member, key),
             value =>
             {
@@ -36,7 +47,8 @@ public partial class MainWindow
                 dictionary[key] = value;
                 MarkSceneChanged();
             },
-            valueType, automationName);
+            valueType, automationName, ownerId, baseStorePath);
+    }
 
     private static object? DictionaryObjectValue(object component, MemberInfo member, string key)
     {
@@ -49,9 +61,9 @@ public partial class MainWindow
     /// 入れ子の自作クラス共通の折りたたみカード。Null時はCreateだけを見せ、
     /// 値がある時は [Inspector] メンバーを行で並べる。Create／Set Nullでは中身を作り直す。
     /// </summary>
-    private Control BuildObjectBox(Func<object?> getter, Action<object?> setter, Type objectType, string automationName)
+    private Control BuildObjectBox(Func<object?> getter, Action<object?> setter, Type objectType, string automationName, Guid? ownerId = null, string? baseStorePath = null)
     {
-        if (!InspectorValueTypes.IsSupportedType(objectType))
+        if (!InspectorValueTypes.IsSupportedType(objectType) && !SceneReferenceTypes.IsSupportedInspectorType(objectType, _components.Registry))
             return UnsupportedBadge(objectType);
         var root = new StackPanel { Spacing = 6 };
         var fields = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
@@ -89,7 +101,11 @@ public partial class MainWindow
                 var members = ComponentSchema.GetInspectorMembers(objectType);
                 fields.Text = $"{members.Count} fields";
                 foreach (var member in members)
-                    body.Children.Add(BuildNestedMemberRow(value, member, $"{automationName}.{member.Name}"));
+                {
+                    var nestedAutomation = $"{automationName}.{member.Name}";
+                    var nestedStore = baseStorePath is null ? null : $"{baseStorePath}.{member.Name}";
+                    body.Children.Add(BuildNestedMemberRow(value, member, nestedAutomation, ownerId, nestedStore, refresh));
+                }
             }
             UpdateErrorBadge();
             QueuePendingUserCodeReload();
@@ -112,6 +128,8 @@ public partial class MainWindow
         {
             if (IsPlaying) return;
             setter(null);
+            if (ownerId is { } id && baseStorePath is not null)
+                _editScene.Current.References.RemovePathsForMember(id, baseStorePath);
             refresh();
         };
         ToolTip.SetTip(root, $"{objectType.Name} — Create to edit, Set Null to clear");

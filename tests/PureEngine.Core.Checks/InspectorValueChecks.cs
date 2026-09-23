@@ -27,6 +27,10 @@ static class InspectorValueChecks
         var scene = new Scene();
         var item = scene.AddEmpty();
         item.Rename("Extended");
+        var targetItem = scene.AddEmpty();
+        targetItem.Rename("TargetHolder");
+        var targetTransform = new Transform { LocalPosition = new Vector3(7, 8, 9) };
+        targetItem.Attach(targetTransform);
         var sample = new ExtendedProbe
         {
             Ratio = 2.5,
@@ -34,7 +38,7 @@ static class InspectorValueChecks
             Direction = new Vector2(4, -5),
             Color = new Vector4(1, 2, 3, 4),
             Rotation = new Quaternion(0, 0, 0, 1),
-            Target = new Transform { LocalPosition = new Vector3(7, 8, 9) },
+            Target = targetTransform,
             Scores = [10, -20, 30],
             Tags = ["a", "b"],
             EmptyList = [],
@@ -71,6 +75,7 @@ static class InspectorValueChecks
             Check(copy.Color == new Vector4(1, 2, 3, 4), "Vector4 did not survive.");
             Check(copy.Rotation == new Quaternion(0, 0, 0, 1), "Quaternion did not survive.");
             Check(copy.Target is not null && copy.Target.LocalPosition == new Vector3(7, 8, 9), "Transform member did not survive.");
+            Check(ReferenceEquals(copy.Target, restored.Objects[1].GetComponent<Transform>()), "Transform reference must resolve to the same-scene instance.");
             Check(copy.Scores.SequenceEqual([10, -20, 30]), "int array did not survive.");
             Check(copy.Tags.SequenceEqual(["a", "b"]), "List<string> did not survive.");
             Check(copy.EmptyList.Count == 0, "Empty list did not survive.");
@@ -83,7 +88,7 @@ static class InspectorValueChecks
             Check(copy.MaybeLevel == Difficulty.Hard && copy.MissingLevel is null, "Nullable enum did not survive.");
             Check(copy.Stages.SequenceEqual([Difficulty.Easy, Difficulty.Hard]), "Enum list did not survive.");
             Check(copy.Spawns["gate"] == Difficulty.Easy, "Enum dictionary did not survive.");
-            var mover = restored.Objects[1].GetComponent<Transform>()!;
+            var mover = restored.Objects[2].GetComponent<Transform>()!;
             Check(mover.LocalPosition == new Vector3(1, 2, 3) && mover.LocalScale == Vector3.One, "Transform component did not survive.");
             Check(serializer.Serialize(restored) == yaml, "Extended save/load changed output.");
         }
@@ -95,13 +100,15 @@ static class InspectorValueChecks
         sample.Scores[0] = 999;
         sample.Tags.Add("leaked");
         sample.Counts["alice"] = 999;
-        sample.Target!.LocalPosition = new Vector3(999, 999, 999);
+        targetTransform.LocalPosition = new Vector3(999, 999, 999);
         Check(cloneProbe.Scores[0] == 10 && cloneProbe.Tags.Count == 2 && cloneProbe.Counts["alice"] == 3
-            && cloneProbe.Target!.LocalPosition == new Vector3(7, 8, 9), "Clone must deep-copy collections and Transform.");
+            && cloneProbe.Target!.LocalPosition == new Vector3(7, 8, 9), "Clone must deep-copy collections and resolve references to the clone target.");
+        Check(!ReferenceEquals(cloneProbe.Target, targetTransform) && ReferenceEquals(cloneProbe.Target, clone.Objects[1].GetComponent<Transform>()),
+            "Clone must resolve references to the clone scene, not the source instance.");
         sample.Scores[0] = 10;
         sample.Tags.Remove("leaked");
         sample.Counts["alice"] = 3;
-        sample.Target.LocalPosition = new Vector3(7, 8, 9);
+        targetTransform.LocalPosition = new Vector3(7, 8, 9);
 
         // Null string elements and empty collections survive.
         sample.Tags = ["", "x"];

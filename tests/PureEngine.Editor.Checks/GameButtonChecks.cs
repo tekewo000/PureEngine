@@ -9,7 +9,6 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
-using PureEngine.Core.Components;
 using PureEngine.Editor;
 using PureEngine.Rendering;
 using PureEngine.Runtime;
@@ -88,7 +87,7 @@ internal static class GameButtonChecks
         var runtime = Field<PlaySession>(editor, "_play").Runtime;
         foreach (var item in runtime.Scene.Objects)
         {
-            if (item.GetComponent<PureEngine.Core.Components.Button>() is not { } button) continue;
+            if (item.GetComponent<PureEngine.Core.Button>() is not { } button) continue;
             if (item.GetComponent<GameClickCounter>() is { } counter) button.Clicked += counter.OnClick;
             if (item.GetComponent<GameThrower>() is not null) button.Clicked += GameThrower.OnClick;
             if (item.GetComponent<GameRemover>() is not null) button.Clicked += GameRemover.OnClick;
@@ -117,13 +116,13 @@ internal static class GameButtonChecks
         item.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
         item.GetComponent<UiElement>()!.SizeDelta = size;
         item.GetComponent<Transform>()!.LocalPosition = position;
-        Check(owner.TryAttach(item, typeof(PureEngine.Core.Components.Button), services.Factory), $"Attach Button to {name}.");
-        item.GetComponent<PureEngine.Core.Components.Button>()!.Interactable = interactable;
+        Check(owner.TryAttach(item, typeof(PureEngine.Core.Button), services.Factory), $"Attach Button to {name}.");
+        item.GetComponent<PureEngine.Core.Button>()!.Interactable = interactable;
         if (withImage)
         {
-            Check(owner.TryAttach(item, typeof(global::Image), services.Factory), $"Attach Image to {name}.");
-            item.GetComponent<global::Image>()!.Sprite = new Sprite(Guid.NewGuid());
-            item.GetComponent<global::Image>()!.Order = order;
+            Check(owner.TryAttach(item, typeof(PureEngine.Core.Image), services.Factory), $"Attach Image to {name}.");
+            item.GetComponent<PureEngine.Core.Image>()!.Sprite = new Sprite(Guid.NewGuid());
+            item.GetComponent<PureEngine.Core.Image>()!.Order = order;
         }
         return item;
     }
@@ -148,7 +147,7 @@ internal static class GameButtonChecks
         {
             var components = Field<ProjectComponents>(editor, "_components");
             var found = ComponentAssets.SearchCandidates(components.Registry, "button");
-            Check(found.Any(entry => entry.Type == typeof(PureEngine.Core.Components.Button) && entry.TypeId == "core.button"),
+            Check(found.Any(entry => entry.Type == typeof(PureEngine.Core.Button) && entry.TypeId == "core.button"),
                 "Add Component search for 'button' must list the Button component.");
             var scene = EditScene(editor);
             var item = scene.AddEmpty();
@@ -157,8 +156,8 @@ internal static class GameButtonChecks
             Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             var services = Field<GameSession>(editor, "EditSession");
-            Check(components.TryAttach(item, typeof(PureEngine.Core.Components.Button), services.Factory), "Button must attach through the existing factory path.");
-            Check(!components.TryAttach(item, typeof(PureEngine.Core.Components.Button), services.Factory), "Duplicate Button must be refused.");
+            Check(components.TryAttach(item, typeof(PureEngine.Core.Button), services.Factory), "Button must attach through the existing factory path.");
+            Check(!components.TryAttach(item, typeof(PureEngine.Core.Button), services.Factory), "Duplicate Button must be refused.");
             Select(editor, null);
             Dispatcher.UIThread.RunJobs();
             Select(editor, item);
@@ -169,7 +168,7 @@ internal static class GameButtonChecks
             EditStore(editor).MarkClean();
             toggle.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
-            Check(item.GetComponent<PureEngine.Core.Components.Button>()!.Interactable == false, "Inspector must edit Interactable.");
+            Check(item.GetComponent<PureEngine.Core.Button>()!.Interactable == false, "Inspector must edit Interactable.");
             Check(EditStore(editor).IsDirty, "Interactable edits must dirty the scene.");
             var warning = editor.GetVisualDescendants().OfType<TextBlock>()
                 .Single(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, "Button.Requirements"));
@@ -200,20 +199,20 @@ internal static class GameButtonChecks
             var components = Field<ProjectComponents>(editor, "_components");
             var scene = EditScene(editor);
             var item = AddCard(editor, scene, "Save me", new Vector3(10, 20, 0), new Vector2(100, 40), 3, false, true);
-            item.GetComponent<global::Image>()!.Color = new Vector4(0.2f, 0.4f, 0.6f, 1f);
+            item.GetComponent<PureEngine.Core.Image>()!.Color = new Vector4(0.2f, 0.4f, 0.6f, 1f);
             var serializer = new SceneSerializer(components.Registry);
             var yaml = serializer.Serialize(scene);
             Check(yaml.Contains("core.button") && yaml.Contains("Interactable"), "Save must carry the Button type and Interactable.");
             var restored = serializer.Deserialize(yaml);
             var copy = restored.Objects.First(candidate => candidate.Name == "Save me");
-            Check(copy.GetComponent<PureEngine.Core.Components.Button>()!.Interactable == false, "Interactable must survive save/reopen.");
-            Check(copy.GetComponent<global::Image>()!.Order == 3, "Order must survive alongside Button state.");
+            Check(copy.GetComponent<PureEngine.Core.Button>()!.Interactable == false, "Interactable must survive save/reopen.");
+            Check(copy.GetComponent<PureEngine.Core.Image>()!.Order == 3, "Order must survive alongside Button state.");
             Check(serializer.Serialize(restored) == yaml, "Button save/load must be stable.");
             var clone = serializer.Clone(scene);
-            var cloneButton = clone.Objects.First(candidate => candidate.Name == "Save me").GetComponent<PureEngine.Core.Components.Button>()!;
-            Check(!cloneButton.Interactable && !ReferenceEquals(cloneButton, item.GetComponent<PureEngine.Core.Components.Button>()),
+            var cloneButton = clone.Objects.First(candidate => candidate.Name == "Save me").GetComponent<PureEngine.Core.Button>()!;
+            Check(!cloneButton.Interactable && !ReferenceEquals(cloneButton, item.GetComponent<PureEngine.Core.Button>()),
                 "Clone must separate transient-free Button state.");
-            item.GetComponent<PureEngine.Core.Components.Button>()!.Interactable = true;
+            item.GetComponent<PureEngine.Core.Button>()!.Interactable = true;
             Check(!cloneButton.Interactable, "Editing after Clone must not leak into the clone.");
             CloseEditor(editor);
         }
@@ -237,8 +236,8 @@ internal static class GameButtonChecks
         item.Rename(name);
         item.Attach(new Transform { LocalPosition = position });
         item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = size });
-        item.Attach(new global::Image { Sprite = new Sprite(imageId), Color = new Vector4(0.2f, 0.4f, 0.6f, 1f), Order = order });
-        item.Attach(new PureEngine.Core.Components.Button { Interactable = interactable });
+        item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = new Vector4(0.2f, 0.4f, 0.6f, 1f), Order = order });
+        item.Attach(new PureEngine.Core.Button { Interactable = interactable });
         return item;
     }
 
@@ -251,7 +250,7 @@ internal static class GameButtonChecks
 
         var scene = new Scene();
         var item = RenderCard(scene, imageId, "State", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true);
-        var savedColor = item.GetComponent<global::Image>()!.Color;
+        var savedColor = item.GetComponent<PureEngine.Core.Image>()!.Color;
         Check(GameSceneRenderer.Build(draw, scene, images, viewport).Count == 0 && draw.Vertices.Length == 6,
             "Normal buttons must draw the base image with no overlay.");
         var states = new Dictionary<Guid, GameSceneRenderer.ButtonVisual>
@@ -260,7 +259,7 @@ internal static class GameButtonChecks
         };
         Check(GameSceneRenderer.Build(draw, scene, images, viewport, states).Count == 0 && draw.Vertices.Length == 12,
             "Hover must add one overlay quad without touching the base order.");
-        Check(item.GetComponent<global::Image>()!.Color == savedColor, "State display must never rewrite the saved Image.Color.");
+        Check(item.GetComponent<PureEngine.Core.Image>()!.Color == savedColor, "State display must never rewrite the saved Image.Color.");
         states[item.Id] = new(UiButtonVisualState.Pressed, false);
         Check(GameSceneRenderer.Build(draw, scene, images, viewport, states).Count == 0 && draw.Vertices.Length == 12
             && draw.Vertices[6].Color != draw.Vertices[0].Color, "Pressed must differ from the base image color.");
@@ -286,8 +285,8 @@ internal static class GameButtonChecks
         var front = RenderCard(ordered, imageId, "Front", new Vector3(10, 20, 0), new Vector2(100, 40), 5, true);
         var frontStates = new Dictionary<Guid, GameSceneRenderer.ButtonVisual> { [front.Id] = new(UiButtonVisualState.Hover, false) };
         Check(GameSceneRenderer.Build(draw, ordered, images, viewport, frontStates).Count == 0, "Ordered render must succeed.");
-        Check(draw.Vertices[0].Color == back.GetComponent<global::Image>()!.Color
-            && draw.Vertices[6].Color == front.GetComponent<global::Image>()!.Color,
+        Check(draw.Vertices[0].Color == back.GetComponent<PureEngine.Core.Image>()!.Color
+            && draw.Vertices[6].Color == front.GetComponent<PureEngine.Core.Image>()!.Color,
             "Game order must follow the shared Order ascending path.");
 
         var imageless = new Scene();
@@ -295,7 +294,7 @@ internal static class GameButtonChecks
         ghost.Rename("Ghost");
         ghost.Attach(new Transform { LocalPosition = new Vector3(10, 20, 0) });
         ghost.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
-        ghost.Attach(new PureEngine.Core.Components.Button());
+        ghost.Attach(new PureEngine.Core.Button());
         Check(GameSceneRenderer.Build(draw, imageless, images, viewport).Count == 0 && draw.Vertices.IsEmpty,
             "Imageless buttons draw nothing when idle.");
         var ghostStates = new Dictionary<Guid, GameSceneRenderer.ButtonVisual> { [ghost.Id] = new(UiButtonVisualState.Normal, true) };
@@ -398,7 +397,7 @@ internal static class GameButtonChecks
             child.GetComponent<Transform>()!.LocalPosition = new Vector3(10, 10, 0);
             child.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
             child.GetComponent<UiElement>()!.SizeDelta = new Vector2(20, 10);
-            owner.TryAttach(child, typeof(PureEngine.Core.Components.Button), services.Factory);
+            owner.TryAttach(child, typeof(PureEngine.Core.Button), services.Factory);
             owner.TryAttach(child, typeof(GameClickCounter), services.Factory);
             var ghost = scene.AddEmpty();
             ghost.Rename("Ghost");
@@ -407,7 +406,7 @@ internal static class GameButtonChecks
             ghost.GetComponent<Transform>()!.LocalPosition = new Vector3(300, 50, 0);
             ghost.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
             ghost.GetComponent<UiElement>()!.SizeDelta = new Vector2(40, 20);
-            owner.TryAttach(ghost, typeof(PureEngine.Core.Components.Button), services.Factory);
+            owner.TryAttach(ghost, typeof(PureEngine.Core.Button), services.Factory);
             owner.TryAttach(ghost, typeof(GameClickCounter), services.Factory);
             var cover = scene.AddEmpty();
             cover.Rename("Cover");
@@ -416,9 +415,9 @@ internal static class GameButtonChecks
             cover.GetComponent<Transform>()!.LocalPosition = new Vector3(300, 50, 0);
             cover.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
             cover.GetComponent<UiElement>()!.SizeDelta = new Vector2(40, 20);
-            owner.TryAttach(cover, typeof(global::Image), services.Factory);
-            cover.GetComponent<global::Image>()!.Sprite = new Sprite(Guid.NewGuid());
-            cover.GetComponent<global::Image>()!.Order = 100;
+            owner.TryAttach(cover, typeof(PureEngine.Core.Image), services.Factory);
+            cover.GetComponent<PureEngine.Core.Image>()!.Sprite = new Sprite(Guid.NewGuid());
+            cover.GetComponent<PureEngine.Core.Image>()!.Order = 100;
             Dispatcher.UIThread.RunJobs();
 
             StartPlayWithCallbacks(editor);
@@ -430,13 +429,13 @@ internal static class GameButtonChecks
             Check(RuntimeCounter(editor, "Front").Calls == 1 && RuntimeCounter(editor, "Back").Calls == 0,
                 "Only the front overlapping button may receive input.");
 
-            front.GetComponent<PureEngine.Core.Components.Button>()!.Interactable = false;
+            front.GetComponent<PureEngine.Core.Button>()!.Interactable = false;
             Check((bool)Call(editor, "TryGamePressForTest", new Vector2(50, 40))!
                 && Field<Guid?>(editor, "GamePressedForTest") == front.Id,
                 "Authoring changes must not change the runtime Button.");
             Call(editor, "CancelGamePress");
             var play = Field<PlaySession?>(editor, "_play")!;
-            play.Runtime.Scene.Objects.First(candidate => candidate.Name == "Front").GetComponent<PureEngine.Core.Components.Button>()!.Interactable = false;
+            play.Runtime.Scene.Objects.First(candidate => candidate.Name == "Front").GetComponent<PureEngine.Core.Button>()!.Interactable = false;
             Check((bool)Call(editor, "TryGamePressForTest", new Vector2(50, 40))!, "Execution press must start on the back button.");
             Check((bool)Call(editor, "TryGameReleaseForTest", new Vector2(50, 40))!, "Execution release must click.");
             Call(editor, "StepPlayOnce", 1f / 60f);
@@ -591,11 +590,11 @@ internal static class GameButtonChecks
 
             var runtimeItem = Field<PlaySession>(editor, "_play").Runtime.Scene.Objects.Single(candidate => candidate.Id == item.Id);
             editor.MouseDown(point, MouseButton.Left);
-            runtimeItem.GetComponent<PureEngine.Core.Components.Button>()!.Interactable = false;
+            runtimeItem.GetComponent<PureEngine.Core.Button>()!.Interactable = false;
             Call(editor, "StepPlayOnce", 0f);
             Check(Field<Guid?>(editor, "GamePressedForTest") is null,
                 "Disabling during a press must immediately cancel capture and state.");
-            runtimeItem.GetComponent<PureEngine.Core.Components.Button>()!.Interactable = true;
+            runtimeItem.GetComponent<PureEngine.Core.Button>()!.Interactable = true;
             editor.MouseUp(point, MouseButton.Left);
             Call(editor, "StepPlayOnce", 0f);
             Check(counter.Calls == 4, "Re-enabling must not resurrect a cancelled press.");
@@ -667,7 +666,7 @@ internal static class GameButtonChecks
             bad.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
             bad.GetComponent<UiElement>()!.SizeDelta = new Vector2(100, 40);
             bad.GetComponent<Transform>()!.LocalPosition = new Vector3(10, 20, 0);
-            owner.TryAttach(bad, typeof(PureEngine.Core.Components.Button), services.Factory);
+            owner.TryAttach(bad, typeof(PureEngine.Core.Button), services.Factory);
             owner.TryAttach(bad, typeof(GameThrower), services.Factory);
             Dispatcher.UIThread.RunJobs();
             StartPlayWithCallbacks(editor);
@@ -693,7 +692,7 @@ internal static class GameButtonChecks
             remover.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
             remover.GetComponent<UiElement>()!.SizeDelta = new Vector2(100, 40);
             remover.GetComponent<Transform>()!.LocalPosition = new Vector3(10, 100, 0);
-            owner.TryAttach(remover, typeof(PureEngine.Core.Components.Button), services.Factory);
+            owner.TryAttach(remover, typeof(PureEngine.Core.Button), services.Factory);
             owner.TryAttach(remover, typeof(GameRemover), services.Factory);
             Dispatcher.UIThread.RunJobs();
             StartPlayWithCallbacks(editor);

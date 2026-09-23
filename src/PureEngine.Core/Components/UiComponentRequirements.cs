@@ -9,8 +9,8 @@ public static class UiComponentRequirements
         ArgumentNullException.ThrowIfNull(item);
         var hasTransform = item.GetComponent<Transform>() is not null;
         var hasElement = item.GetComponent<UiElement>() is not null;
-        var hasImage = item.GetComponent<global::Image>() is not null;
-        var hasButton = item.GetComponent<Components.Button>() is not null;
+        var hasImage = item.GetComponent<Image>() is not null;
+        var hasButton = item.GetComponent<Button>() is not null;
         if (hasImage || hasButton)
         {
             List<string> missing = [];

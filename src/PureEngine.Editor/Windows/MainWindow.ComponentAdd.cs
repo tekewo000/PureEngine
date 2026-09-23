@@ -34,9 +34,9 @@ public partial class MainWindow
         var list = new ListBox { MaxHeight = 320, SelectionMode = SelectionMode.Single };
         list.SetValue(AutomationProperties.NameProperty, "AddComponentList");
         var status = new TextBlock { Classes = { "hint" }, TextWrapping = TextWrapping.Wrap };
-        var add = new Button { Content = "Add", IsDefault = true };
+        var add = new Avalonia.Controls.Button { Content = "Add", IsDefault = true };
         add.SetValue(AutomationProperties.NameProperty, "AddComponentAdd");
-        var close = new Button { Content = "Close", IsCancel = true };
+        var close = new Avalonia.Controls.Button { Content = "Close", IsCancel = true };
         close.SetValue(AutomationProperties.NameProperty, "AddComponentClose");
         void updateAddState() => add.IsEnabled = list.SelectedItem is ComponentAddRow row && !row.Attached && !IsPlaying;
         void refresh()

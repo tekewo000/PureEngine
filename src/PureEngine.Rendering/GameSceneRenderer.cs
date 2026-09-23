@@ -1,6 +1,5 @@
 using System.Numerics;
 using PureEngine.Core;
-using PureEngine.Core.Components;
 
 namespace PureEngine.Rendering;
 
@@ -42,7 +41,7 @@ public static class GameSceneRenderer
             CollectRecursive(root, viewportSize, Matrix4x4.Identity, collected, diagnostics);
         foreach (var entry in SceneViewMath.SortForRender(collected))
         {
-            var hasImage = entry.Object.GetComponent<global::Image>() is { Sprite: not null };
+            var hasImage = entry.Object.GetComponent<Image>() is { Sprite: not null };
             try
             {
                 UiImageRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, images, clip, null);

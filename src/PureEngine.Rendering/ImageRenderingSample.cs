@@ -22,7 +22,7 @@ public sealed class ImageRenderingSample
             new UiElement { Pivot = Vector2.Zero, SizeDelta = new(160) }, new Sprite(ImageId, (64, 0, 64, 64)));
         var tinted = Add(_root, "Tint and alpha", new Transform { LocalPosition = new(245, 65, 0) },
             new UiElement { Pivot = Vector2.Zero, SizeDelta = new(96) }, new Sprite(ImageId, (0, 0, 64, 64)));
-        tinted.GetComponent<global::Image>()!.Color = new(1, .35f, .35f, .6f);
+        tinted.GetComponent<Image>()!.Color = new(1, .35f, .35f, .6f);
         var parent = Add(_root, "Rotated parent", new Transform
         {
             LocalPosition = new(410, 15, 0), LocalScale = new(.85f, .85f, 1),
@@ -67,7 +67,7 @@ public sealed class ImageRenderingSample
         item.SetParent(parent);
         item.Attach(transform);
         item.Attach(element);
-        item.Attach(new global::Image { Sprite = sprite });
+        item.Attach(new Image { Sprite = sprite });
         return item;
     }
 
