@@ -15,6 +15,7 @@
     <Compile Include="../../src/PureEngine.Editor/Compilation/UserCodeIdentity.cs" Link="Compilation/UserCodeIdentity.cs" />
     <Compile Include="../../src/PureEngine.Editor/Scenes/SceneFile.cs" Link="SceneFile.cs" />
     <Compile Include="../../src/PureEngine.Editor/Projects/ProjectFile.cs" Link="ProjectFile.cs" />
+    <Compile Include="../../src/PureEngine.Editor/Projects/ProjectFileImporter.cs" Link="ProjectFileImporter.cs" />
     <Compile Include="../../src/PureEngine.Editor/Samples/*.cs" Link="Samples/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

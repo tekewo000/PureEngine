@@ -65,6 +65,7 @@ public partial class MainWindow : Window
             surface.AddHandler(DragDrop.DragOverEvent, OnComponentDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
             surface.AddHandler(DragDrop.DropEvent, OnComponentDrop, RoutingStrategies.Bubble, handledEventsToo: true);
         }
+        InitProjectDrop();
         InitPlayControls();
         InitConsole();
     }

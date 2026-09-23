@@ -110,6 +110,7 @@ Check(PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, typeof(PureEngine.
 
 ScenePersistenceChecks.Run();
 ProjectPersistenceChecks.Run();
+ProjectImportChecks.Run();
 SceneRuntimeChecks.Run();
 PriorityChecks.Run();
 LifecycleChecks.Run();

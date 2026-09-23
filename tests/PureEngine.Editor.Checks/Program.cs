@@ -39,6 +39,7 @@ internal static class Program
             launcher.Show();
             Dispatcher.UIThread.RunJobs();
             PlayConnectionChecks.Run();
+            ProjectDropChecks.Run();
             EditorOwnershipChecks.Run(root);
             ConsoleChecks.Run();
             UserCodeChecks.Run(root);
