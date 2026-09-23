@@ -248,7 +248,29 @@ public partial class MainWindow : Window
         body.Children.Add(new Separator { Classes = { "divider" } });
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
             body.Children.Add(BuildMemberRow(component, member));
-        return new Border { Classes = { "componentCard" }, Child = body };
+        var remove = new MenuItem { Header = "Remove" };
+        var card = new Border
+        {
+            Classes = { "componentCard" }, Child = body,
+            ContextMenu = new ContextMenu { Items = { remove } },
+        };
+        card.ContextMenu.Opening += (_, _) => remove.IsEnabled = !IsPlaying;
+        remove.Click += (_, _) =>
+        {
+            if (RejectWhenPlaying("削除") || !ComponentEditors.Children.Contains(card)) return;
+            if (!item.Detach(component)) return;
+            foreach (var box in card.GetVisualDescendants().OfType<TextBox>())
+                _invalidFields.Remove(box);
+            ComponentEditors.Children.Remove(card);
+            ComponentsHeader.Text = $"Components ({item.Components.Count})";
+            AttachedClasses.IsVisible = item.Components.Count > 0;
+            UpdateErrorBadge();
+            MarkSceneChanged();
+            try { ComponentAssets.DisposeComponents([component]); }
+            catch (Exception error) { SetFileStatus(error.ToString(), true); }
+            QueuePendingUserCodeReload();
+        };
+        return card;
     }
 
     /// <summary>Attach settings, separate from Inspector members. Only lifecycles present on the class are shown.</summary>
@@ -324,7 +346,7 @@ public partial class MainWindow : Window
         box.SetValue(AutomationProperties.NameProperty, $"{type.Name}.{kind}Priority");
         box.TextChanged += (_, _) =>
         {
-            if (IsPlaying) return;
+            if (IsPlaying || !box.GetVisualAncestors().Contains(ComponentEditors)) return;
             if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
             {
                 if (getter() != value)
@@ -495,6 +517,7 @@ public partial class MainWindow : Window
 
     private void MarkInvalid(TextBox box, string? message)
     {
+        if (!box.GetVisualAncestors().Contains(ComponentEditors)) return;
         if (message is null)
         {
             box.ClearValue(TextBox.BorderBrushProperty);
@@ -571,6 +594,43 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("追加")) return;
         var item = _editScene.Current.AddEmpty();
+        MarkSceneChanged();
+        SceneObjects.SelectedItem = item;
+        SceneObjects.ScrollIntoView(item);
+        SceneObjects.Focus();
+    }
+
+    private void OnAddUiImage(object? sender, RoutedEventArgs e) =>
+        AddUiObject("Image", [typeof(Core.Components.Image)]);
+
+    private void OnAddUiButton(object? sender, RoutedEventArgs e) =>
+        AddUiObject("Button", [typeof(Core.Components.Image), typeof(Core.Components.Button)]);
+
+    /// <summary>
+    /// Stuffsの右クリックメニュー「UI」からの作成。Imageは画像用のComponentだけ、
+    /// Buttonは見た目用のImageと操作用のButtonを付ける。描画・プレビューは将来の範囲。
+    /// </summary>
+    private void AddUiObject(string baseName, Type[] componentTypes)
+    {
+        if (RejectWhenPlaying("追加")) return;
+        var item = _editScene.Current.AddNamed(baseName);
+        try
+        {
+            foreach (var type in componentTypes)
+            {
+                if (!ComponentAssets.TryAttach(item, type, _editSession.Factory))
+                    throw new InvalidOperationException($"{type.Name} をアタッチできませんでした。");
+            }
+        }
+        catch (Exception error)
+        {
+            var created = item.Components.ToArray();
+            _editScene.Current.Remove(item);
+            try { ComponentAssets.DisposeComponents(created); }
+            catch (Exception cleanupError) { SetFileStatus(cleanupError.ToString(), true); }
+            SetFileStatus($"UIの追加に失敗しました: {error.GetBaseException().Message}", true);
+            return;
+        }
         MarkSceneChanged();
         SceneObjects.SelectedItem = item;
         SceneObjects.ScrollIntoView(item);

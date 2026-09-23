@@ -27,6 +27,8 @@ public static class ComponentAssets
 
     static ComponentAssets()
     {
+        Registry.Register<Core.Components.Image>("core.image");
+        Registry.Register<Core.Components.Button>("core.button");
         Registry.Register<Samples.PlayerStats>("sample.player-stats");
         Registry.Register<Samples.RoundSettings>("sample.round-settings");
         Registry.Register<Samples.InjectedPlayer>("sample.injected-player");

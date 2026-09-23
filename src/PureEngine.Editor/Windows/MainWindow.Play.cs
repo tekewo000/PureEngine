@@ -330,6 +330,7 @@ public partial class MainWindow
         if (SaveSceneAsMenu is not null) SaveSceneAsMenu.IsEnabled = enabled;
         StartupSceneMenu.IsEnabled = enabled && _project is not null;
         AddObjectMenuItem.IsEnabled = enabled;
+        if (AddUiMenuItem is not null) AddUiMenuItem.IsEnabled = enabled;
         DeleteObjectMenuItem.IsEnabled = enabled && SceneObjects.SelectedItem is not null;
     }
 

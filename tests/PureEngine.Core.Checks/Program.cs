@@ -85,6 +85,31 @@ Check(update is not null, "Update must be detected.");
 Check(update!.GetParameters() is { Length: 1 } ps && ps[0].ParameterType == typeof(float),
     "Update must take a single float parameter.");
 Check(ComponentSchema.GetDestroyMethod(typeof(SampleBehaviour)) is null, "Destroy must be absent when not defined.");
+holder.SetStartPriority(sample, 7);
+Check(!holder.Detach(new SampleBehaviour()) && holder.Detach(sample) && !holder.Detach(sample),
+    "Detach must remove only the exact instance, once.");
+Check(holder.GetComponent<SampleBehaviour>() is null, "Detached components must not be retrievable.");
+holder.Attach(sample);
+Check(holder.GetStartPriority(sample) == 0, "Detach must clear attachment priorities.");
+try
+{
+    holder.Detach(null!);
+    throw new Exception("Null detach must be rejected.");
+}
+catch (ArgumentNullException) { }
+using (var runtime = new SceneRuntime(new Scene(), new ComponentRegistry()))
+{
+    var runtimeObject = runtime.Scene.AddEmpty();
+    var runtimeComponent = new PlayerController();
+    runtimeObject.Attach(runtimeComponent);
+    try
+    {
+        runtimeObject.Detach(runtimeComponent);
+        throw new Exception("Editing detach must not bypass runtime ownership.");
+    }
+    catch (InvalidOperationException) { }
+    Check(runtimeObject.Components.Count == 1, "Rejected runtime detach must preserve ownership.");
+}
 try
 {
     ComponentSchema.GetUpdateMethod(typeof(DuplicatedUpdate));
@@ -111,12 +136,13 @@ Check(PureEngine.Editor.ComponentAssets.TryAttach(dropTarget, typeof(PureEngine.
 ScenePersistenceChecks.Run();
 ProjectPersistenceChecks.Run();
 SceneRuntimeChecks.Run();
+UiCreationChecks.Run();
 PriorityChecks.Run();
 LifecycleChecks.Run();
 DependencyInjectionChecks.Run();
 GameDependencyChecks.Run();
 LogChecks.Run();
-Console.WriteLine("PASS: add, rename, validation, identity, notifications, removal, attach, get-component, schema, asset drop policy, YAML persistence, and projects.");
+Console.WriteLine("PASS: add, rename, validation, identity, notifications, removal, attach, get-component, schema, asset drop policy, YAML persistence, UI creation, and projects.");
 
 sealed class PlayerController
 {

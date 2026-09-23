@@ -28,7 +28,8 @@
 | Project | manifest、複数シーン、起動シーン指定、相対パス、Projectフォルダの移動 | [ProjectFile](../src/PureEngine.Editor/Projects/ProjectFile.cs)、[ProjectDocument](../src/PureEngine.Core/Projects/ProjectDocument.cs) |
 | Project Explorer | フォルダツリーとファイル一覧、シーンを開く、作成・改名・削除・更新、名前指定で空のsealedクラスを作るCreate C#。組み込みComponents一覧は表示しない | [MainWindow.ProjectExplorer](../src/PureEngine.Editor/Windows/MainWindow.ProjectExplorer.cs) |
 | Editorの配置 | 左がScene View／Game、中央がStuffs、右がInspector、下部がProject／Console。ペインのサイズ変更 | [MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
-| シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除 | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs) |
+| シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除。UI作成は「UI/Image」「UI/Button」で重複しない名前付け | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs) |
+| UI作成 | Stuffsの右クリック「UI」からImage（画像用Component付き）・Button（Image＋Button付き）を作成。Inspector編集・YAML保存・Play中の拒否に対応。描画・プレビューは未実装 | [Image・Button](../src/PureEngine.Core/Components/)、[MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
 | ドラッグ＆ドロップ | Projectの自作C#ファイルからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
@@ -51,7 +52,7 @@
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはUIスレッドで行う。
 - Inspectorと保存の対応型はstring・int・float・bool。配列・リスト・独自型などは未対応。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・自動マイグレーションは未実装。固定typeIdは維持できるが、保存メンバーの改名にはデータ移行が必要。
-- ゲーム内UI、描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
+- ゲーム内UIの作成（Stuffsの右クリック「UI」→Image／Button）は実装済み。描画、プレビュー、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
 ## 仕様整理と次の実装順
@@ -115,6 +116,17 @@
 描画・Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。
 
 ## 検証状況
+
+UI作成（Stuffsの右クリック「UI」→Image／Button）追加時：Core・EditorのReleaseチェックがPASS。
+
+```powershell
+dotnet run --project tests/PureEngine.Core.Checks -c Release
+dotnet run --project tests/PureEngine.Editor.Checks -c Release
+```
+
+- 追加分（Core・UI作成）：`core.image`／`core.button` の登録とtypeId維持、Inspectorメンバーの検出、`AddNamed` の重複しない名前付け（`AddEmpty` の既存動作を維持）、Image単体・Image＋Buttonのアタッチと重複拒否、値のYAML往復を確認。
+- 追加分（Editor・UIメニュー）：メニュー構成（Add Empty・UI・区切り・DeleteとUI内のImage／Button）、作成・選択・未保存化、名前の重複回避、Inspectorの表示、YAML往復、Play中の無効化と作成拒否、Stop後の復帰を確認。
+- 既存分：前回（共通ログAPIとConsole・Play接続後）の全項目を再確認。
 
 クラス改名対応：クラス名＋名前空間変更後のID・Inspector値・Priority維持、保存後の再Open、旧シーンの名前空間変更からの初回移行、多対多改名時の拒否と管理ファイル保持、複数クラスの名前空間変更をEditorチェックで確認。
 

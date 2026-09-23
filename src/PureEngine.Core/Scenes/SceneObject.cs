@@ -71,6 +71,20 @@ public sealed class SceneObject : INotifyPropertyChanged
         _components.Add(component);
     }
 
+    /// <summary>Detaches the exact editing instance and its priorities. The caller owns disposal.</summary>
+    /// <remarks>Runtime component detachment is not supported.</remarks>
+    public bool Detach(object component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        if (Runtime is not null)
+            throw new InvalidOperationException("Cannot detach components from a runtime scene.");
+        var index = _components.FindIndex(candidate => ReferenceEquals(candidate, component));
+        if (index < 0) return false;
+        _components.RemoveAt(index);
+        _priorities.Remove(component);
+        return true;
+    }
+
     /// <summary>Returns the first attached component assignable to <typeparamref name="T"/>, or null.</summary>
     public T? GetComponent<T>() where T : class
     {

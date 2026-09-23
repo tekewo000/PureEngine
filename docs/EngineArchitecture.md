@@ -233,7 +233,12 @@ components:
 - 履歴はProject名とmanifestのローカルパスを最大12件保存する。保存先は `%LOCALAPPDATA%/PureEngine/recent-projects.json`。履歴が破損・保存不可でもProjectの作成・読み込みは妨げない。
 - Launcherから新規作成するProjectは空のMainシーンを持つ。Editor内でのProject作成・切り替え操作はLauncherへの復帰に統一する。
 
-## UI・描画・プレビュー：保留
+## UI・描画・プレビュー：作成のみ実装、描画は保留
+
+Stuffsの右クリックメニュー「UI」からImage／Buttonのオブジェクトを作れる。
+`PureEngine.Core.Components` の `Image`（SpritePath・Color・Width・Height）と
+`Button`（Text・Interactable）は普通のComponentとしてInspectorで編集・YAMLで保存し、
+Buttonの見た目は同じオブジェクトのImageが持つ。Play中の作成は他操作と同様に拒否する。
 
 以下は将来の構想であり、現時点では設計・実装を進めない。
 

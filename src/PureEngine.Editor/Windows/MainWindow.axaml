@@ -341,6 +341,10 @@
                 <Grid.ContextMenu>
                   <ContextMenu>
                     <MenuItem x:Name="AddObjectMenuItem" Header="Add Empty" Click="OnAddObject" />
+                    <MenuItem x:Name="AddUiMenuItem" Header="UI">
+                      <MenuItem x:Name="AddUiImageMenuItem" Header="Image" Click="OnAddUiImage" />
+                      <MenuItem x:Name="AddUiButtonMenuItem" Header="Button" Click="OnAddUiButton" />
+                    </MenuItem>
                     <Separator />
                     <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
                               InputGesture="Delete" IsEnabled="False" />

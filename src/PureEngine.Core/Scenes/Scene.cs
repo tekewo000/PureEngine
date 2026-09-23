@@ -17,12 +17,19 @@ public sealed class Scene
     public ReadOnlyObservableCollection<SceneObject> Objects { get; }
 
     /// <summary>Creates an empty object with a non-colliding default name ("Empty", "Empty (1)", ...).</summary>
-    public SceneObject AddEmpty()
+    public SceneObject AddEmpty() => AddNamed("Empty");
+
+    /// <summary>
+    /// Creates an object with a non-colliding name based on <paramref name="baseName"/>
+    /// ("Image", "Image (1)", ...). Used by the Stuffs context menu (Empty, UI/Image, UI/Button).
+    /// </summary>
+    public SceneObject AddNamed(string baseName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseName);
         Runtime?.EnsureMutationAllowed();
-        var name = "Empty";
+        var name = baseName.Trim();
         for (var suffix = 1; _objects.Any(item => item.Name == name); suffix++)
-            name = $"Empty ({suffix})";
+            name = $"{baseName.Trim()} ({suffix})";
 
         var item = new SceneObject(name) { Runtime = Runtime };
         Runtime?.RegisterObject(item);

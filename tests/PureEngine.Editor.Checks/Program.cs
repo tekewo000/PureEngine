@@ -43,6 +43,7 @@ internal static class Program
             ConsoleChecks.Run();
             EditorSeparationChecks.Run(root);
             UserCodeChecks.Run(root);
+            UiMenuChecks.Run();
             Control<TextBox>(launcher, "ProjectLocation").Text = root;
             Control<TextBox>(launcher, "ProjectName").Text = "LauncherTest";
             Click(Control<Button>(launcher, "CreateProjectButton"));
