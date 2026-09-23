@@ -50,6 +50,7 @@ public sealed class SceneRuntime : IDisposable
     private readonly List<Invocation> _updates = [];
     private readonly List<RuntimeObject> _removals = [];
     private readonly List<SceneRuntimeError> _errors = [];
+    private readonly Queue<Guid> _buttonClicks = [];
     private bool _started;
     private bool _stopped;
     private bool _stopRequested;
@@ -83,6 +84,7 @@ public sealed class SceneRuntime : IDisposable
         Errors = _errors.AsReadOnly();
         try
         {
+            UiButtonValidation.Validate(Scene);
             foreach (var item in Scene.Objects)
             {
                 RegisterObject(item);
@@ -122,6 +124,7 @@ public sealed class SceneRuntime : IDisposable
         try
         {
             StartPending();
+            DispatchButtonClicks();
             for (var i = 0; i < _updates.Count && !_stopRequested; i++)
             {
                 var entry = _updates[i];
@@ -154,6 +157,19 @@ public sealed class SceneRuntime : IDisposable
 
     /// <summary>Equivalent to Stop; Destroy and Dispose remain single-shot.</summary>
     public void Dispose() => Stop();
+
+    /// <summary>Game入力からのクリックを次の更新境界へ予約する。実行中でなければ古い入力として捨てる。</summary>
+    /// <remarks>Start前・編集中・停止後のEnqueueはhandlerを呼ばず捨てる。呼び出しは単一スレッドで行う。</remarks>
+    public void EnqueueButtonClick(Guid buttonObjectId)
+    {
+        if (buttonObjectId == Guid.Empty)
+            throw new ArgumentException("Button object ID must not be empty.", nameof(buttonObjectId));
+        if (!IsRunning)
+            return;
+        _buttonClicks.Enqueue(buttonObjectId);
+    }
+
+    internal int PendingButtonClicks => _buttonClicks.Count;
 
     internal void EnsureMutationAllowed()
     {
@@ -281,6 +297,67 @@ public sealed class SceneRuntime : IDisposable
         if (_updates.Count > updatesBefore && _updates.Count > 1) _updates.Sort(UpdateOrder);
     }
 
+    /// <summary>予約されたクリックを更新境界で同じSceneObjectのhandlerへ1回ずつ届ける。</summary>
+    /// <remarks>Start後のStep内でのみ呼ぶ。0個は何もせず、複数は検証エラーとして停止する。削除・停止後の残りは呼ばない。</remarks>
+    private void DispatchButtonClicks()
+    {
+        if (_buttonClicks.Count == 0)
+            return;
+        var count = _buttonClicks.Count;
+        for (var i = 0; i < count && !_stopRequested; i++)
+        {
+            var id = _buttonClicks.Dequeue();
+            RuntimeObject? owner = null;
+            foreach (var candidate in _objects.Values)
+            {
+                if (candidate.Item.Id == id)
+                {
+                    owner = candidate;
+                    break;
+                }
+            }
+            if (owner is null || owner.Removed)
+                continue;
+            var item = owner.Item;
+            if (item.GetComponent<Components.Button>() is not { Interactable: true })
+                continue;
+            List<object> handlers = [];
+            foreach (var component in item.Components)
+            {
+                if (component is IUiButtonHandler)
+                    handlers.Add(component);
+            }
+            if (handlers.Count == 0)
+                continue;
+            if (handlers.Count > 1)
+            {
+                _errors.Add(new SceneRuntimeError(item.Id, item.Name, typeof(Components.Button),
+                    nameof(IUiButtonHandler.OnClick),
+                    new InvalidOperationException($"{item.Name}: Button has {handlers.Count} handlers, at most one is allowed.")));
+                _stopRequested = true;
+                continue;
+            }
+            // Attach during this frame joins the next Start batch, including handlers added by another click.
+            if (_pendingStarts.Any(entry => ReferenceEquals(entry.Component, handlers[0])))
+            {
+                _buttonClicks.Enqueue(id);
+                continue;
+            }
+            try
+            {
+                ((IUiButtonHandler)handlers[0]).OnClick(new UiClickContext(Scene, item));
+            }
+            catch (Exception error)
+            {
+                _errors.Add(new SceneRuntimeError(item.Id, item.Name, handlers[0].GetType(),
+                    nameof(IUiButtonHandler.OnClick), error));
+                _stopRequested = true;
+            }
+        }
+        if (_stopRequested)
+            _buttonClicks.Clear();
+    }
+
     private void FinishStep()
     {
         var completedStop = false;
@@ -305,6 +382,7 @@ public sealed class SceneRuntime : IDisposable
                 _pendingStarts.Clear();
                 _updates.Clear();
                 _removals.Clear();
+                _buttonClicks.Clear();
                 completedStop = true;
             }
         }

@@ -17,11 +17,13 @@ public partial class MainWindow
             _projectAssets = ProjectAssets.Scan(Path.GetTempPath());
             _previewImages = [];
             _sceneViewport?.InvalidateImageCache();
+            _gameViewport?.InvalidateImageCache();
             return;
         }
         _projectAssets = ProjectAssets.Scan(_project.RootDirectory);
         _previewImages = _projectAssets.LoadImageBytes();
         _sceneViewport?.InvalidateImageCache();
+        _gameViewport?.InvalidateImageCache();
         foreach (var diagnostic in _projectAssets.Diagnostics)
             Log.Engine.Warning(diagnostic);
         if (_projectAssets.Diagnostics.Count > 0)

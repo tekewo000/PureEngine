@@ -97,6 +97,7 @@ public partial class MainWindow : Window
             surface.AddHandler(DragDrop.DragOverEvent, OnComponentDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
             surface.AddHandler(DragDrop.DropEvent, OnComponentDrop, RoutingStrategies.Bubble, handledEventsToo: true);
         }
+        InitProjectDrop();
         InitPlayControls();
         InitConsole();
         var viewport = new PureEngine.Rendering.Avalonia.VulkanViewport();
@@ -104,7 +105,12 @@ public partial class MainWindow : Window
         ConnectPreviewViewport(viewport);
         RefreshProjectAssets();
         SceneViewport.Children.Add(viewport);
+        var gameViewport = new PureEngine.Rendering.Avalonia.VulkanViewport();
+        gameViewport.RenderingFailed += error => Log.Engine.Error(error);
+        ConnectGameViewport(gameViewport);
+        GameViewport.Children.Add(gameViewport);
         InitSceneView();
+        InitGameInput();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)

@@ -92,8 +92,7 @@ internal sealed class VulkanCheckApp : App
                 catch (Exception error)
                 {
                     Console.Error.WriteLine(error);
-                    Environment.ExitCode = 1;
-                    window.Close();
+                    desktop.Shutdown(1);
                 }
             };
         }

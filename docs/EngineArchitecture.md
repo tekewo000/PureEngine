@@ -551,6 +551,16 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 
 実装はCoreの`Scenes/SceneViewMath.cs`（ビュー変換・配置列挙・ヒット判定・親逆変換・F表示の共通計算）、Renderingの`SceneViewOverlay.cs`（グリッド・選択枠・Gizmoの表示要素）と`EditSceneRenderer`／`UiImageRenderer`のビュー合成、Editorの`Windows/MainWindow.SceneView.cs`（パン／ズーム・選択・Gizmo・F・中断と未保存管理）に置く。Headlessの移動操作口は本番と同じ開始・更新・確定処理を呼ぶ。加えてHeadlessのマウス・キー入力から実際のヒットテストとイベント経路を検証し、計算のみのテストと区別する。
 
+### V5前半：Game表示とButton操作
+
+**合意した範囲：Game表示とButton操作まで。** Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は追加しない。この達成だけでV3〜V5全体を完了扱いにしない。検証の証跡は[実装計画](ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
+
+- GameはPlaySessionの実行用Sceneを描く。Scene Viewは編集用Sceneの表示を維持し、Play中の編集禁止を守る。実行中のTransformやImageの変更は次のフレームの配置再計算でGameへ反映する。描画は配置と画像投入だけを行い、Start／Updateを呼ばないため更新の二重実行は起きない。Gameタブ非表示時は描画・入力を止めるが、Playタイマーは独立しているためゲームの進行は維持する。Sceneの読み取りと更新はどちらもUIスレッドで直列化し、GPU側へは確定したDrawListを渡す。
+- Buttonは普通のComponent（`PureEngine.Core.Components.Button`、typeId `core.button`）とし、TransformとUiElementで領域を決める。見た目は同じオブジェクトのImageを使う。Avalonia.Controls.Buttonとの衝突を避けるためComponents名前空間に置く。`Interactable = true` を既定とし、Inspector編集・保存・復元・Cloneへ接続する。一時的な押下・ホバー・フォーカス状態はComponentに持たず、保存やCloneで引き継がない。Add Componentの検索（"button"で一致）・既存factory・重複防止を使い、Transform／UiElementの不足は既存の `UiComponentRequirements`／Inspector警告で知らせる。Imageは必須にしない。
+- 状態表示は保存済みの `Image.Color` を書き換えず、実効色の読み取りと重ね描きで行う。通常はそのまま、ホバー・押下・無効はそれぞれ白・黒・灰色の半透明矩形を重ね、キーボードフォーカスは紫の枠を描く。ImageのないButtonもヒット対象とし、フォーカス時は枠だけを描く。
+- 入力は配置計算・座標変換・Orderによる順序を描画と共有する（`SceneViewMath.SortForRender`／`HitTest`、`UiLayout`）。Gameにパン／ズームはなく、Scene Viewの視点は影響しない。親の回転・拡縮は逆行列で戻し、DPIは論理座標とGPUターゲット寸法の境界で一度だけ適用する。表示領域のクリップ（領域外は対象外）を考慮し、見た目と判定を一致させる。重なったButtonは手前（Order降順、同値は後方が手前）の1つだけが入力を受ける。左ボタンで押し始めたButton上で離したときだけ1回通知し、外で離した場合はキャンセルする。ポインターキャプチャを使い、フォーカス喪失・キャプチャ喪失・タブ切替・無効化・削除・Stopで押下状態を解除する。Tab／Shift+TabはOrder昇順（描画順の背→手前）で移動し、Enter／Spaceでも操作できる。キーボードの長押しリピートは抑止する。他の起動キーの解放やTab移動では再発火させず、ポインター押下中のキー起動は受け付けない。Tab候補から画面外・退化変換・描画失敗のButtonを除き、無効化・削除時の押下とフォーカスは更新後に解除する。`Interactable=false`・0サイズ・判定不能な変換は対象外にする。親Buttonの無効化だけで子Buttonを無効化しない。ImageのないButtonも操作でき、ButtonでないImageはGame入力を遮らない。未実装のVisible／ClipChildren等は考慮せず、実装済みとして扱わない。
+- ゲームコードとの接続は`IUiButtonHandler.OnClick(UiClickContext context)`を採用する。同じSceneObjectのhandlerを呼び、contextに実行用SceneとButtonのSceneObject（実行インスタンス）を渡す。handlerは0個なら何もしない。複数は検証エラーとして理由を表示し、実行を開始しない（準備時の `UiButtonValidation.Validate` と実行中の再検証で停止する）。メソッド名やデリゲートは保存せず、既存のComponent保存・生成経路を使う。入力は `SceneRuntime.Step` 内の更新境界（Start済みバッチの後・Updateの前）で処理し、Start前や編集中のhandlerを呼ばない。同じ更新内で動的に追加したhandler宛てのクリックは、次のStartバッチが済むまで繰り越す。Enqueueは実行中でなければ古い入力として捨てる。クリック中の削除・停止・例外は既存Runtimeの終了規則へ接続する。例外は `Errors` へ報告してConsoleへ転送し、安全に停止する。Stopや削除後に残った入力から古いhandlerを呼ばない（停止時はキューを破棄する）。
+
 ## マルチプレイ・Steam：将来の構想
 
 ### 複数インスタンスでの検証
