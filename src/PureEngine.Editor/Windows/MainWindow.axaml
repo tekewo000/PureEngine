@@ -11,12 +11,23 @@
         FontFamily="Segoe UI" FontSize="12"
         WindowStartupLocation="CenterScreen" WindowState="Maximized">
   <Window.Styles>
-    <Style Selector="ListBox#SceneObjects ListBoxItem">
-      <Setter Property="MinHeight" Value="0" />
-      <Setter Property="Height" Value="24" />
+    <Style Selector="TreeView#SceneObjects TreeViewItem" x:DataType="editor:HierarchyNode">
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
       <Setter Property="Padding" Value="8,2" />
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TreeView#SceneObjects TreeViewItem.drop-before /template/ Border#PART_LayoutRoot">
+      <Setter Property="BoxShadow" Value="inset 0 2 0 0 #4CC2FF" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="TreeView#SceneObjects TreeViewItem.drop-after /template/ Border#PART_LayoutRoot">
+      <Setter Property="BoxShadow" Value="inset 0 -2 0 0 #4CC2FF" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="TreeView#SceneObjects TreeViewItem.drop-as-child /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
     </Style>
     <Style Selector="ListBox#ProjectFiles ListBoxItem">
       <Setter Property="Width" Value="112" />
@@ -480,15 +491,16 @@
                               InputGesture="Delete" IsEnabled="False" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <ListBox x:Name="SceneObjects" Background="Transparent" BorderThickness="0" Margin="8"
-                         SelectionMode="Single" AutomationProperties.Name="Stuffs objects"
-                         KeyDown="OnSceneKeyDown">
-                  <ListBox.ItemTemplate>
-                    <DataTemplate DataType="core:SceneObject">
-                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                    </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
+                <TreeView x:Name="SceneObjects" Background="Transparent" BorderThickness="0" Margin="8"
+                          SelectionMode="Single" AutomationProperties.Name="Stuffs objects"
+                          DragDrop.AllowDrop="True"
+                          KeyDown="OnSceneKeyDown" SelectionChanged="OnObjectSelected">
+                  <TreeView.DataTemplates>
+                    <TreeDataTemplate DataType="editor:HierarchyNode" ItemsSource="{Binding Children}">
+                      <TextBlock Text="{Binding Ref.Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Ref.Name}" />
+                    </TreeDataTemplate>
+                  </TreeView.DataTemplates>
+                </TreeView>
               </Grid>
             </TabItem>
           </TabControl>

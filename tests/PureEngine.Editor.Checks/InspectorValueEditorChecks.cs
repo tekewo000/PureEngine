@@ -38,7 +38,12 @@ static class InspectorValueEditorChecks
             Dispatcher.UIThread.RunJobs();
         }
 
-        var sceneObjects = Control<ListBox>(editor, "SceneObjects");
+        var sceneObjects = Control<TreeView>(editor, "SceneObjects");
+        _ = sceneObjects;
+        static void Select(MainWindow window, SceneObject item) =>
+            typeof(MainWindow).GetMethod("SelectSceneObjectForTest",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!
+                .Invoke(window, [item]);
         var editStore = (EditSceneStore)typeof(MainWindow).GetField("_editScene", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
         var scene = editStore.Current;
 
@@ -50,9 +55,12 @@ static class InspectorValueEditorChecks
         moverObject.Rename("Mover");
         var mover = new Transform { LocalPosition = new Vector3(1, 2, 3) };
         moverObject.Attach(mover);
+        typeof(MainWindow).GetMethod("SyncHierarchyForTest",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!
+            .Invoke(editor, []);
         Dispatcher.UIThread.RunJobs();
 
-        sceneObjects.SelectedItem = valueObject;
+        Select(editor, valueObject);
         Dispatcher.UIThread.RunJobs();
 
         // New types must show editors, not Unsupported badges.
@@ -160,7 +168,7 @@ static class InspectorValueEditorChecks
         Check(probe.Target is null, "Transform Set Null must clear the member.");
 
         // Transform component itself shows Local editors.
-        sceneObjects.SelectedItem = moverObject;
+        Select(editor, moverObject);
         Dispatcher.UIThread.RunJobs();
         var moverX = Box(editor, $"{nameof(Transform)}.LocalPosition.X");
         moverX.Text = "9";
@@ -168,7 +176,7 @@ static class InspectorValueEditorChecks
         Check(mover.LocalPosition.X == 9f, "Transform component edit did not reach the scene.");
 
         // Enum ComboBox selection reaches the scene.
-        sceneObjects.SelectedItem = valueObject;
+        Select(editor, valueObject);
         Dispatcher.UIThread.RunJobs();
         var level = Combo(editor, $"{nameof(InspectorValueProbe)}.Level");
         level.SelectedItem = Difficulty.Hard;

@@ -63,11 +63,12 @@ static class EditorOwnershipChecks
         Check(OwnershipProbe.Created.Count == 3 && OwnershipProbe.Created[2].Disposes == 1
             && current.Disposes == 0, "Cancelled read must release its temporary copy and keep the current scene.");
 
-        var objects = editor.FindControl<ListBox>("SceneObjects")!;
+        var objects = editor.FindControl<TreeView>("SceneObjects")!;
         var target = EditScene(editor).Objects[0];
         var sibling = new PlayerStats();
         target.Attach(sibling);
-        objects.SelectedIndex = 0;
+        Call(editor, "SyncHierarchyForTest");
+        Call(editor, "SelectSceneObjectForTest", target);
         Call(editor, "RefreshComponents");
         Dispatcher.UIThread.RunJobs();
         var cards = editor.FindControl<StackPanel>("ComponentEditors")!;
@@ -91,7 +92,7 @@ static class EditorOwnershipChecks
         remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Dispatcher.UIThread.RunJobs();
         Check(target.Components.Count == 1 && ReferenceEquals(target.Components[0], sibling)
-            && ReferenceEquals(objects.SelectedItem, target), "Remove must preserve the object, selection, and sibling components.");
+            && ReferenceEquals(Call(editor, "GetSelectedSceneObject"), target), "Remove must preserve the object, selection, and sibling components.");
         Check(current.Disposes == 1 && current.Destroys == 0 && current.DisposedWithLiveServices,
             "Removing an editing component must dispose once without Destroy.");
         Check(EditStore(editor).IsDirty && cards.Children.Count == 1

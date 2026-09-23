@@ -45,7 +45,7 @@ public partial class MainWindow
         var diagnostics = EditSceneRenderer.Append(draw, _editScene.Current, _previewImages, viewportSize, view);
         _sceneDrawFailures.Clear();
         foreach (var diagnostic in diagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);
-        if (SceneObjects.SelectedItem is not SceneObject selected)
+        if (GetSelectedSceneObject() is not SceneObject selected)
             return;
         if (!TrySceneFrame(selected, viewportSize, out var corners, out var pivot, out var xAxis, out var yAxis, out var gizmoValid))
             return;

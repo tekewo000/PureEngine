@@ -13,11 +13,30 @@ public sealed class Scene
 
     public Scene() => Objects = new ReadOnlyObservableCollection<SceneObject>(_objects);
 
-    /// <summary>Live read-only view of objects, in insertion order. Bound directly by the Editor.</summary>
+    /// <summary>Live read-only view of objects, in insertion order.</summary>
     public ReadOnlyObservableCollection<SceneObject> Objects { get; }
 
     /// <summary>Root objects in sibling order. Children hold their own sibling order.</summary>
     public IReadOnlyList<SceneObject> RootObjects => [.. _objects.Where(item => item.Parent is null)];
+
+    /// <summary>Moves a root object within the root sibling order. Children keep their own order.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Index is outside the root order.</exception>
+    /// <exception cref="InvalidOperationException">Item is not a root object of this scene.</exception>
+    public void SetRootSiblingIndex(SceneObject item, int index)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        Runtime?.EnsureHierarchyMutationAllowed(item);
+        if (item.Parent is not null || !_objects.Contains(item))
+            throw new InvalidOperationException("Only root objects of this scene can be reordered by the Scene.");
+        var roots = RootObjects;
+        if (index < 0 || index >= roots.Count)
+            throw new ArgumentOutOfRangeException(nameof(index), "Root sibling index is out of range.");
+        if (IndexOfReference(roots, item) == index) return;
+        _objects.Remove(item);
+        var remaining = RootObjects;
+        if (index >= remaining.Count) _objects.Add(item);
+        else _objects.Insert(_objects.IndexOf(remaining[index]), item);
+    }
 
     /// <summary>Creates an empty object with a non-colliding default name ("Empty", "Empty (1)", ...).</summary>
     public SceneObject AddEmpty()
@@ -68,6 +87,13 @@ public sealed class Scene
         for (var i = 0; i < collected.Count; i++)
             collected.AddRange(collected[i].Children);
         return collected;
+    }
+
+    private static int IndexOfReference(IReadOnlyList<SceneObject> items, SceneObject item)
+    {
+        for (var i = 0; i < items.Count; i++)
+            if (ReferenceEquals(items[i], item)) return i;
+        return -1;
     }
 
     internal SceneObject RestoreObject(Guid id, string name)

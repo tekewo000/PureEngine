@@ -4,7 +4,7 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
-実装済み・自動検証済み・実画面確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。2026-09-23、下記のUI5項目（Component検索・追加から保存・Cloneまで）を実装し、自動検証を通過した。2026-09-23、V4前半のScene View編集操作（グリッド・パン／ズーム・選択・XY移動Gizmo・F表示）を実装・レビュー修正し、自動検証と実GPUチェックを通過した。実画面は表示を確認済み。一連の手動操作とCIは未確認として区別する。
+実装済み・自動検証済み・実画面確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。2026-09-23、下記のUI5項目（Component検索・追加から保存・Cloneまで）を実装し、自動検証を通過した。2026-09-23、V4前半のScene View編集操作（グリッド・パン／ズーム・選択・XY移動Gizmo・F表示）を実装・レビュー修正し、自動検証と実GPUチェックを通過した。実画面は表示を確認済み。2026-09-23、Stuffsの親子ツリー表示とドラッグ＆ドロップの子付け・並べ替えを実装し、自動検証を通過した。Stuffsの主要なドラッグ操作・折りたたみ・改名は実画面でも確認済み。青線とホバー待機の目視、実画面での保存往復、今回の差分のCIは未確認として区別する。
 
 ## 次に着手する作業
 
@@ -68,10 +68,10 @@
 | Project | manifest、複数シーン、起動シーン指定、相対パス、Projectフォルダの移動 | [ProjectFile](../src/PureEngine.Editor/Projects/ProjectFile.cs)、[ProjectDocument](../src/PureEngine.Core/Projects/ProjectDocument.cs) |
 | Project Explorer | フォルダツリーとファイル一覧、シーンを開く、作成・改名・削除・更新、名前指定で空のsealedクラスを作るCreate C#。組み込みComponents一覧は表示しない | [MainWindow.ProjectExplorer](../src/PureEngine.Editor/Windows/MainWindow.ProjectExplorer.cs) |
 | Editorの配置 | 左がScene View／Game、中央がStuffs、右がInspector、下部がProject／Console。ペインのサイズ変更 | [MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
-| シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除 | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs) |
+| シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除。Stuffsは親子のツリー表示、ドラッグ＆ドロップの子付け・前後並べ替え・ルート化、選択中への子追加 | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs)、[StuffsHierarchy](../src/PureEngine.Editor/Editing/StuffsHierarchy.cs)、[MainWindow.Hierarchy](../src/PureEngine.Editor/Windows/MainWindow.Hierarchy.cs) |
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
 | コンポーネントの取り外し | InspectorカードのRemove、編集用Detach、Priority除去、Disposeの単発実行。他カードの入力と選択を保持し、Play中の取り外しを拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
-| ドラッグ＆ドロップ | Projectの自作C#ファイルからStuffsの行、または選択中オブジェクトのInspectorへアタッチ | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs) |
+| ドラッグ＆ドロップ | Projectの自作C#ファイルからStuffsの行、または選択中オブジェクトのInspectorへアタッチ。Stuffs行同士の親子付け・並べ替えはツリー上で行う | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[MainWindow.Hierarchy](../src/PureEngine.Editor/Windows/MainWindow.Hierarchy.cs) |
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
@@ -95,7 +95,7 @@
 ## まだできないこと・制限
 
 - Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。Game表示・入力・Play描画接続、単体実行・配布は未実装。
-- 親子関係・兄弟順・Sprite参照の保存は実装済み。オブジェクト参照（ObjectRef）・フォント素材・Text／Button、ルートの並べ替えUIは未実装。
+- 親子関係・兄弟順・Sprite参照の保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・Text／Buttonは未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、独自クラス・サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
@@ -182,6 +182,18 @@ V1が成立する前にUI本実装へ進まない。最終目標は、カード�
 Steamなど設計書で保留している内容は、ここに載せたことをもって着手しない。描画はV2基盤に加え、Image／Sprite／UiLayoutの検証用Sceneまで接続済み。実Projectの編集・保存・Play接続は後続。
 
 ## 検証状況
+
+### Stuffsの親子ツリーとドラッグ＆ドロップ（2026-09-23）
+
+Stuffsをフラットな一覧から親子のツリー表示へ変え、行のドラッグ＆ドロップで子付け・前後並べ替え・ルート化ができるようにした。Coreの `Parent`／`Children`／`SetParent`／`SetSiblingIndex` はそのまま使い、ルート同士の並べ替えだけ `Scene.SetRootSiblingIndex` を追加した。Editor側に `HierarchyNode`＋`HierarchyDrop` を置き、D&D実行本体をUI非依存で検証できるようにした。Single選択・Undoなしは維持し、保存形式（version 2）の変更はなし。namespaceは変更していない。
+
+- ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェック通過。
+- Core追加（`ParentChecks`）：ルートの先頭・末尾・中間移動とno-op、範囲外・非ルート・未所属の拒否、子リンク不変を確認。`HierarchyDrop` の子付け・ルート化・兄弟前後、自分・子孫への拒否、同一親内移動の補正、`StuffsHierarchy.Build` のルート・子対応を確認。
+- Editor追加（`SceneViewEditorChecks.HierarchyTreeAndDrop`）：ルートだけの表示、子の入れ子、子選択時の祖先展開、ID基準の選択維持、ルート化・前後並べ替えのツリー反映、改名追従を確認。既存のEditorチェックはTreeView経路（`SelectSceneObjectForTest`／`GetSelectedSceneObject`／`SyncHierarchyForTest`）へ移し、全件通過。
+- レビュー修正：Component用ハンドラーによるMoveの上書き、展開状態のUIバインディング漏れ、展開済み親の高さによる位置誤判定、DragOverごとのホバー計時リセット、ノードの改名イベント購読蓄積を修正。青線はレイアウトを変えない見出し内の描画とし、選択イベントの重複登録も除去した。
+- 回帰検証（`SceneViewEditorChecks.HierarchyRoutedDrag`）：実際のRoutedEvent経路で子付け・前後移動・ペイン外周余白へのルート化・自己／子孫拒否・Play拒否を確認。ComponentのCopy／Attach、実際の行の双方向展開、継続DragOver中の500ms展開、離脱時のタイマー／表示解除、青線の方向と行高不変、破棄ノードのGC回収も確認。改名はモデル値だけでなく表示TextBlockを検査する。修正後の`./tools/code-quality.ps1 -Check`も終了コード0でPASS。
+- 実画面確認：Windowsの一時シーンを使い、Computer Useのマウスドラッグで親の中央への子付け、展開中の親の上端／下端への前後移動、余白へのルート化を確認。折りたたみとInspectorでの日本語改名の即時反映も確認。青線の描画プロパティ・500ms継続ホバーはHeadless検証で、ドラッグ途中の青線・待機時間の目視と実画面での保存往復は未確認。
+- CI：今回の未コミット差分に対しては未実行。ローカルでGitHub Actionsと同じ`-Check`を通過したことと区別する。
 
 ### V4前半のScene View編集操作（2026-09-23）
 

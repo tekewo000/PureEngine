@@ -24,8 +24,10 @@ static class ParentChecks
         DirectCycleIsRejected();
         IndirectCycleIsRejected();
         NonAncestorIsAllowed();
+        RootReorder();
+        DropReorder();
         FailedAttachLeavesTreeUnchanged();
-        Console.WriteLine("PASS: parent attach/detach, reparent, no-op, self/direct/indirect cycle rejection, and tree integrity.");
+        Console.WriteLine("PASS: parent attach/detach, reparent, no-op, self/direct/indirect cycle rejection, root reorder, drop reorder, and tree integrity.");
     }
 
     private static void InitialState()
@@ -146,6 +148,80 @@ static class ParentChecks
             "Nesting one sibling under another must be allowed.");
         Check(ReferenceEquals(left.Parent, root) && root.Children.Count == 1,
             "Sibling nesting must keep the root link.");
+    }
+
+    private static void RootReorder()
+    {
+        var scene = new Scene();
+        var first = scene.AddEmpty();
+        var second = scene.AddEmpty();
+        var third = scene.AddEmpty();
+        var child = scene.AddEmpty();
+        child.SetParent(second);
+
+        scene.SetRootSiblingIndex(third, 0);
+        Check(scene.RootObjects.SequenceEqual([third, first, second]), "Moving a root to the front must reorder roots.");
+        Check(second.Children.SequenceEqual([child]), "Root reorder must not disturb child links.");
+        Check(scene.Objects.Contains(child), "Root reorder must keep children in the scene.");
+
+        scene.SetRootSiblingIndex(third, 2);
+        Check(scene.RootObjects.SequenceEqual([first, second, third]), "Moving a root to the back must reorder roots.");
+
+        scene.SetRootSiblingIndex(first, 1);
+        Check(scene.RootObjects.SequenceEqual([second, first, third]), "Moving a root into the middle must reorder roots.");
+
+        scene.SetRootSiblingIndex(second, 0);
+        Check(scene.RootObjects.SequenceEqual([second, first, third]), "Reordering to the current index must be a no-op.");
+
+        Reject<ArgumentOutOfRangeException>(() => scene.SetRootSiblingIndex(first, -1));
+        Reject<ArgumentOutOfRangeException>(() => scene.SetRootSiblingIndex(first, 3));
+        Reject<InvalidOperationException>(() => scene.SetRootSiblingIndex(child, 0));
+        Reject<InvalidOperationException>(() => scene.SetRootSiblingIndex(new SceneObject("Standalone"), 0));
+        Reject<InvalidOperationException>(() => new Scene().AddEmpty().SetParent(first));
+        Check(scene.RootObjects.SequenceEqual([second, first, third]), "Rejected root reorder must leave the order unchanged.");
+        Check(ReferenceEquals(child.Parent, second) && second.Children.Count == 1,
+            "Rejected root reorder must leave child links unchanged.");
+    }
+
+    private static void DropReorder()
+    {
+        var scene = new Scene();
+        var first = scene.AddEmpty();
+        var second = scene.AddEmpty();
+        var third = scene.AddEmpty();
+
+        PureEngine.Editor.HierarchyDrop.Execute(scene, third.Id, first.Id, PureEngine.Editor.HierarchyDropPosition.Before);
+        Check(scene.RootObjects.SequenceEqual([third, first, second]), "Before-drop must move the root before the target.");
+
+        PureEngine.Editor.HierarchyDrop.Execute(scene, third.Id, second.Id, PureEngine.Editor.HierarchyDropPosition.After);
+        Check(scene.RootObjects.SequenceEqual([first, second, third]), "After-drop must move the root after the target.");
+
+        PureEngine.Editor.HierarchyDrop.Execute(scene, third.Id, second.Id, PureEngine.Editor.HierarchyDropPosition.AsChild);
+        Check(ReferenceEquals(third.Parent, second) && second.Children.SequenceEqual([third]),
+            "AsChild-drop must parent the dragged object.");
+
+        var fourth = scene.AddEmpty();
+        PureEngine.Editor.HierarchyDrop.Execute(scene, fourth.Id, third.Id, PureEngine.Editor.HierarchyDropPosition.Before);
+        Check(third.Parent!.Children.SequenceEqual([fourth, third]), "Before-drop among children must insert in order.");
+        Check(PureEngine.Editor.HierarchyDrop.CanDrop(scene, third.Id, fourth.Id), "Sibling drop must be allowed.");
+        Check(!PureEngine.Editor.HierarchyDrop.CanDrop(scene, third.Id, third.Id), "Self drop must be rejected.");
+        Check(!PureEngine.Editor.HierarchyDrop.CanDrop(scene, second.Id, third.Id), "Ancestor into descendant must be rejected.");
+        Check(PureEngine.Editor.HierarchyDrop.CanDrop(scene, third.Id, null), "Empty-area drop must be allowed.");
+
+        PureEngine.Editor.HierarchyDrop.Execute(scene, third.Id, null, PureEngine.Editor.HierarchyDropPosition.AsChild);
+        Check(third.Parent is null && scene.RootObjects.Contains(third), "Empty-area drop must return the object to roots.");
+
+        Reject<InvalidOperationException>(() =>
+            PureEngine.Editor.HierarchyDrop.Execute(scene, second.Id, fourth.Id, PureEngine.Editor.HierarchyDropPosition.AsChild));
+        Reject<InvalidOperationException>(() =>
+            PureEngine.Editor.HierarchyDrop.Execute(scene, first.Id, first.Id, PureEngine.Editor.HierarchyDropPosition.AsChild));
+        Check(ReferenceEquals(fourth.Parent, second) && first.Parent is null && third.Parent is null,
+            "Rejected drops must leave the tree unchanged.");
+
+        Check(PureEngine.Editor.StuffsHierarchy.Build(scene).Count == scene.RootObjects.Count,
+            "Hierarchy build must expose one node per root.");
+        var roots = PureEngine.Editor.StuffsHierarchy.Build(scene);
+        Check(roots.Single(node => node.Ref == second).Children.Count == 1, "Hierarchy build must expose children.");
     }
 
     private static void FailedAttachLeavesTreeUnchanged()

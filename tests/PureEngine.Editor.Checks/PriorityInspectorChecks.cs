@@ -40,7 +40,12 @@ static class PriorityInspectorChecks
 
     public static void Run(MainWindow editor)
     {
-        var sceneObjects = Control<ListBox>(editor, "SceneObjects");
+        var sceneObjects = Control<TreeView>(editor, "SceneObjects");
+        _ = sceneObjects;
+        static void Select(MainWindow window, SceneObject item) =>
+            typeof(MainWindow).GetMethod("SelectSceneObjectForTest",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!
+                .Invoke(window, [item]);
         Check(sceneObjects.Items.Count == 0, "Inspector checks require an empty scene.");
 
         // Attach a full-lifecycle component and a data-only component to separate objects.
@@ -59,11 +64,14 @@ static class PriorityInspectorChecks
         dataObject.Rename("Data");
         var data = new InspectorDataOnly();
         dataObject.Attach(data);
+        typeof(MainWindow).GetMethod("SyncHierarchyForTest",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!
+            .Invoke(editor, []);
 
         Dispatcher.UIThread.RunJobs();
 
         // Full shows three compact fields beside the component name, in lifecycle order.
-        sceneObjects.SelectedItem = fullObject;
+        Select(editor, fullObject);
         Dispatcher.UIThread.RunJobs();
         var fullBoxes = PriorityBoxes(editor, nameof(InspectorFullProbe));
         Check(fullBoxes.Count == 3, $"Full must show 3 priorities, got {fullBoxes.Count}.");
@@ -103,7 +111,7 @@ static class PriorityInspectorChecks
             "Compact priority fields must share the component title header and dock right.");
 
         // Partial shows only Start.
-        sceneObjects.SelectedItem = partialObject;
+        Select(editor, partialObject);
         Dispatcher.UIThread.RunJobs();
         var partialBoxes = PriorityBoxes(editor, nameof(InspectorStartOnlyProbe));
         Check(partialBoxes.Count == 1, $"Start-only must show 1 priority, got {partialBoxes.Count}.");
@@ -111,12 +119,12 @@ static class PriorityInspectorChecks
             "Initial priority must be 0.");
 
         // Data-only shows none.
-        sceneObjects.SelectedItem = dataObject;
+        Select(editor, dataObject);
         Dispatcher.UIThread.RunJobs();
         Check(PriorityBoxes(editor, nameof(InspectorDataOnly)).Count == 0, "Data-only must show no priorities.");
 
         // Edit a valid value including negatives; unsaved state appears.
-        sceneObjects.SelectedItem = fullObject;
+        Select(editor, fullObject);
         Dispatcher.UIThread.RunJobs();
         var startBox = FindPriorityBox(editor, $"{nameof(InspectorFullProbe)}.StartPriority");
         startBox.Text = "-12";
@@ -165,7 +173,7 @@ static class PriorityInspectorChecks
             && fullObject.GetStartPriority(full) == -12, "Priorities must stay independent.");
 
         // Collapse hides member editors but keeps the header; state survives reselection.
-        sceneObjects.SelectedItem = dataObject;
+        Select(editor, dataObject);
         Dispatcher.UIThread.RunJobs();
         static TextBox MemberBox(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<TextBox>()
             .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
@@ -180,9 +188,9 @@ static class PriorityInspectorChecks
         Check(((dataCollapse.Background as Avalonia.Media.SolidColorBrush)?.Color.ToString())
             == Avalonia.Media.Color.Parse("#2E2A4A").ToString(), "Collapsed toggle must show its wash fill.");
         Check(!MemberBox(editor, $"{nameof(InspectorDataOnly)}.Value").IsEffectivelyVisible, "Collapsed card must hide member editors.");
-        sceneObjects.SelectedItem = fullObject;
+        Select(editor, fullObject);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = dataObject;
+        Select(editor, dataObject);
         Dispatcher.UIThread.RunJobs();
         Check(!MemberBox(editor, $"{nameof(InspectorDataOnly)}.Value").IsEffectivelyVisible, "Collapse state must survive reselection.");
         Click(CollapseToggle(editor, $"{nameof(InspectorDataOnly)}.Collapse"));

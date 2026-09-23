@@ -84,8 +84,7 @@ public partial class MainWindow : Window
         Closing += OnEditorClosing;
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);
         UpdateSceneTitle();
-        SceneObjects.ItemsSource = _editScene.Current.Objects;
-        SceneObjects.SelectionChanged += OnObjectSelected;
+        InitHierarchy();
         ObjectName.TextChanged += OnObjectNameChanged;
         RefreshProjectExplorer();
         SceneSurface.AddHandler(PointerPressedEvent, OnScenePointerPressed, RoutingStrategies.Tunnel);
@@ -158,12 +157,12 @@ public partial class MainWindow : Window
 
     private SceneObject? DropTarget(object? sender, DragEventArgs e) =>
         ReferenceEquals(sender, InspectorPane)
-            ? SceneObjects.SelectedItem as SceneObject
-            : (e.Source as Visual)?.GetSelfAndVisualAncestors()
-                .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as SceneObject;
+            ? GetSelectedSceneObject()
+            : FindHierarchyNode(e.Source as Visual)?.Ref;
 
     private void OnComponentDragOver(object? sender, DragEventArgs e)
     {
+        if (!e.DataTransfer.Contains(ComponentTypesFormat) && !e.DataTransfer.Contains(ComponentFormat)) return;
         if (IsPlaying)
         {
             e.DragEffects = DragDropEffects.None;
@@ -190,13 +189,14 @@ public partial class MainWindow : Window
 
     private void OnComponentDrop(object? sender, DragEventArgs e)
     {
+        if (!e.DataTransfer.Contains(ComponentTypesFormat) && !e.DataTransfer.Contains(ComponentFormat)) return;
         e.Handled = true;
         e.DragEffects = DragDropEffects.None;
         if (RejectWhenPlaying("Attach")) return;
         var target = DropTarget(sender, e);
         var types = GetDragTypes(e).Where(t => _components.CanAttach(target, t)).ToArray();
         if (types.Length == 0) return;
-        SceneObjects.SelectedItem = target;
+        SelectSceneObject(target, focus: false);
         var attached = 0;
         string? firstError = null;
         Type? errorType = null;
@@ -233,7 +233,7 @@ public partial class MainWindow : Window
     {
         ComponentEditors.Children.Clear();
         _invalidFields.Clear();
-        var item = SceneObjects.SelectedItem as SceneObject;
+        var item = GetSelectedSceneObject();
         var components = item?.Components.ToArray() ?? [];
         AttachedClasses.IsVisible = item is not null;
         NoComponentsHint.IsVisible = item is not null && components.Length == 0;
@@ -755,33 +755,33 @@ public partial class MainWindow : Window
     private void OnScenePointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(SceneSurface).Properties.IsRightButtonPressed) return;
-        var row = (e.Source as Avalonia.Visual)?.GetSelfAndVisualAncestors()
-            .OfType<ListBoxItem>().FirstOrDefault();
-        SceneObjects.SelectedItem = row?.DataContext as SceneObject;
-        SceneObjects.Focus();
+        SelectSceneObject(FindHierarchyNode(e.Source as Avalonia.Visual)?.Ref, focus: true);
     }
 
     private void OnAddObject(object? sender, RoutedEventArgs e)
     {
         if (RejectWhenPlaying("Add")) return;
+        var parent = GetSelectedSceneObject();
         var item = _editScene.Current.AddEmpty();
+        if (parent is not null) item.SetParent(parent);
         MarkSceneChanged();
-        SceneObjects.SelectedItem = item;
-        SceneObjects.ScrollIntoView(item);
+        RefreshHierarchy(item.Id, expandId: parent?.Id);
+        RefreshObjectInspector();
         SceneObjects.Focus();
     }
 
     private void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
     {
+        if (_hierarchyRefreshing) return;
         if (_sceneMoveKind is not PureEngine.Core.SceneViewMath.GizmoKind.None
-            && !ReferenceEquals(SceneObjects.SelectedItem, _dragTarget))
+            && !ReferenceEquals(GetSelectedSceneObject(), _dragTarget))
             CancelSceneViewDrag();
         RefreshObjectInspector();
     }
 
     private void RefreshObjectInspector()
     {
-        var item = SceneObjects.SelectedItem as SceneObject;
+        var item = GetSelectedSceneObject();
         DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying;
         ObjectInspector.IsVisible = item is not null;
         ObjectName.Text = item?.Name ?? "";
@@ -795,7 +795,7 @@ public partial class MainWindow : Window
     private void OnObjectNameChanged(object? sender, TextChangedEventArgs e)
     {
         if (IsPlaying) return;
-        if (SceneObjects.SelectedItem is not SceneObject item) return;
+        if (GetSelectedSceneObject() is not SceneObject item) return;
         NameError.IsVisible = string.IsNullOrWhiteSpace(ObjectName.Text);
         if (!NameError.IsVisible && item.Name != ObjectName.Text!.Trim())
         {
@@ -817,9 +817,13 @@ public partial class MainWindow : Window
     private void DeleteSelectedObject()
     {
         if (RejectWhenPlaying("Delete")) return;
-        if (SceneObjects.SelectedItem is not SceneObject item) return;
+        if (GetSelectedSceneObject() is not SceneObject item) return;
         CancelSceneViewDrag();
-        var index = SceneObjects.SelectedIndex;
+        var siblings = item.Parent is null ? _editScene.Current.RootObjects : item.Parent.Children;
+        var siblingIndex = IndexOfSceneObject(siblings, item);
+        var next = siblingIndex >= 0 && siblingIndex + 1 < siblings.Count ? siblings[siblingIndex + 1]
+            : siblingIndex > 0 ? siblings[siblingIndex - 1]
+            : item.Parent;
         List<object> doomed = [.. item.Components];
         var stack = new Stack<SceneObject>(item.Children);
         while (stack.Count > 0)
@@ -831,10 +835,18 @@ public partial class MainWindow : Window
         }
         _editScene.Current.Remove(item);
         MarkSceneChanged();
-        SceneObjects.SelectedIndex = Math.Min(index, _editScene.Current.Objects.Count - 1);
+        RefreshHierarchy(next?.Id);
+        RefreshObjectInspector();
         SceneObjects.Focus();
         try { ComponentAssets.DisposeComponents(doomed); }
         catch (Exception error) { SetFileStatus(error.ToString(), true); }
+    }
+
+    private static int IndexOfSceneObject(IReadOnlyList<SceneObject> items, SceneObject item)
+    {
+        for (var i = 0; i < items.Count; i++)
+            if (ReferenceEquals(items[i], item)) return i;
+        return -1;
     }
 
     private void OnPanePointerPressed(object? sender, PointerPressedEventArgs e)

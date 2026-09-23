@@ -27,7 +27,12 @@ internal static class UiImageEditorChecks
         static ComboBox SpriteCombo(MainWindow window) => window.GetVisualDescendants().OfType<ComboBox>()
             .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, "Image.Sprite"));
 
-        var sceneObjects = Control<ListBox>(editor, "SceneObjects");
+        var sceneObjects = Control<TreeView>(editor, "SceneObjects");
+        _ = sceneObjects;
+        static void Select(MainWindow window, PureEngine.Core.SceneObject? item) =>
+            typeof(MainWindow).GetMethod("SelectSceneObjectForTest",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!
+                .Invoke(window, [item]);
         var editStore = (EditSceneStore)typeof(MainWindow).GetField("_editScene",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
         var scene = editStore.Current;
@@ -39,7 +44,8 @@ internal static class UiImageEditorChecks
 
         var item = scene.AddEmpty();
         item.Rename("Ui card");
-        sceneObjects.SelectedItem = item;
+        Call(editor, "SyncHierarchyForTest");
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         Check(addButton.IsEffectivelyVisible, "An empty object must expose Add Component through all parent panels.");
 
@@ -77,9 +83,9 @@ internal static class UiImageEditorChecks
         Dispatcher.UIThread.RunJobs();
         Check(item.Components.Count == 0 && addButton.IsEffectivelyVisible, "Removing the last component must keep Add Component visible.");
         AddThroughDialog("core.image");
-        sceneObjects.SelectedItem = null;
+        Select(editor, null);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         var requirements = Warning(editor, "Image");
         Check(requirements.IsVisible && requirements.Text!.Contains("Transform"),
@@ -87,34 +93,34 @@ internal static class UiImageEditorChecks
         Check(editor.Title!.StartsWith("* "), "Component add must mark the scene dirty.");
 
         AddThroughDialog("core.transform");
-        sceneObjects.SelectedItem = null;
+        Select(editor, null);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         requirements = Warning(editor, "Image");
         Check(requirements.IsVisible && requirements.Text!.Contains("UiElement"),
             "Image with only Transform must still warn about UiElement.");
 
         AddThroughDialog("core.ui-element");
-        sceneObjects.SelectedItem = null;
+        Select(editor, null);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         requirements = Warning(editor, "Image");
         Check(!requirements.IsVisible, "Complete Image combination must clear the diagnostic.");
 
         var element = item.GetComponent<UiElement>()!;
         Check(item.Detach(element), "UiElement detach failed.");
-        sceneObjects.SelectedItem = null;
+        Select(editor, null);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         requirements = Warning(editor, "Image");
         Check(requirements.IsVisible, "Removing UiElement must restore the diagnostic.");
         Check(components.TryAttach(item, typeof(UiElement), editStore.Services.Factory), "UiElement re-add failed.");
-        sceneObjects.SelectedItem = null;
+        Select(editor, null);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         Check(!Warning(editor, "Image").IsVisible, "Re-adding UiElement must clear the diagnostic again.");
 
@@ -135,9 +141,9 @@ internal static class UiImageEditorChecks
             }
             var imported = ProjectAssets.ImportImage(project.RootDirectory, tempSource);
             Call(editor, "RefreshProjectAssets");
-            sceneObjects.SelectedItem = null;
+            Select(editor, null);
             Dispatcher.UIThread.RunJobs();
-            sceneObjects.SelectedItem = item;
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             combo = SpriteCombo(editor);
             Check(combo.Items.Cast<object>().Any(option => option.ToString()!.Contains(imported.RelativePath)),
@@ -157,9 +163,9 @@ internal static class UiImageEditorChecks
         }
 
         image.Sprite = new Sprite(Guid.NewGuid());
-        sceneObjects.SelectedItem = null;
+        Select(editor, null);
         Dispatcher.UIThread.RunJobs();
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         requirements = Warning(editor, "Image");
         Check(requirements.IsVisible && requirements.Text!.Contains("Missing"),
@@ -168,7 +174,7 @@ internal static class UiImageEditorChecks
 
         foreach (var other in scene.Objects.Where(candidate => !ReferenceEquals(candidate, item)).ToList())
             scene.Remove(other);
-        sceneObjects.SelectedItem = item;
+        Select(editor, item);
         Dispatcher.UIThread.RunJobs();
         Call(editor, "StartPlay");
         Dispatcher.UIThread.RunJobs();

@@ -18,8 +18,11 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - Project Explorerの自作C#ファイルをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
 - Inspectorの「Add Component」で選択中オブジェクトへEngineのComponentを検索して追加できる。候補は当該Projectの登録型（`Transform`・`UiElement`・`Image`・自作型）から探し、既存のアタッチ処理・factoryを使う。重複追加は付けない。Play中は追加できない。
 - Inspectorのコンポーネントカードを右クリックして「Remove」で取り外す。削除は未保存の変更になり、保存後のシーンからも除かれる。Play中は取り外せない。親の削除はその時点の子孫ごと削除する。
-- Stuffsの右クリックメニュー「Add Empty」でオブジェクトを追加し、Inspectorの「Name」で名前を編集する。
-- オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。
+- Stuffsは親子をツリー表示する。子は親の下にインデントして並び、折りたたみ・展開ができる。名前の変更はツリーへ即時反映する。
+- Stuffsの行をドラッグ＆ドロップして親子付けと並べ替えができる。見出し行の中央50%へ落とすとその子に、上端／下端の25%へ落とすと青線の示す前後に移動する。展開済みの親も見出し行を基準に判定し、青線で行の高さは変わらない。折りたたまれた親の中央に500ms留まると自動展開する。空の余白へ落とすとルートに戻る。自分自身・自分の子孫へのドロップとPlay中の付け替えは受け付けない。
+- Stuffsの右クリックメニュー「Add Empty」は選択中があればその子として追加し、なければルートに追加する。追加後は親を展開して追加分を選択する。
+- Inspectorの「Name」で名前を編集する。ツリー表示へ即時反映し、未保存になる。
+- オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。削除後は兄弟内の次の対象へ選択を移す。
 - Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
 - `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える。`Sprite`がNoneのときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。

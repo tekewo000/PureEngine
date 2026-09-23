@@ -17,6 +17,12 @@ static class ProjectServiceRegistrationChecks
     private static T Field<T>(MainWindow window, string name) =>
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
+    private static TreeView SceneObjects(MainWindow editor) => editor.FindControl<TreeView>("SceneObjects")!;
+    private static void Select(MainWindow editor, SceneObject? item) =>
+        Call(editor, "SelectSceneObjectForTest", [item]);
+    private static SceneObject? Selected(MainWindow editor) =>
+        (SceneObject?)Call(editor, "GetSelectedSceneObject", []);
+
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -257,7 +263,9 @@ static class ProjectServiceRegistrationChecks
             board.Score = 55;
             item.SetStartPriority(board, -4);
             var objectId = item.Id;
-            editor.FindControl<ListBox>("SceneObjects")!.SelectedItem = item;
+            _ = SceneObjects(editor);
+            Call(editor, "SyncHierarchyForTest");
+            Select(editor, item);
             Call(editor, "MarkSceneChanged");
             Dispatcher.UIThread.RunJobs();
             var oldBoard = (object)board;
@@ -275,7 +283,7 @@ static class ProjectServiceRegistrationChecks
             Check((int)renewed.Score == 55, "Reload must preserve unsaved Inspector values.");
             Check(current.GetStartPriority((object)renewed) == -4, "Reload must preserve Priority.");
             Check(editor.Title!.StartsWith("* "), "Reload must preserve dirty state.");
-            Check(ReferenceEquals(editor.FindControl<ListBox>("SceneObjects")!.SelectedItem, current),
+            Check(ReferenceEquals(Selected(editor), current),
                 "Reload must preserve selection.");
             Check(renewed.Bonus is not null && !ReferenceEquals((object)renewed.Log, oldLogObject),
                 "Reload must resolve new services from the new registration.");

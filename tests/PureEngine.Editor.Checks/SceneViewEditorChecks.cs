@@ -4,7 +4,9 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
@@ -30,6 +32,9 @@ internal static class SceneViewEditorChecks
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;
 
+    private static void Select(MainWindow window, SceneObject? item) =>
+        Call(window, "SelectSceneObjectForTest", item);
+
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -46,7 +51,9 @@ internal static class SceneViewEditorChecks
         DeleteDrops();
         InputSeparation();
         SaveClonePreserveZ();
-        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, inspector sync, scene replacement, play guard, delete safety, input separation, and save/clone.");
+        HierarchyTreeAndDrop();
+        HierarchyRoutedDrag();
+        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, and save/clone.");
     }
 
     private static MainWindow CreateEditor()
@@ -70,10 +77,10 @@ internal static class SceneViewEditorChecks
         try
         {
             var viewport = Control<Grid>(editor, "SceneViewport");
-            var item = AddCard(EditScene(editor), new(80, 70, 7));
+            var item = AddCard(editor, EditScene(editor), new(80, 70, 7));
             var transform = item.GetComponent<Transform>()!;
             var element = item.GetComponent<UiElement>()!;
-            Control<ListBox>(editor, "SceneObjects").SelectedItem = item;
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             var store = EditStore(editor);
             store.MarkClean();
@@ -151,9 +158,10 @@ internal static class SceneViewEditorChecks
             Up();
             element.AnchorMin = element.AnchorMax = Vector2.Zero;
 
-            var parent = AddCard(EditScene(editor), Vector3.Zero);
+            var parent = AddCard(editor, EditScene(editor), Vector3.Zero);
             parent.GetComponent<UiElement>()!.SizeDelta = new(300, 180);
             item.SetParent(parent);
+            Call(editor, "SyncHierarchyForTest");
             Down(); Move(90, 80);
             parent.GetComponent<Transform>()!.LocalScale = new(2, 2, 1);
             Move(95, 85);
@@ -162,6 +170,7 @@ internal static class SceneViewEditorChecks
             Up();
             parent.GetComponent<Transform>()!.LocalScale = Vector3.One;
             item.SetParent(null);
+            Call(editor, "SyncHierarchyForTest");
 
             Down(); Move(90, 80);
             store.MarkSaved(savePath);
@@ -202,6 +211,16 @@ internal static class SceneViewEditorChecks
         _ = Log.Drain();
     }
 
+    private static SceneObject AddCard(MainWindow editor, Scene scene, Vector3 position)
+    {
+        var item = scene.AddEmpty();
+        item.Rename("Card");
+        item.Attach(new Transform { LocalPosition = position });
+        item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = new Vector2(100, 40) });
+        Call(editor, "SyncHierarchyForTest");
+        return item;
+    }
+
     private static SceneObject AddCard(Scene scene, Vector3 position)
     {
         var item = scene.AddEmpty();
@@ -240,10 +259,8 @@ internal static class SceneViewEditorChecks
         try
         {
             var scene = EditScene(editor);
-            var sceneObjects = Control<ListBox>(editor, "SceneObjects");
-            var start = new Vector3(10, 20, 5);
-            var item = AddCard(scene, start);
-            sceneObjects.SelectedItem = item;
+            var item = AddCard(editor, scene, new Vector3(10, 20, 5));
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             EditStore(editor).MarkClean();
             var press = new Vector2(200, 100);
@@ -288,9 +305,8 @@ internal static class SceneViewEditorChecks
         try
         {
             var scene = EditScene(editor);
-            var sceneObjects = Control<ListBox>(editor, "SceneObjects");
-            var item = AddCard(scene, new Vector3(4, 6, 2));
-            sceneObjects.SelectedItem = item;
+            var item = AddCard(editor, scene, new Vector3(4, 6, 2));
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             EditStore(editor).MarkClean();
             var transform = item.GetComponent<Transform>()!;
@@ -320,9 +336,8 @@ internal static class SceneViewEditorChecks
         try
         {
             var scene = EditScene(editor);
-            var sceneObjects = Control<ListBox>(editor, "SceneObjects");
-            var item = AddCard(scene, new Vector3(10, 20, 5));
-            sceneObjects.SelectedItem = item;
+            var item = AddCard(editor, scene, new Vector3(10, 20, 5));
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             EditStore(editor).MarkClean();
             var press = new Vector2(200, 100);
@@ -350,9 +365,8 @@ internal static class SceneViewEditorChecks
         try
         {
             var scene = EditScene(editor);
-            var sceneObjects = Control<ListBox>(editor, "SceneObjects");
-            var item = AddCard(scene, new Vector3(10, 20, 5));
-            sceneObjects.SelectedItem = item;
+            var item = AddCard(editor, scene, new Vector3(10, 20, 5));
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             EditStore(editor).MarkClean();
             var press = new Vector2(200, 100);
@@ -381,7 +395,7 @@ internal static class SceneViewEditorChecks
         try
         {
             var scene = EditScene(editor);
-            var item = AddCard(scene, new Vector3(10, 20, 5));
+            var item = AddCard(editor, scene, new Vector3(10, 20, 5));
             EditStore(editor).MarkClean();
             var press = new Vector2(200, 100);
             Check((bool)Call(editor, "TryBeginMoveForTest", item, SceneViewMath.GizmoKind.XY, press)!, "Delete move must begin.");
@@ -404,9 +418,8 @@ internal static class SceneViewEditorChecks
         try
         {
             var scene = EditScene(editor);
-            var sceneObjects = Control<ListBox>(editor, "SceneObjects");
-            var item = AddCard(scene, new Vector3(10, 20, 0));
-            sceneObjects.SelectedItem = item;
+            var item = AddCard(editor, scene, new Vector3(10, 20, 0));
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             var viewport = Control<Grid>(editor, "SceneViewport");
             viewport.Focus();
@@ -427,7 +440,7 @@ internal static class SceneViewEditorChecks
             Dispatcher.UIThread.RunJobs();
             var fitted = Field<Vector2>(editor, "_scenePan") != panBefore || Field<float>(editor, "_sceneZoom") != zoomBefore;
             Check(fitted, "F with Scene View focus must fit the selection.");
-            sceneObjects.SelectedItem = null;
+            Select(editor, null);
             Dispatcher.UIThread.RunJobs();
             var panAfterFit = Field<Vector2>(editor, "_scenePan");
             var zoomAfterFit = Field<float>(editor, "_sceneZoom");
@@ -442,6 +455,191 @@ internal static class SceneViewEditorChecks
         {
             CloseEditor(editor);
         }
+    }
+
+    private static void HierarchyTreeAndDrop()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            var scene = EditScene(editor);
+            var parent = scene.AddEmpty();
+            parent.Rename("Parent");
+            var child = scene.AddEmpty();
+            child.Rename("Child");
+            child.SetParent(parent);
+            var sibling = scene.AddEmpty();
+            sibling.Rename("Sibling");
+            Call(editor, "SyncHierarchyForTest");
+            Dispatcher.UIThread.RunJobs();
+            var tree = Control<TreeView>(editor, "SceneObjects");
+            var roots = tree.Items.OfType<HierarchyNode>().ToList();
+            Check(roots.Count == 2, $"Tree must show roots only, got {roots.Count}.");
+            var parentNode = roots.Single(node => ReferenceEquals(node.Ref, parent));
+            Check(parentNode.Children.Count == 1 && ReferenceEquals(parentNode.Children[0].Ref, child),
+                "Tree must nest children under their parent.");
+            Select(editor, child);
+            Dispatcher.UIThread.RunJobs();
+            Check(ReferenceEquals(Call(editor, "GetSelectedSceneObject"), child), "Tree selection must resolve the SceneObject.");
+            Check(parentNode.IsExpanded, "Selecting a child must expand its ancestors.");
+            var parentRow = tree.GetVisualDescendants().OfType<TreeViewItem>().Single(row => row.DataContext == parentNode);
+            Check(parentRow.IsExpanded && parentRow.GetVisualDescendants().OfType<TreeViewItem>().Any(row => row.IsVisible),
+                "Selecting a child must expand its actual row and show the child.");
+            Select(editor, parent);
+            parentRow.SetCurrentValue(TreeViewItem.IsExpandedProperty, false);
+            Check(!parentNode.IsExpanded, "Collapsing the actual row must update the node.");
+            parentRow.SetCurrentValue(TreeViewItem.IsExpandedProperty, true);
+            Call(editor, "RefreshHierarchy", child.Id, null);
+            Dispatcher.UIThread.RunJobs();
+            Check(ReferenceEquals(Call(editor, "GetSelectedSceneObject"), child), "Refresh must preserve selection by id.");
+
+            HierarchyDrop.Execute(scene, child.Id, null, HierarchyDropPosition.AsChild);
+            Call(editor, "SyncHierarchyForTest");
+            Dispatcher.UIThread.RunJobs();
+            roots = [.. tree.Items.OfType<HierarchyNode>()];
+            Check(roots.Count == 3, "Unparented child must return to roots.");
+
+            var first = roots[0].Ref;
+            HierarchyDrop.Execute(scene, sibling.Id, first.Id, HierarchyDropPosition.Before);
+            Call(editor, "SyncHierarchyForTest");
+            Dispatcher.UIThread.RunJobs();
+            roots = [.. tree.Items.OfType<HierarchyNode>()];
+            Check(ReferenceEquals(roots[0].Ref, sibling), "Before-drop must reorder roots in the tree.");
+
+            child.Rename("Renamed");
+            Dispatcher.UIThread.RunJobs();
+            var renamed = tree.Items.OfType<HierarchyNode>().SelectMany(Enumerate).Single(node => ReferenceEquals(node.Ref, child));
+            Check(tree.GetVisualDescendants().OfType<TextBlock>().Any(text => text.DataContext == renamed && text.Text == "Renamed"),
+                "Visible tree labels must follow renames.");
+        }
+        finally
+        {
+            CloseEditor(editor);
+        }
+
+        static IEnumerable<HierarchyNode> Enumerate(HierarchyNode node)
+        {
+            yield return node;
+            foreach (var nested in node.Children.SelectMany(Enumerate))
+                yield return nested;
+        }
+    }
+
+    private static void HierarchyRoutedDrag()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            var scene = EditScene(editor);
+            var parent = scene.AddEmpty();
+            var child = scene.AddEmpty();
+            child.SetParent(parent);
+            var dragged = scene.AddEmpty();
+            Call(editor, "SyncHierarchyForTest");
+            Select(editor, child);
+            Dispatcher.UIThread.RunJobs();
+            var tree = Control<TreeView>(editor, "SceneObjects");
+            var surface = Control<Grid>(editor, "SceneSurface");
+            TreeViewItem row(SceneObject item) => tree.GetVisualDescendants().OfType<TreeViewItem>()
+                .Single(control => control.DataContext is HierarchyNode node && node.Ref == item);
+            static Border header(TreeViewItem item) => item.GetTemplateDescendants().OfType<Border>()
+                .Single(control => control.Name == "PART_LayoutRoot");
+            static DragEventArgs drag(Interactive target, Point point, RoutedEvent<DragEventArgs> routedEvent, IDataTransfer data)
+            {
+                var e = new DragEventArgs(routedEvent, data, target, point, KeyModifiers.None);
+                target.RaiseEvent(e);
+                Dispatcher.UIThread.RunJobs();
+                return e;
+            }
+            DragEventArgs dropOn(SceneObject target, double fraction, RoutedEvent<DragEventArgs> routedEvent, IDataTransfer data)
+            {
+                var targetHeader = header(row(target));
+                return drag(targetHeader, new Point(targetHeader.Bounds.Width / 2, targetHeader.Bounds.Height * fraction), routedEvent, data);
+            }
+            using var data = new DataTransfer();
+            var format = (DataFormat<string>)typeof(MainWindow).GetField("SceneObjectIdFormat", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+            data.Add(DataTransferItem.Create(format, dragged.Id.ToString("D")));
+            var parentRow = row(parent);
+            var parentHeader = header(parentRow);
+            var height = parentHeader.Bounds.Height;
+            Check(parentRow.Bounds.Height > height, "Drop geometry check must include expanded descendants.");
+            Check(dropOn(parent, 0.5, DragDrop.DragEnterEvent, data).DragEffects == DragDropEffects.Move
+                && parentRow.Classes.Contains("drop-as-child"), "Routed enter on an expanded header center must allow child drop.");
+            Check(dropOn(parent, 0.1, DragDrop.DragOverEvent, data).DragEffects == DragDropEffects.Move
+                && parentRow.Classes.Contains("drop-before"), "Parent handlers must preserve a hierarchy Move.");
+            Check(parentHeader.BoxShadow.Count == 1 && parentHeader.BoxShadow[0].OffsetY == 2
+                && parentHeader.Bounds.Height == height, "Before indicator must render above the header without resizing it.");
+            _ = dropOn(parent, 0.9, DragDrop.DragOverEvent, data);
+            Check(parentRow.Classes.Contains("drop-after") && parentHeader.BoxShadow.Count == 1
+                && parentHeader.BoxShadow[0].OffsetY == -2 && parentHeader.Bounds.Height == height,
+                "After indicator must render below the header without resizing it.");
+            // Drop recomputes its position instead of using the previous After hover.
+            Check(dropOn(parent, 0.5, DragDrop.DropEvent, data).DragEffects == DragDropEffects.Move
+                && dragged.Parent == parent, "Routed drop must parent the object and keep Move through ancestor handlers.");
+            Check(row(parent).IsExpanded && row(dragged).IsVisible, "Dropped child must be visible and its parent expanded.");
+            Check(ReferenceEquals(Call(editor, "GetSelectedSceneObject"), dragged), "Drop must select the moved object.");
+
+            Check(dropOn(dragged, 0.5, DragDrop.DragOverEvent, data).DragEffects == DragDropEffects.None,
+                "Self drop must be rejected through the routed path.");
+            using var parentData = new DataTransfer();
+            parentData.Add(DataTransferItem.Create(format, parent.Id.ToString("D")));
+            Check(dropOn(child, 0.5, DragDrop.DropEvent, parentData).DragEffects == DragDropEffects.None && parent.Parent is null,
+                "Descendant drop must be rejected without changing the hierarchy.");
+            var empty = new Point(2, surface.Bounds.Height - 2);
+            Check(drag(surface, empty, DragDrop.DropEvent, data).DragEffects == DragDropEffects.Move && dragged.Parent is null,
+                "The outer empty margin of Stuffs must accept root drops.");
+            Check(dropOn(parent, 0.1, DragDrop.DropEvent, data).DragEffects == DragDropEffects.Move && scene.RootObjects[0] == dragged,
+                "Routed before drop must reorder roots.");
+            Check(dropOn(parent, 0.9, DragDrop.DropEvent, data).DragEffects == DragDropEffects.Move && scene.RootObjects[^1] == dragged,
+                "Routed after drop must reorder roots.");
+
+            parentRow = row(parent);
+            parentRow.SetCurrentValue(TreeViewItem.IsExpandedProperty, false);
+            Dispatcher.UIThread.RunJobs();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            while (watch.ElapsedMilliseconds < 900 && !parentRow.IsExpanded)
+            {
+                _ = dropOn(parent, 0.5, DragDrop.DragOverEvent, data);
+                using var slice = new CancellationTokenSource(80);
+                Dispatcher.UIThread.MainLoop(slice.Token);
+            }
+            Check(parentRow.IsExpanded, "Continuous hover events must expand the actual row after 500ms.");
+            parentRow.SetCurrentValue(TreeViewItem.IsExpandedProperty, false);
+            _ = drag(surface, empty, DragDrop.DragOverEvent, data);
+            _ = dropOn(parent, 0.5, DragDrop.DragOverEvent, data);
+            Check(Field<DispatcherTimer>(editor, "_hierarchyExpandTimer").IsEnabled, "Collapsed parent must start hover timer.");
+            _ = drag(surface, new Point(-10, -10), DragDrop.DragLeaveEvent, data);
+            Check(!Field<DispatcherTimer>(editor, "_hierarchyExpandTimer").IsEnabled
+                && !parentRow.Classes.Contains("drop-as-child"), "Leaving Stuffs must clear the timer and highlight.");
+
+            using var componentData = new DataTransfer();
+            var componentFormat = (DataFormat<Type>)typeof(MainWindow).GetField("ComponentFormat", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+            componentData.Add(DataTransferItem.Create(componentFormat, typeof(Transform)));
+            Check(dropOn(parent, 0.5, DragDrop.DragOverEvent, componentData).DragEffects == DragDropEffects.Copy,
+                "Component drags must keep their existing Copy behavior.");
+            Check(dropOn(parent, 0.5, DragDrop.DropEvent, componentData).DragEffects == DragDropEffects.Copy
+                && parent.GetComponent<Transform>() is not null, "Component drop must still attach to the hierarchy row.");
+            Call(editor, "StartPlay");
+            Check(dropOn(parent, 0.5, DragDrop.DropEvent, data).DragEffects == DragDropEffects.None && dragged.Parent is null,
+                "Play must reject a routed hierarchy drop.");
+            Call(editor, "StopPlay");
+        }
+        finally
+        {
+            CloseEditor(editor);
+        }
+
+        var retainedScene = new Scene();
+        _ = retainedScene.AddEmpty();
+        var oldNode = buildWeakNode(retainedScene);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Check(!oldNode.IsAlive, "A retained scene must not keep discarded hierarchy nodes alive through event subscriptions.");
+        GC.KeepAlive(retainedScene);
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static WeakReference buildWeakNode(Scene scene) => new(StuffsHierarchy.Build(scene)[0]);
     }
 
     private static byte[] CreatePng(SKColor color)

@@ -1,0 +1,302 @@
+using System.Collections.ObjectModel;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using PureEngine.Core;
+
+namespace PureEngine.Editor;
+
+public partial class MainWindow
+{
+    internal static readonly DataFormat<string> SceneObjectIdFormat =
+        DataFormat.CreateInProcessFormat<string>("PureEngine.SceneObjectId");
+
+    private static Guid? GetDraggedId(DragEventArgs e) =>
+        e.DataTransfer.TryGetValue(SceneObjectIdFormat) is { } text
+        && Guid.TryParse(text, out var id) ? id : null;
+
+    private ObservableCollection<HierarchyNode> _hierarchyRoots = [];
+    private PointerPressedEventArgs? _hierarchyPress;
+    private Point _hierarchyPressPosition;
+    private Guid? _hierarchyDragId;
+    private TreeViewItem? _hierarchyDropTarget;
+    private HierarchyDropPosition _hierarchyDropPosition;
+    private readonly DispatcherTimer _hierarchyExpandTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private bool _hierarchyRefreshing;
+
+    /// <summary>Stuffsペインのツリー駆動を開始する。コンストラクタから1回だけ呼ぶ。</summary>
+    private void InitHierarchy()
+    {
+        _hierarchyExpandTimer.Tick += OnHierarchyExpandTick;
+        RefreshHierarchy();
+        SceneObjects.AddHandler(PointerPressedEvent, OnHierarchyPointerPressed, RoutingStrategies.Tunnel);
+        SceneObjects.AddHandler(PointerMovedEvent, OnHierarchyPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SceneObjects.AddHandler(PointerReleasedEvent, OnHierarchyPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SceneSurface.AddHandler(DragDrop.DragEnterEvent, OnHierarchyDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        SceneSurface.AddHandler(DragDrop.DragOverEvent, OnHierarchyDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        SceneSurface.AddHandler(DragDrop.DropEvent, OnHierarchyDrop, RoutingStrategies.Bubble, handledEventsToo: true);
+        SceneSurface.AddHandler(DragDrop.DragLeaveEvent, OnHierarchyDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    /// <summary>検証用: Sceneへ直接追加した新規オブジェクトをツリーへ反映する。選択は維持する。</summary>
+    internal void SyncHierarchyForTest() => RefreshHierarchy(GetSelectedSceneObject()?.Id);
+
+    /// <summary>選択中のSceneObject。TreeViewの選択はHierarchyNodeのためRefへ読み替える。</summary>
+    internal SceneObject? GetSelectedSceneObject() => (SceneObjects.SelectedItem as HierarchyNode)?.Ref;
+
+    /// <summary>検証用: 選択中ノード。TreeView化後のテストがIDではなく実体で比較できる。</summary>
+    internal HierarchyNode? SelectedHierarchyNodeForTest() => SceneObjects.SelectedItem as HierarchyNode;
+
+    /// <summary>検証用: SceneObjectから対応ノードを選ぶ。ツリー表示の選択経路を通す。</summary>
+    internal void SelectSceneObjectForTest(SceneObject? item) => SelectSceneObject(item, focus: false);
+
+    /// <summary>HierarchyNodeの列挙。リビルド前後の状態退避と選択復元に使う。</summary>
+    private IEnumerable<HierarchyNode> EnumerateHierarchyNodes(IEnumerable<HierarchyNode>? roots = null)
+    {
+        var stack = new Stack<HierarchyNode>(roots ?? _hierarchyRoots);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            yield return node;
+            foreach (var child in node.Children)
+                stack.Push(child);
+        }
+    }
+
+    /// <summary>Sceneの親子からStuffsツリーを組み立て直す。展開と選択はID基準で温存する。</summary>
+    internal void RefreshHierarchy(Guid? keepSelectedId = null, Guid? expandId = null)
+    {
+        ClearHierarchyDropIndicator();
+        var selectedNode = SceneObjects.SelectedItem as HierarchyNode;
+        _hierarchyRefreshing = true;
+        try
+        {
+            var expanded = new HashSet<Guid>();
+            foreach (var node in EnumerateHierarchyNodes())
+                if (node.IsExpanded) expanded.Add(node.Ref.Id);
+            _hierarchyRoots = StuffsHierarchy.Build(_editScene.Current);
+            foreach (var node in EnumerateHierarchyNodes())
+                if (expanded.Contains(node.Ref.Id)) node.IsExpanded = true;
+            SceneObjects.ItemsSource = _hierarchyRoots;
+        }
+        finally
+        {
+            _hierarchyRefreshing = false;
+        }
+        var selectedId = keepSelectedId ?? selectedNode?.Ref.Id;
+        if (expandId is { } parentId)
+            foreach (var node in EnumerateHierarchyNodes())
+                if (node.Ref.Id == parentId)
+                {
+                    node.IsExpanded = true;
+                    break;
+                }
+        if (selectedId is { } id)
+            SelectSceneObject(FindObject(id), focus: false);
+        else
+            RefreshObjectInspector();
+    }
+
+    private SceneObject? FindObject(Guid id)
+    {
+        foreach (var item in _editScene.Current.Objects)
+            if (item.Id == id) return item;
+        return null;
+    }
+
+    /// <summary>SceneObjectを指定してStuffsツリーを選択する。親ノードを展開して可視化する。</summary>
+    internal void SelectSceneObject(SceneObject? item, bool focus)
+    {
+        if (item is null)
+        {
+            SceneObjects.SelectedItem = null;
+            if (focus) SceneObjects.Focus();
+            return;
+        }
+        ExpandAncestors(item);
+        foreach (var node in EnumerateHierarchyNodes())
+            if (ReferenceEquals(node.Ref, item))
+            {
+                SceneObjects.SelectedItem = node;
+                SceneObjects.ScrollIntoView(node);
+                break;
+            }
+        if (focus) SceneObjects.Focus();
+    }
+
+    private void ExpandAncestors(SceneObject item)
+    {
+        var ancestors = new Stack<SceneObject>();
+        for (var current = item.Parent; current is not null; current = current.Parent)
+            ancestors.Push(current);
+        while (ancestors.Count > 0)
+        {
+            var ancestor = ancestors.Pop();
+            foreach (var node in EnumerateHierarchyNodes())
+                if (ReferenceEquals(node.Ref, ancestor))
+                {
+                    node.IsExpanded = true;
+                    break;
+                }
+        }
+    }
+
+    private void OnHierarchyPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _hierarchyPress = null;
+        _hierarchyDragId = null;
+        var point = e.GetCurrentPoint(SceneObjects);
+        if (!point.Properties.IsLeftButtonPressed) return;
+        if (IsPlaying) return;
+        var node = FindHierarchyNode(e.Source as Visual);
+        if (node is null) return;
+        _hierarchyPress = e;
+        _hierarchyPressPosition = e.GetPosition(SceneObjects);
+        _hierarchyDragId = node.Ref.Id;
+    }
+
+    private async void OnHierarchyPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_hierarchyPress is null || _hierarchyDragId is null) return;
+        if (!e.GetCurrentPoint(SceneObjects).Properties.IsLeftButtonPressed)
+        {
+            _hierarchyPress = null;
+            _hierarchyDragId = null;
+            return;
+        }
+        var delta = e.GetPosition(SceneObjects) - _hierarchyPressPosition;
+        if (Math.Abs(delta.X) < 4 && Math.Abs(delta.Y) < 4) return;
+        var press = _hierarchyPress;
+        var draggedId = _hierarchyDragId.Value;
+        _hierarchyPress = null;
+        _hierarchyDragId = null;
+        using var data = new DataTransfer();
+        data.Add(DataTransferItem.Create(SceneObjectIdFormat, draggedId.ToString("D")));
+        try { await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Move); }
+        finally { ClearHierarchyDropIndicator(); }
+    }
+
+    private void OnHierarchyPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _hierarchyPress = null;
+        _hierarchyDragId = null;
+    }
+
+    private static HierarchyNode? FindHierarchyNode(Visual? source) =>
+        source?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault()?.DataContext as HierarchyNode;
+
+    private static (TreeViewItem? Container, HierarchyDropPosition Position) HierarchyDropTarget(DragEventArgs e, Visual? source)
+    {
+        var container = source?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault();
+        // The container includes expanded children; only its header is a drop row.
+        var header = container?.GetTemplateDescendants().OfType<Border>().FirstOrDefault(item => item.Name == "PART_LayoutRoot");
+        if (header is null || header.Bounds.Height <= 0) return (null, HierarchyDropPosition.AsChild);
+        var point = e.GetPosition(header);
+        if (!new Rect(header.Bounds.Size).Contains(point)) return (null, HierarchyDropPosition.AsChild);
+        return (container, point.Y < header.Bounds.Height * 0.25 ? HierarchyDropPosition.Before
+            : point.Y > header.Bounds.Height * 0.75 ? HierarchyDropPosition.After : HierarchyDropPosition.AsChild);
+    }
+
+    private void OnHierarchyDragOver(object? sender, DragEventArgs e)
+    {
+        if (!e.DataTransfer.Contains(SceneObjectIdFormat)) return;
+        if (IsPlaying || GetDraggedId(e) is not { } draggedId)
+        {
+            ClearHierarchyDropIndicator();
+            e.DragEffects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        var (container, position) = HierarchyDropTarget(e, e.Source as Visual);
+        var node = container?.DataContext as HierarchyNode;
+        var targetId = node?.Ref.Id;
+        if (!HierarchyDrop.CanDrop(_editScene.Current, draggedId, targetId))
+        {
+            ClearHierarchyDropIndicator();
+            e.DragEffects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        if (!ReferenceEquals(_hierarchyDropTarget, container) || _hierarchyDropPosition != position)
+        {
+            ClearHierarchyDropIndicator();
+            _hierarchyDropTarget = container;
+            _hierarchyDropPosition = position;
+            container?.Classes.Add(position switch
+            {
+                HierarchyDropPosition.Before => "drop-before",
+                HierarchyDropPosition.After => "drop-after",
+                _ => "drop-as-child",
+            });
+            if (position == HierarchyDropPosition.AsChild && node is { IsExpanded: false, Children.Count: > 0 })
+                _hierarchyExpandTimer.Start();
+        }
+        e.DragEffects = DragDropEffects.Move;
+        e.Handled = true;
+    }
+
+    private void OnHierarchyDragLeave(object? sender, DragEventArgs e)
+    {
+        // Moving between the text and chevron of the same row must not restart the hover delay.
+        var hit = SceneSurface.InputHitTest(e.GetPosition(SceneSurface)) as Visual;
+        var (container, position) = HierarchyDropTarget(e, hit);
+        if (ReferenceEquals(container, _hierarchyDropTarget) && position == _hierarchyDropPosition) return;
+        ClearHierarchyDropIndicator();
+    }
+
+    private void OnHierarchyExpandTick(object? sender, EventArgs e)
+    {
+        _hierarchyExpandTimer.Stop();
+        if (!IsPlaying && _hierarchyDropTarget?.DataContext is HierarchyNode node)
+            node.IsExpanded = true;
+    }
+
+    private void ClearHierarchyDropIndicator()
+    {
+        _hierarchyExpandTimer.Stop();
+        if (_hierarchyDropTarget is not null)
+        {
+            _hierarchyDropTarget.Classes.Remove("drop-before");
+            _hierarchyDropTarget.Classes.Remove("drop-after");
+            _hierarchyDropTarget.Classes.Remove("drop-as-child");
+            _hierarchyDropTarget = null;
+        }
+    }
+
+    private void OnHierarchyDrop(object? sender, DragEventArgs e)
+    {
+        if (!e.DataTransfer.Contains(SceneObjectIdFormat)) return;
+        e.Handled = true;
+        e.DragEffects = DragDropEffects.None;
+        var (container, position) = HierarchyDropTarget(e, e.Source as Visual);
+        ClearHierarchyDropIndicator();
+        if (RejectWhenPlaying("Reparent")) return;
+        if (GetDraggedId(e) is not { } draggedId) return;
+        var node = container?.DataContext as HierarchyNode;
+        var targetId = node?.Ref.Id;
+        try
+        {
+            HierarchyDrop.Execute(_editScene.Current, draggedId, targetId, position);
+        }
+        catch (Exception error)
+        {
+            SetFileStatus($"Cannot reparent: {error.GetBaseException().Message}", true);
+            return;
+        }
+        MarkSceneChanged();
+        e.DragEffects = DragDropEffects.Move;
+        var dragged = FindObject(draggedId);
+        if (targetId is { } parentId && position == HierarchyDropPosition.AsChild)
+            RefreshHierarchy(draggedId, expandId: parentId);
+        else if (dragged?.Parent?.Id is { } ancestorId)
+            RefreshHierarchy(draggedId, expandId: ancestorId);
+        else
+            RefreshHierarchy(draggedId);
+    }
+
+    internal bool IsRefreshingHierarchyForTest() => _hierarchyRefreshing;
+}

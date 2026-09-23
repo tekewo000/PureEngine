@@ -59,6 +59,8 @@ static class UserCodeChecks
         internal class Hidden { public class Nested { } }
         """;
     private static object Player(MainWindow editor) => EditScene(editor).Objects.Single().Components.Single();
+    private static SceneObject? Selected(MainWindow editor) =>
+        (SceneObject?)Call(editor, "GetSelectedSceneObject", []);
     private static int Version(MainWindow editor) => (int)Player(editor).GetType().GetProperty("Version")!.GetValue(Player(editor))!;
     private static TextBox HealthBox(MainWindow editor) => editor.GetVisualDescendants().OfType<TextBox>()
         .Single(box => AutomationProperties.GetName(box) == "Player.Health");
@@ -207,7 +209,7 @@ static class UserCodeChecks
             Check((int)hitPoints.GetValue(renamedPlayer)! == 81 && editor.Title!.StartsWith("* ")
                 && EditScene(editor).Objects.Single().Id == id
                 && EditScene(editor).Objects.Single().GetStartPriority(renamedPlayer) == -9
-                && ReferenceEquals(editor.FindControl<ListBox>("SceneObjects")!.SelectedItem, EditScene(editor).Objects.Single())
+                && ReferenceEquals(Selected(editor), EditScene(editor).Objects.Single())
                 && editor.GetVisualDescendants().OfType<TextBox>().Any(box => AutomationProperties.GetName(box) == "Hero.HitPoints" && box.Text == "81"),
                 "Renamed members must retain unsaved values, identity, Priority and selection, with the new Inspector label.");
             var legacyScene = new SceneSerializer(owner.Registry).Deserialize(legacyYaml);
@@ -243,7 +245,7 @@ static class UserCodeChecks
                 && resetPlayer.GetType().GetField("Added") is null
                 && EditScene(editor).Objects.Single().Id == id
                 && EditScene(editor).Objects.Single().GetStartPriority(resetPlayer) == -9
-                && ReferenceEquals(editor.FindControl<ListBox>("SceneObjects")!.SelectedItem, EditScene(editor).Objects.Single())
+                && ReferenceEquals(Selected(editor), EditScene(editor).Objects.Single())
                 && editor.Title!.StartsWith("* "), "Resetting renamed fields must preserve identity, Priority, selection and dirty state.");
             var resetSerializer = new SceneSerializer(owner.Registry);
             var oldScene = resetSerializer.Deserialize(legacyYaml);

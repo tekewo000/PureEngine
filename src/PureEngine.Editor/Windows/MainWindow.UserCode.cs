@@ -88,7 +88,7 @@ public partial class MainWindow
             UserCodeCompileTracker.Release(compiled);
             return;
         }
-        var selectedId = (SceneObjects.SelectedItem as SceneObject)?.Id;
+        var selectedId = GetSelectedSceneObject()?.Id;
         var outcome = _reloadCoordinator.Apply(_editScene, _components, compiled);
         foreach (var diagnostic in outcome.Diagnostics)
         {
@@ -101,9 +101,7 @@ public partial class MainWindow
             // Clear drag references to the previous collectible assembly.
             _dragTypes = null;
             _assetPress = null;
-            SceneObjects.SelectedItem = null;
-            SceneObjects.ItemsSource = _editScene.Current.Objects;
-            SceneObjects.SelectedItem = _editScene.Current.Objects.FirstOrDefault(item => item.Id == selectedId);
+            RefreshHierarchy(selectedId);
             RefreshObjectInspector();
             UpdateSceneTitle();
         }

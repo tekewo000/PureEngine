@@ -19,6 +19,11 @@ static class PlayConnectionChecks
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;
+    private static TreeView SceneObjects(MainWindow window) => Control<TreeView>(window, "SceneObjects");
+
+    private static void Select(MainWindow window, SceneObject? item) =>
+        Call(window, "SelectSceneObjectForTest", item);
+
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -104,7 +109,7 @@ static class PlayConnectionChecks
             Dispatcher.UIThread.RunJobs();
             Check((bool)Call(editor, "get_IsPlaying")!, "StartPlay must enter playing state.");
             Check(!playButton.IsEnabled && stopButton.IsEnabled, "Playing must enable Stop and disable Play.");
-            Check(!Control<ListBox>(editor, "SceneObjects").IsEnabled, "Playing must disable scene editing.");
+            Check(!SceneObjects(editor).IsEnabled, "Playing must disable scene editing.");
             Check(!Control<TreeView>(editor, "ProjectTree").IsEnabled, "Playing must disable scene switching.");
             Check(status.Text?.Contains("Play started") == true, "Play start must report status.");
             var timer = Field<DispatcherTimer?>(editor, "_playTimer");
@@ -125,7 +130,7 @@ static class PlayConnectionChecks
             Check(!(bool)Call(editor, "get_IsPlaying")!, "StopPlay must leave playing state.");
             Check(PlayCounter.Destroys == 1, $"Stop must destroy once, got {PlayCounter.Destroys}.");
             Check(playButton.IsEnabled && !stopButton.IsEnabled, "Stop must restore Play/Stop buttons.");
-            Check(Control<ListBox>(editor, "SceneObjects").IsEnabled, "Stop must restore scene editing.");
+            Check(SceneObjects(editor).IsEnabled, "Stop must restore scene editing.");
             Check(status.Text?.Contains("Stopped Play") == true, "Stop must report status.");
             var frozen = PlayCounter.Updates;
             Dispatcher.UIThread.RunJobs();
@@ -196,7 +201,8 @@ static class PlayConnectionChecks
             var item = scene.AddEmpty();
             Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
             Dispatcher.UIThread.RunJobs();
-            editor.FindControl<ListBox>("SceneObjects")!.SelectedItem = item;
+            Call(editor, "SyncHierarchyForTest");
+            Select(editor, item);
             Dispatcher.UIThread.RunJobs();
             var box = editor.GetVisualDescendants().OfType<TextBox>()
                 .First(b => Equals(b.GetValue(Avalonia.Automation.AutomationProperties.NameProperty) as string,
@@ -245,7 +251,7 @@ static class PlayConnectionChecks
             Check(Field<PlaySession?>(editor, "_play") is null, "Failed start must release the session.");
             Check(status.Text?.Contains("Cannot start Play") == true, "Failed start must report the reason.");
             Check(Control<Button>(editor, "PlayButton").IsEnabled, "Failed start must restore buttons.");
-            Check(Control<ListBox>(editor, "SceneObjects").IsEnabled, "Failed start must restore editing.");
+            Check(SceneObjects(editor).IsEnabled, "Failed start must restore editing.");
             Check(PlayCounter.Starts == 0, "Failed start must not run other components.");
             CloseEditor(editor);
         }
@@ -278,7 +284,7 @@ static class PlayConnectionChecks
             Check(status.Text?.Contains("boom") == true, "Update failure must report runtime errors.");
             Check(PlayFailUpdate.Destroys == 1, "Auto-stop must destroy once.");
             Check(Control<Button>(editor, "PlayButton").IsEnabled, "Auto-stop must restore buttons.");
-            Check(Control<ListBox>(editor, "SceneObjects").IsEnabled, "Auto-stop must restore editing.");
+            Check(SceneObjects(editor).IsEnabled, "Auto-stop must restore editing.");
             CloseEditor(editor);
         }
         finally

@@ -129,7 +129,7 @@ public partial class MainWindow
         SceneViewport.Focus();
         if (IsPlaying) { RejectWhenPlaying("Select"); return; }
         var entries = SceneLayouts(viewportSize);
-        if (SceneObjects.SelectedItem is SceneObject selected
+        if (GetSelectedSceneObject() is SceneObject selected
             && FindLayout(entries, selected) is { } entry
             && SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out _, out var pivot)
             && SceneViewMath.TryGetParentAxes(entry.ParentWorld, out var xAxis, out var yAxis)
@@ -140,7 +140,7 @@ public partial class MainWindow
             e.Handled = true;
             return;
         }
-        SceneObjects.SelectedItem = SceneViewMath.HitTest(entries, viewportSize, _scenePan, _sceneZoom, viewPoint, IsDrawableImage);
+        SelectSceneObject(SceneViewMath.HitTest(entries, viewportSize, _scenePan, _sceneZoom, viewPoint, IsDrawableImage), focus: false);
         e.Handled = true;
     }
 
@@ -275,7 +275,7 @@ public partial class MainWindow
             return;
         if (ViewportTabs.SelectedIndex != 0 || !SceneViewport.IsEffectivelyVisible)
             return;
-        if (SceneObjects.SelectedItem is not SceneObject target)
+        if (GetSelectedSceneObject() is not SceneObject target)
             return;
         var viewportSize = SceneViewportSize();
         if (!SceneViewMath.IsValidViewport(viewportSize) || !SceneViewMath.IsValidView(_scenePan, _sceneZoom))
@@ -342,7 +342,7 @@ public partial class MainWindow
 
     private void SyncInspectorToDragTarget(SceneObject target, Transform transform)
     {
-        if (!ReferenceEquals(SceneObjects.SelectedItem, target))
+        if (!ReferenceEquals(GetSelectedSceneObject(), target))
             return;
         var card = ComponentEditors.Children.OfType<Border>()
             .FirstOrDefault(candidate => ReferenceEquals(candidate.Tag, transform));
@@ -404,7 +404,7 @@ public partial class MainWindow
     /// <summary>Headless検証用のF表示。選択対象を余白付きで中央に収め、未保存化しない。</summary>
     internal bool TryFitForTest()
     {
-        if (SceneObjects.SelectedItem is not SceneObject target)
+        if (GetSelectedSceneObject() is not SceneObject target)
             return false;
         var entry = FindLayout(SceneLayouts(SceneViewportSize()), target);
         if (entry is null || !SceneViewMath.TryGetSceneCorners(entry, out var corners))

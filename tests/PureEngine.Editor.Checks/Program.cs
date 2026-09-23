@@ -79,7 +79,7 @@ internal static class Program
             Click(Control<Button>(launcher, "CreateProjectButton"));
             var editor = desktop.Windows.OfType<MainWindow>().Single();
             Check(editor.IsVisible && !launcher.IsVisible, "Creating a project must enter Editor and hide Launcher.");
-            Check(editor.Title!.Contains("LauncherTest") && Control<ListBox>(editor, "SceneObjects").Items.Count == 0,
+            Check(editor.Title!.Contains("LauncherTest") && Control<TreeView>(editor, "SceneObjects").Items.Count == 0,
                 "New projects must open an empty Main scene.");
             Check(Control<TreeView>(editor, "ProjectTree").Items.Count > 0, "Project Explorer was not populated.");
             var manifest = Path.Combine(root, "LauncherTest", "Project.pure.project.yaml");

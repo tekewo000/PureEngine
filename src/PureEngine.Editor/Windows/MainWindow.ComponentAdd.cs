@@ -15,7 +15,7 @@ public partial class MainWindow
     internal void OpenAddComponentDialog()
     {
         if (RejectWhenPlaying("Add")) return;
-        if (SceneObjects.SelectedItem is not SceneObject target)
+        if (GetSelectedSceneObject() is not SceneObject target)
         {
             AttachError.Text = "Select an object first.";
             AttachError.IsVisible = true;

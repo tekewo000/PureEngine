@@ -55,6 +55,11 @@ static class IntegratedArchitectureChecks
         return (int)rules.GetType().GetProperty("Version")!.GetValue(rules)!;
     }
     private static object Player(MainWindow editor) => Field<EditSceneStore>(editor, "_editScene").Current.Objects.Single().Components.Single();
+    private static TreeView SceneObjects(MainWindow editor) => editor.FindControl<TreeView>("SceneObjects")!;
+    private static void Select(MainWindow editor, SceneObject item) =>
+        Call(editor, "SelectSceneObjectForTest", [item]);
+    private static SceneObject? Selected(MainWindow editor) =>
+        (SceneObject?)Call(editor, "GetSelectedSceneObject", []);
 
     public static void Run(string parent)
     {
@@ -112,7 +117,7 @@ static class IntegratedArchitectureChecks
             var oldPlayer = Player(editor);
             oldPlayer.GetType().GetField("Health")!.SetValue(oldPlayer, 81);
             store.MarkChanged();
-            editor.FindControl<ListBox>("SceneObjects")!.SelectedItem = store.Current.Objects.Single();
+            Select(editor, store.Current.Objects.Single());
             gates[1].SetResult(latest);
             Program.Wait(second);
             var current = Player(editor);
@@ -123,7 +128,7 @@ static class IntegratedArchitectureChecks
             Check((int)oldPlayer.GetType().GetField("DisposeCount")!.GetValue(oldPlayer)! == 1,
                 "Adoption must release old components once.");
             Check(store.Current.Objects.Single().GetStartPriority(current) == -12
-                && ReferenceEquals(editor.FindControl<ListBox>("SceneObjects")!.SelectedItem, store.Current.Objects.Single()),
+                && ReferenceEquals(Selected(editor), store.Current.Objects.Single()),
                 "Priority and selection must survive async adoption.");
             gates[0].SetResult(old);
             Program.Wait(first);

@@ -132,9 +132,8 @@ public partial class MainWindow
             return;
         }
         var previous = _editScene.Replace(restored, path, dirty: false);
-        SceneObjects.SelectedItem = null;
-        SceneObjects.ItemsSource = _editScene.Current.Objects;
-        SceneObjects.SelectedIndex = _editScene.Current.Objects.Count > 0 ? 0 : -1;
+        RefreshHierarchy();
+        SelectSceneObject(_editScene.Current.RootObjects.Count > 0 ? _editScene.Current.RootObjects[0] : null, focus: false);
         // Selection may already have been empty; explicitly reset the Inspector as well.
         RefreshObjectInspector();
         UpdateSceneTitle();
@@ -146,6 +145,7 @@ public partial class MainWindow
 
     private void CloseEditSession()
     {
+        ClearHierarchyDropIndicator();
         CancelSceneViewDrag();
         // プロジェクトの切り替え・終了時には、そのプロジェクトの監視を終了する。
         // 終了順序：編集SceneのComponent破棄 → 編集サービス破棄 → コード解放要求。別プロジェクトには触れない。
