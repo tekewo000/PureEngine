@@ -4,10 +4,17 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 
+## Inspector Color対応とローカルImage変更の統合
+
+- `Color`・`Color?`・配列・List・stringキー辞書をInspector／保存／Cloneへ接続。単体とNullableはRGBA数値と色見本、コレクション要素はRGBA数値で編集する。カラーピッカー・HSV／hex入力、コレクション要素の `Color?` は対象外。
+- ローカルの `b7856a4`（Image use Color）を保持して統合し、描画境界でRGBAをVector4へ渡す。旧シーンとの保存互換性は [EngineArchitecture.md](EngineArchitecture.md) のYAML節を参照。
+- レビューで型付きColor復元時の非有限値検証と、NullableのSet Null時に非表示入力欄のエラーが残る問題を修正。
+- 統合後の `./tools/code-quality.ps1 -Check` はローカルで通過。旧Image保存形式の移行、RGBA／alpha描画、非有限値全チャンネル拒否、範囲外の有限値保持、色見本、Nullableエラー解除、配列／リスト／辞書編集を自動チェックした。CI結果はPRに記録し、実画面・実GPUは未確認。
+
 ## ローカルColor追加のレビュー
 
 - `Values/Color.cs` にRGBAを保持する値型とHSV・hex変換を追加。保持値そのものは変更せず、変換で使用するチャンネルは非有限値を拒否し、RGB／彩度／明度／alphaを0〜1へ制限する。色相は負数・360度付近の丸めを含めて `[0, 360)` に収める。`ToHsv` はalphaを変換に使用しない。
-- `InspectorValueTypes.cs` は内容・namespaceを変えず `Components/` から `Values/` へ移動。今回のColorは単独の値型で、既存の `Image.Color`（Vector4）・Inspector・YAMLへの接続は含めない。
+- `InspectorValueTypes.cs` は内容・namespaceを変えず `Components/` から `Values/` へ移動。この時点では単独の値型のみ追加し、InspectorとImageへの接続は上記の後続工程で行った。
 - `ColorChecks` に非有限値・範囲外・負の色相・360度付近・alpha保持の回帰チェックを追加。ローカルの `./tools/code-quality.ps1 -Check` は提案レベル解析、警告をエラー扱いにしたビルド、Core／Editorチェックを含め通過。CI・実画面は未確認。
 - レビュー・修正・検証はDelta作業ツリーで実施。普段のチェックアウトへの反映・コミット・GitHub公開とは区別する。
 
@@ -202,7 +209,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 | 属性 | Inspector・Start・Update・Destroyの定義、Inspectorメンバーとライフサイクルメソッドの検出 | [ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Coreの実行 | 実行用Sceneの複製、開始・明示的な更新・停止、追加・削除予約、例外の報告と後片付け、Priority順の実行 | [SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs) |
 | EditorのPlay／Stop | ツールバーのPlay／Stop、独立Sceneでの開始・一定間隔の更新・停止、編集中Sceneの分離、実行中の編集・切替の無効化、入力エラー時の開始拒否、失敗表示と後片付け | [MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs)、[MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
-| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Transform・Sprite・自作クラス・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Values/InspectorValueTypes.cs) |
+| Inspector | string・int・float・double・bool・enum（Flags含む）・Vector2／3／4・Quaternion・Color・Transform・Sprite・自作クラス・配列・List・Dictionary（stringキー）の表示と編集、数値の無効表示・エラー数、Escで復元、非有限数の拒否、存在するライフサイクルのPriority表示と編集。対応範囲の正本は [EngineArchitecture.md](EngineArchitecture.md) | [MainWindow](../src/PureEngine.Editor/Windows/MainWindow.axaml.cs)、[Inspector](../src/PureEngine.Editor/Windows/MainWindow.Inspector.cs)、[InspectorValueTypes](../src/PureEngine.Core/Values/InspectorValueTypes.cs) |
 | UI部品の追加 | InspectorのAdd Componentから当該Projectの登録型を検索し、既存のアタッチ処理・factoryで追加。重複防止・削除・未保存・Play禁止を維持。`Transform`・`UiElement`・`Image` は組み込み登録 | [ComponentAssets](../src/PureEngine.Editor/Components/ComponentAssets.cs)、[MainWindow.ComponentAdd](../src/PureEngine.Editor/Windows/MainWindow.ComponentAdd.cs) |
 | UI組み合わせ診断 | `Image` に必要な `Transform`／`UiElement` の不足を通知し、揃うと解除する。自動追加はしない | [UiComponentRequirements](../src/PureEngine.Core/Components/UiComponentRequirements.cs)、[MainWindow.UiDiagnostics](../src/PureEngine.Editor/Windows/MainWindow.UiDiagnostics.cs) |
 | 画像素材 | `Assets/` への取り込み、隣接登録情報、Project Open・Refreshでの索引再走査、Sprite欄の選択・None解除、欠落IDの保持と診断 | [ProjectAssets](../src/PureEngine.Editor/Assets/ProjectAssets.cs)、[Sprite](../src/PureEngine.Core/Assets/Sprite.cs) |

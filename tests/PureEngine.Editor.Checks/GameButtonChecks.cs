@@ -199,7 +199,7 @@ internal static class GameButtonChecks
             var components = Field<ProjectComponents>(editor, "_components");
             var scene = EditScene(editor);
             var item = AddCard(editor, scene, "Save me", new Vector3(10, 20, 0), new Vector2(100, 40), 3, false, true);
-            item.GetComponent<PureEngine.Core.Image>()!.Color = new Vector4(0.2f, 0.4f, 0.6f, 1f);
+            item.GetComponent<PureEngine.Core.Image>()!.Color = new(0.2f, 0.4f, 0.6f, 1f);
             var serializer = new SceneSerializer(components.Registry);
             var yaml = serializer.Serialize(scene);
             Check(yaml.Contains("core.button") && yaml.Contains("Interactable"), "Save must carry the Button type and Interactable.");
@@ -236,7 +236,7 @@ internal static class GameButtonChecks
         item.Rename(name);
         item.Attach(new Transform { LocalPosition = position });
         item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = size });
-        item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = new Vector4(0.2f, 0.4f, 0.6f, 1f), Order = order });
+        item.Attach(new PureEngine.Core.Image { Sprite = new Sprite(imageId), Color = new(0.2f, 0.4f, 0.6f, 1f), Order = order });
         item.Attach(new PureEngine.Core.Button { Interactable = interactable });
         return item;
     }
@@ -285,8 +285,8 @@ internal static class GameButtonChecks
         var front = RenderCard(ordered, imageId, "Front", new Vector3(10, 20, 0), new Vector2(100, 40), 5, true);
         var frontStates = new Dictionary<Guid, GameSceneRenderer.ButtonVisual> { [front.Id] = new(UiButtonVisualState.Hover, false) };
         Check(GameSceneRenderer.Build(draw, ordered, images, viewport, frontStates).Count == 0, "Ordered render must succeed.");
-        Check(draw.Vertices[0].Color == back.GetComponent<PureEngine.Core.Image>()!.Color
-            && draw.Vertices[6].Color == front.GetComponent<PureEngine.Core.Image>()!.Color,
+        Check(draw.Vertices[0].Color == new Vector4(0.2f, 0.4f, 0.6f, 1f)
+            && draw.Vertices[6].Color == new Vector4(0.2f, 0.4f, 0.6f, 1f),
             "Game order must follow the shared Order ascending path.");
 
         var imageless = new Scene();

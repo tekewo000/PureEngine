@@ -25,7 +25,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - 同じメニューの「UI → Image」はTransform・UiElement・Image、「UI → Button」はさらにButtonを付けて作成する。親への追加と選択はAdd Emptyと同じで、名前は連番で重複を避ける。Spriteは作成後にInspectorで指定する。Play中は作成できない。
 - Inspectorの「Name」で名前を編集する。ツリー表示へ即時反映し、未保存になる。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。削除後は兄弟内の次の対象へ選択を移す。
-- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。
+- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Color`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。`Color` はR・G・B・Aの数値とプレビューで編集する。
 - `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える。`Sprite`がNoneのときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
 - Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
@@ -418,6 +418,8 @@ var region = cropped.ResolveSourceRect(imageWidth: 128, imageHeight: 64);
 
 
 ## Image Componentの描画
+
+`Image.Color` は `PureEngine.Core.Color` 型です。InspectorではRGBA数値と色見本を表示します。旧シーンのVector4形式は読み込めますが、C#で `Vector4` を代入していた箇所は `new Color(r, g, b, a)` または `Color.White` へ変更してください。保存互換性の詳細は [設計書のYAML節](docs/EngineArchitecture.md#inspector拡張値のyaml形式実装済み) を参照してください。
 
 Scene Viewの前後関係はInspectorの`Image.Order`で変更します。手前にしたい画像へ大きい値を設定してください。描画順の適用範囲は[設計書](docs/EngineArchitecture.md#image-componentから描画への接続)、確認済みの項目は[検証記録](docs/ImplementationPlan.md#描画順の共通基盤order2026-09-23)を参照してください。
 

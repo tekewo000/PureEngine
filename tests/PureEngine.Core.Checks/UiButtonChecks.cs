@@ -34,7 +34,7 @@ static class UiButtonChecks
         item.Rename(name);
         item.Attach(new Transform { LocalPosition = position });
         item.Attach(new UiElement { Pivot = Vector2.Zero, SizeDelta = size });
-        item.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()), Color = Vector4.One, Order = order });
+        item.Attach(new Image { Sprite = new Sprite(Guid.NewGuid()), Color = Color.White, Order = order });
         item.Attach(new Button { Interactable = interactable });
         return item;
     }

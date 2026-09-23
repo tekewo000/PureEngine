@@ -41,6 +41,7 @@ public static class UiImageRenderer
         if (size.X == 0 || size.Y == 0 || matrix.GetDeterminant() == 0) return;
         if (!images.TryGetValue(sprite.ImageId, out var encodedImage))
             throw new InvalidOperationException($"{item.Name}: source image {sprite.ImageId:D} is missing.");
-        draw.Image(sprite, encodedImage, size, matrix, image.Color, clip);
+        var color = image.Color;
+        draw.Image(sprite, encodedImage, size, matrix, new Vector4(color.R, color.G, color.B, color.A), clip);
     }
 }

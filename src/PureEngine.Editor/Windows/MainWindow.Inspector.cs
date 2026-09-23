@@ -53,6 +53,62 @@ public partial class MainWindow
         return panel;
     }
 
+    private StackPanel BuildColorEditor(object component, MemberInfo member, string automationName)
+    {
+        var preview = BuildColorPreview(GetMemberValue(component, member), $"{automationName}.Preview");
+        string[] channels = ["R", "G", "B", "A"];
+        var boxes = channels.Select(channel => BuildColorComponentBox(component, member, automationName, channel, preview)).ToList();
+        var panel = BuildAxisGrid(channels, boxes);
+        ToolTip.SetTip(panel, "Color (r, g, b, a) — Press Esc in a field to revert");
+        var root = new StackPanel { Spacing = 6 };
+        root.Children.Add(preview);
+        root.Children.Add(panel);
+        return root;
+    }
+
+    private TextBox BuildColorComponentBox(object component, MemberInfo member, string automationName, string channel, Border preview)
+    {
+        var box = new TextBox
+        {
+            Text = FormatColorChannel(GetMemberValue(component, member), channel),
+            FontSize = 12,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        box.Classes.Add("inspectorField");
+        box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
+        const string hint = "Enter a number — Press Esc to revert";
+        ToolTip.SetTip(box, hint);
+        box.TextChanged += (_, _) =>
+        {
+            if (IsPlaying) return;
+            if (IsSyncingInspectorForSceneView()) return;
+            if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value)
+                || !float.IsFinite(value))
+            {
+                MarkInvalid(box, "Enter a number");
+                return;
+            }
+            var current = GetMemberValue(component, member);
+            var updated = WithColorChannel(current, channel, value);
+            if (updated is null)
+            {
+                MarkInvalid(box, "Enter a number");
+                return;
+            }
+            SetMemberValue(component, member, updated);
+            RefreshColorPreview(preview, updated);
+            MarkInvalid(box, null, hint);
+        };
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            box.Text = FormatColorChannel(GetMemberValue(component, member), channel);
+            e.Handled = true;
+        };
+        return box;
+    }
+
     private Grid BuildVectorEditor(object component, MemberInfo member, string automationName, int dimensions)
     {
         string[] labels = dimensions == 2 ? ["X", "Y"] : dimensions == 3 ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
@@ -119,6 +175,8 @@ public partial class MainWindow
             return BuildNullableVectorEditor(component, member, automationName, 3);
         if (underlying == typeof(Vector4) || underlying == typeof(Quaternion))
             return BuildNullableVectorEditor(component, member, automationName, 4);
+        if (underlying == typeof(PureEngine.Core.Color))
+            return BuildNullableColorEditor(component, member, automationName);
         if (underlying.IsEnum)
             return BuildNullableEnumEditor(component, member, automationName);
         return UnsupportedBadge(GetMemberType(member));
@@ -220,6 +278,96 @@ public partial class MainWindow
         return root;
     }
 
+    private StackPanel BuildNullableColorEditor(object component, MemberInfo member, string automationName)
+    {
+        var root = new StackPanel { Spacing = 6 };
+        var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var header = BuildSplitHeader(status, create, clear);
+        var colorPanel = BuildColorEditorForNullable(component, member, automationName);
+        root.Children.Add(header);
+        root.Children.Add(colorPanel);
+        void refresh()
+        {
+            var isNull = GetMemberValue(component, member) is null;
+            status.IsVisible = isNull;
+            create.IsVisible = isNull;
+            clear.IsVisible = !isNull;
+            colorPanel.IsVisible = !isNull;
+            if (!isNull)
+                RefreshColorBoxes(colorPanel, GetMemberValue(component, member));
+        }
+        create.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            SetMemberValue(component, member, PureEngine.Core.Color.White);
+            refresh();
+        };
+        clear.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            SetMemberValue(component, member, null);
+            foreach (var box in colorPanel.GetVisualDescendants().OfType<TextBox>())
+                MarkInvalid(box, null);
+            refresh();
+        };
+        refresh();
+        return root;
+    }
+
+    private StackPanel BuildColorEditorForNullable(object component, MemberInfo member, string automationName)
+    {
+        var preview = BuildColorPreview(GetMemberValue(component, member), $"{automationName}.Preview");
+        string[] channels = ["R", "G", "B", "A"];
+        var boxes = new List<TextBox>();
+        foreach (var channel in channels)
+        {
+            var box = new TextBox { FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            box.Classes.Add("inspectorField");
+            box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
+            const string hint = "Enter a number — Press Esc to revert";
+            ToolTip.SetTip(box, hint);
+            var captured = channel;
+            box.TextChanged += (_, _) =>
+            {
+                if (IsPlaying) return;
+                if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value) || !float.IsFinite(value))
+                {
+                    MarkInvalid(box, "Enter a number");
+                    return;
+                }
+                var current = GetMemberValue(component, member);
+                if (current is null)
+                {
+                    MarkInvalid(box, "Enter a number");
+                    return;
+                }
+                var updated = WithColorChannel(current, captured, value);
+                if (updated is null)
+                    MarkInvalid(box, "Enter a number");
+                else
+                {
+                    SetMemberValue(component, member, updated);
+                    RefreshColorPreview(preview, updated);
+                    MarkInvalid(box, null, hint);
+                }
+            };
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                box.Text = FormatColorChannel(GetMemberValue(component, member), captured);
+                e.Handled = true;
+            };
+            boxes.Add(box);
+        }
+        var panel = BuildAxisGrid(channels, boxes);
+        var root = new StackPanel { Spacing = 6 };
+        root.Children.Add(preview);
+        root.Children.Add(panel);
+        return root;
+    }
+
     private Grid BuildVectorEditorForNullable(object component, MemberInfo member, string automationName, int dimensions)
     {
         string[] labels = dimensions == 2 ? ["X", "Y"] : dimensions == 3 ? ["X", "Y", "Z"] : ["X", "Y", "Z", "W"];
@@ -312,21 +460,21 @@ public partial class MainWindow
         return root;
     }
 
-    /// <summary>Axis badge chip matching the S/U/D badge style. X/Y/Z reuse the lifecycle tints; W stays neutral.</summary>
+    /// <summary>Axis badge chip matching the S/U/D badge style. X/R reuse the red tint, Y/G the green tint, Z/B the blue tint; W/A stay neutral.</summary>
     private static Border BuildAxisBadge(string axis)
     {
         var background = axis switch
         {
-            "X" => DestroyBadgeBackground,
-            "Y" => UpdateBadgeBackground,
-            "Z" => StartBadgeBackground,
+            "X" or "R" => DestroyBadgeBackground,
+            "Y" or "G" => UpdateBadgeBackground,
+            "Z" or "B" => StartBadgeBackground,
             _ => NeutralBadgeBackground,
         };
         var foreground = axis switch
         {
-            "X" => DestroyAccent,
-            "Y" => UpdateAccent,
-            "Z" => StartAccent,
+            "X" or "R" => DestroyAccent,
+            "Y" or "G" => UpdateAccent,
+            "Z" or "B" => StartAccent,
             _ => MemberLabelBrush,
         };
         var letter = new TextBlock
@@ -568,6 +716,8 @@ public partial class MainWindow
             return BuildSequenceBoolBox(component, member, index, elementName);
         if (elementType == typeof(Vector2) || elementType == typeof(Vector3) || elementType == typeof(Vector4) || elementType == typeof(Quaternion))
             return BuildSequenceVectorRow(component, member, elementType, index, elementName);
+        if (elementType == typeof(PureEngine.Core.Color))
+            return BuildSequenceColorRow(component, member, index, elementName);
         if (elementType.IsEnum)
             return BuildSequenceEnumBox(component, member, elementType, index, elementName);
         var underlying = Nullable.GetUnderlyingType(elementType);
@@ -772,6 +922,8 @@ public partial class MainWindow
         }
         if (valueType == typeof(Vector2) || valueType == typeof(Vector3) || valueType == typeof(Vector4) || valueType == typeof(Quaternion))
             return BuildDictionaryVectorRow(component, member, valueType, key, valueName);
+        if (valueType == typeof(PureEngine.Core.Color))
+            return BuildDictionaryColorRow(component, member, key, valueName);
         if (valueType.IsEnum)
             return BuildDictionaryEnumBox(component, member, valueType, key, valueName);
         var underlying = Nullable.GetUnderlyingType(valueType);
@@ -972,7 +1124,69 @@ public partial class MainWindow
         return FormatFloat(value.GetAxis(axis));
     }
 
+    private static string FormatColorChannel(object? value, string channel)
+    {
+        if (value is null) return "0";
+        return FormatFloat(value.GetAxis(channel));
+    }
+
     private static string FormatFloat(float value) => value.ToString(CultureInfo.InvariantCulture);
+
+    private static PureEngine.Core.Color WithColorAxis(PureEngine.Core.Color color, string channel, float value) => channel switch
+    {
+        "R" => color with { R = value },
+        "G" => color with { G = value },
+        "B" => color with { B = value },
+        "A" => color with { A = value },
+        _ => color,
+    };
+
+    private static PureEngine.Core.Color? WithColorChannel(object? value, string channel, float parsed) =>
+        value is PureEngine.Core.Color color ? WithColorAxis(color, channel, parsed) : null;
+
+    private static Border BuildColorPreview(object? value, string automationName)
+    {
+        var preview = new Border
+        {
+            Height = 20,
+            CornerRadius = new Avalonia.CornerRadius(4),
+            BorderThickness = new Avalonia.Thickness(1),
+            BorderBrush = UnsupportedBadgeBrush,
+            Background = ToPreviewBrush(value),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        preview.SetValue(AutomationProperties.NameProperty, automationName);
+        ToolTip.SetTip(preview, "Current color preview");
+        return preview;
+    }
+
+    private static void RefreshColorPreview(Border preview, object? value) =>
+        preview.Background = ToPreviewBrush(value);
+
+    private static SolidColorBrush ToPreviewBrush(object? value)
+    {
+        if (value is not PureEngine.Core.Color color)
+            return new SolidColorBrush(Avalonia.Media.Color.FromArgb(0, 0, 0, 0));
+        return new SolidColorBrush(Avalonia.Media.Color.FromArgb(ToPreviewByte(color.A), ToPreviewByte(color.R), ToPreviewByte(color.G), ToPreviewByte(color.B)));
+    }
+
+    private static byte ToPreviewByte(float channel)
+    {
+        if (!float.IsFinite(channel)) return 0;
+        return (byte)MathF.Round(Math.Clamp(channel, 0f, 1f) * 255f);
+    }
+
+    private static void RefreshColorBoxes(Panel panel, object? value)
+    {
+        var boxes = panel.GetVisualDescendants().OfType<TextBox>().ToList();
+        string[] channels = ["R", "G", "B", "A"];
+        var preview = panel.GetVisualDescendants().OfType<Border>()
+            .FirstOrDefault(border => ((border.GetValue(AutomationProperties.NameProperty) as string) ?? "").EndsWith(".Preview", StringComparison.Ordinal));
+        for (var i = 0; i < boxes.Count && i < channels.Length; i++)
+            boxes[i].Text = FormatColorChannel(value, channels[i]);
+        if (preview is not null)
+            RefreshColorPreview(preview, value);
+    }
 
     private static object? WithVectorAxis(object? value, string axis, float parsed) =>
         value switch
@@ -1023,6 +1237,7 @@ public partial class MainWindow
         if (elementType == typeof(Vector3)) return Vector3.Zero;
         if (elementType == typeof(Vector4)) return Vector4.Zero;
         if (elementType == typeof(Quaternion)) return Quaternion.Identity;
+        if (elementType == typeof(PureEngine.Core.Color)) return PureEngine.Core.Color.White;
         if (elementType.IsEnum) return Enum.ToObject(elementType, 0);
         if (Nullable.GetUnderlyingType(elementType) is not null) return null;
         if (InspectorValueTypes.IsCustomInspectorObject(elementType))

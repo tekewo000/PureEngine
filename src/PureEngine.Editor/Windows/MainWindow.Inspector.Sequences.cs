@@ -197,6 +197,51 @@ public partial class MainWindow
         return grid;
     }
 
+    private Grid BuildSequenceColorRow(object component, MemberInfo member, int index, string automationName)
+    {
+        var grid = new Grid { ColumnSpacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        string[] channels = ["R", "G", "B", "A"];
+        foreach (var _ in channels)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        var column = 0;
+        foreach (var channel in channels)
+        {
+            var box = new TextBox { Text = SequenceColorChannelText(component, member, index, channel), MinWidth = 40, FontSize = 12, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+            box.Classes.Add("inspectorField");
+            box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
+            const string hint = "Enter a number — Press Esc to revert";
+            ToolTip.SetTip(box, hint);
+            var captured = channel;
+            box.TextChanged += (_, _) =>
+            {
+                if (IsPlaying) return;
+                if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value) || !float.IsFinite(value))
+                {
+                    MarkInvalid(box, "Enter a number");
+                    return;
+                }
+                var current = SequenceElement(component, member, index);
+                var updated = WithColorChannel(current, captured, value);
+                if (updated is null)
+                    MarkInvalid(box, "Enter a number");
+                else
+                {
+                    SetSequenceElement(component, member, index, updated);
+                    MarkInvalid(box, null, hint);
+                }
+            };
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                box.Text = SequenceColorChannelText(component, member, index, captured);
+                e.Handled = true;
+            };
+            Grid.SetColumn(box, column++);
+            grid.Children.Add(box);
+        }
+        return grid;
+    }
+
     private TextBox BuildSequenceNullableBox(object component, MemberInfo member, Type _, Type underlying, int index, string automationName)
     {
         const string hint = "Empty = null — Press Esc to revert";
@@ -338,6 +383,52 @@ public partial class MainWindow
         return grid;
     }
 
+    private Grid BuildDictionaryColorRow(object component, MemberInfo member, string key, string automationName)
+    {
+        var grid = new Grid { ColumnSpacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        string[] channels = ["R", "G", "B", "A"];
+        foreach (var _ in channels)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        var column = 0;
+        foreach (var channel in channels)
+        {
+            var box = new TextBox { Text = DictionaryColorChannelText(component, member, key, channel), MinWidth = 40, FontSize = 12, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+            box.Classes.Add("inspectorField");
+            box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
+            const string hint = "Enter a number — Press Esc to revert";
+            ToolTip.SetTip(box, hint);
+            var captured = channel;
+            box.TextChanged += (_, _) =>
+            {
+                if (IsPlaying) return;
+                if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value) || !float.IsFinite(value))
+                {
+                    MarkInvalid(box, "Enter a number");
+                    return;
+                }
+                if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
+                var updated = WithColorChannel(dictionary[key], captured, value);
+                if (updated is null)
+                    MarkInvalid(box, "Enter a number");
+                else
+                {
+                    dictionary[key] = updated;
+                    MarkSceneChanged();
+                    MarkInvalid(box, null, hint);
+                }
+            };
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                box.Text = DictionaryColorChannelText(component, member, key, captured);
+                e.Handled = true;
+            };
+            Grid.SetColumn(box, column++);
+            grid.Children.Add(box);
+        }
+        return grid;
+    }
+
     private TextBox BuildDictionaryNullableBox(object component, MemberInfo member, Type _, Type underlying, string key, string automationName)
     {
         const string hint = "Empty = null — Press Esc to revert";
@@ -427,6 +518,16 @@ public partial class MainWindow
         if (element is float single) return single.ToString(CultureInfo.InvariantCulture);
         if (element is double real) return real.ToString(CultureInfo.InvariantCulture);
         return element.ToString() ?? "";
+    }
+
+    private static string SequenceColorChannelText(object component, MemberInfo member, int index, string channel) =>
+        FormatColorChannel(SequenceElement(component, member, index), channel);
+
+    private static string DictionaryColorChannelText(object component, MemberInfo member, string key, string channel)
+    {
+        if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key))
+            return "0";
+        return FormatColorChannel(dictionary[key], channel);
     }
 
     private static string SequenceVectorAxisText(object component, MemberInfo member, int index, string axis) =>

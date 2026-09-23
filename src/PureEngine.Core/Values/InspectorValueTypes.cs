@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace PureEngine.Core;
 
-/// <summary>Inspector and persistable value types. Handles scalars, enums, vectors, Transform, Sprite, arrays, List, dictionaries, and nested custom classes.</summary>
+/// <summary>Inspector and persistable value types. Handles scalars, enums, vectors, colors, Transform, Sprite, arrays, List, dictionaries, and nested custom classes.</summary>
 public static class InspectorValueTypes
 {
     public static bool IsSupportedType(Type type)
@@ -20,7 +20,7 @@ public static class InspectorValueTypes
             return true;
         if (type == typeof(int) || type == typeof(float) || type == typeof(double) || type == typeof(bool))
             return true;
-        if (type == typeof(Vector2) || type == typeof(Vector3) || type == typeof(Vector4) || type == typeof(Quaternion))
+        if (type == typeof(Vector2) || type == typeof(Vector3) || type == typeof(Vector4) || type == typeof(Quaternion) || type == typeof(Color))
             return true;
         if (type == typeof(Transform))
             return true;
@@ -32,6 +32,7 @@ public static class InspectorValueTypes
         if (underlying is not null)
             return underlying == typeof(int) || underlying == typeof(float) || underlying == typeof(double) || underlying == typeof(bool)
                 || underlying == typeof(Vector2) || underlying == typeof(Vector3) || underlying == typeof(Vector4) || underlying == typeof(Quaternion)
+                || underlying == typeof(Color)
                 || underlying.IsEnum;
         if (type.IsArray)
             return type.GetArrayRank() == 1 && IsSupportedElementCore(type.GetElementType()!, chain);
@@ -58,7 +59,7 @@ public static class InspectorValueTypes
             return true;
         if (type == typeof(int) || type == typeof(float) || type == typeof(double) || type == typeof(bool))
             return true;
-        if (type == typeof(Vector2) || type == typeof(Vector3) || type == typeof(Vector4) || type == typeof(Quaternion))
+        if (type == typeof(Vector2) || type == typeof(Vector3) || type == typeof(Vector4) || type == typeof(Quaternion) || type == typeof(Color))
             return true;
         if (type == typeof(Sprite))
             return true;
@@ -234,6 +235,14 @@ public static class InspectorValueTypes
                 throw new InvalidDataException("A finite number is required.");
             return new Dictionary<string, object?> { ["x"] = quaternion.X, ["y"] = quaternion.Y, ["z"] = quaternion.Z, ["w"] = quaternion.W };
         }
+        if (type == typeof(Color))
+        {
+            if (value is not Color color)
+                throw new InvalidDataException($"Invalid Color value: {value.GetType().FullName}.");
+            if (!float.IsFinite(color.R) || !float.IsFinite(color.G) || !float.IsFinite(color.B) || !float.IsFinite(color.A))
+                throw new InvalidDataException("A finite number is required.");
+            return new Dictionary<string, object?> { ["r"] = color.R, ["g"] = color.G, ["b"] = color.B, ["a"] = color.A };
+        }
         if (type == typeof(Transform))
         {
             if (value is not Transform transform)
@@ -401,6 +410,20 @@ public static class InspectorValueTypes
             if (!float.IsFinite(quaternion.X) || !float.IsFinite(quaternion.Y) || !float.IsFinite(quaternion.Z) || !float.IsFinite(quaternion.W))
                 throw new InvalidDataException($"{path}: a finite number is required.");
             return quaternion;
+        }
+        if (type == typeof(Color))
+        {
+            if (raw is Color existingColor)
+                return new Color(ReadFloat(existingColor.R, $"{path}.r"), ReadFloat(existingColor.G, $"{path}.g"),
+                    ReadFloat(existingColor.B, $"{path}.b"), ReadFloat(existingColor.A, $"{path}.a"));
+            var mapping = ToStringKeyedMapping(raw, path);
+            // Read legacy Vector4 colors without changing how new colors are saved.
+            if (mapping.Count == 4 && mapping.TryGetValue("x", out var x) && mapping.TryGetValue("y", out var y)
+                && mapping.TryGetValue("z", out var z) && mapping.TryGetValue("w", out var w))
+                return new Color(ReadFloat(x, $"{path}.x"), ReadFloat(y, $"{path}.y"),
+                    ReadFloat(z, $"{path}.z"), ReadFloat(w, $"{path}.w"));
+            RequireKeys(mapping, ["r", "g", "b", "a"], path);
+            return new Color(ReadFloat(mapping["r"], $"{path}.r"), ReadFloat(mapping["g"], $"{path}.g"), ReadFloat(mapping["b"], $"{path}.b"), ReadFloat(mapping["a"], $"{path}.a"));
         }
         if (type == typeof(Transform))
         {

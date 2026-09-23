@@ -39,7 +39,7 @@ internal static class UiEndToEndChecks
         card.GetComponent<UiElement>()!.SizeDelta = new Vector2(120, 60);
         card.GetComponent<UiElement>()!.Pivot = Vector2.Zero;
         card.GetComponent<PureEngine.Core.Image>()!.Sprite = new Sprite(imported.Id);
-        card.GetComponent<PureEngine.Core.Image>()!.Color = new Vector4(1, 0.5f, 0.25f, 1);
+        card.GetComponent<PureEngine.Core.Image>()!.Color = new Color(1, 0.5f, 0.25f, 1);
         card.GetComponent<PureEngine.Core.Image>()!.Order = 3;
         var child = scene.AddEmpty();
         child.Rename("Badge");
@@ -67,7 +67,7 @@ internal static class UiEndToEndChecks
             Check(reopened.GetComponent<PureEngine.Core.Image>()!.Sprite!.ImageId == imported.Id
                 && reopened.GetComponent<Transform>()!.LocalPosition == new Vector3(20, 30, 0)
                 && reopened.GetComponent<UiElement>()!.SizeDelta == new Vector2(120, 60)
-                && reopened.GetComponent<PureEngine.Core.Image>()!.Color == new Vector4(1, 0.5f, 0.25f, 1)
+                && reopened.GetComponent<PureEngine.Core.Image>()!.Color == new Color(1, 0.5f, 0.25f, 1)
                 && reopened.GetComponent<PureEngine.Core.Image>()!.Order == 3
                 && reopenedChild.GetComponent<PureEngine.Core.Image>()!.Order == -1,
                 "Reopen must restore Sprite reference, placement, color and Order.");
