@@ -80,6 +80,7 @@ private void Start()
 
 - 参照できるのは同じSceneのSceneObjectと、Projectに登録されたComponent型（`Transform`・`UiElement`・`Image`・`Button`・自作型）。未登録の対応する自作クラスは埋め込み値になる。登録Component型の欄に `new Button()`／`new Transform()` を直接入れても埋め込み値にはならず、別Scene・未アタッチの参照先の保存は拒否する。自作のpublic具象クラスは自動登録されるため、従来埋め込みに使った型も登録対象なら参照欄になる。
 - Inspectorの参照欄は対象名・ID・None／Missing・選択／解除を表示する。Stuffsの行を参照欄へドラッグ＆ドロップできる（Componentアタッチとは別形式）。型・Scene所属が合わない候補は選ばない。Play中は編集できない。変更したときだけ未保存になる。
+- 参照を設定したいオブジェクトを選択し、参照先のStuffs行をInspectorの参照欄へドラッグする。行を押した時点では選択を切り替えず、ドラッグ中もInspectorを維持する。ドラッグせずに離すと、その行を選択する。
 - 対象を削除・取り外すとC#はnullになり、IDはMissingとして保持される。Missingのまま保存・開き直しができ、同じIDが戻れば再接続する。別の対象を選び直すと実物の値を優先する。Missingを消すときは欄のClearを使う。単なるnull代入ではMissingは消えない。
 - 旧シーン（v1／v2）はSceneObject IDを保持し、Component IDを新規発行して未保存化する。登録Component型の旧インライン値は保持して診断し、欄の再割り当て／Clearまで上書き保存・Play用Cloneを拒否する。例えば旧Button値は実際にアタッチしたButtonを選び直す。復元に失敗したときは元Scene・元ファイルを置き換えない。
 - 参照を含む配列・List・stringキーDictionaryは、埋め込みクラスの中でも選択・解除・行の追加／削除ができる。Inspectorで行削除や辞書キー変更を行うとMissingのIDも移動する。Missingを含むコレクションを通常のC#から構造変更する場合は `Scene.References` の明示操作で保持パスも更新する（null同士の移動は通常のC#参照から判別できない）。
