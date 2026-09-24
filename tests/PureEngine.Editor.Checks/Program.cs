@@ -83,6 +83,7 @@ internal static class Program
             IntegratedArchitectureChecks.Run(root);
             ProjectAssetChecks.Run(root);
             DataAssetEditorChecks.Run(root);
+            DirectAssetEditorChecks.Run(root);
             DataAssetMenuChecks.Run(root);
             UiEndToEndChecks.Run(root);
             SpriteReopenChecks.Run(root);

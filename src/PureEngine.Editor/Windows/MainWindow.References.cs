@@ -26,9 +26,18 @@ public partial class MainWindow
     private bool ShouldShowReferenceEditor(Type declaredType) =>
         SceneReferenceTypes.IsSingleReference(declaredType, _components.Registry);
 
-    private List<(SceneObject Owner, object? Component, Guid Id, string Display)> ReferenceCandidates(Type declaredType)
+    private List<(SceneObject? Owner, object? Component, Guid Id, string Display)> ReferenceCandidates(Type declaredType)
     {
-        List<(SceneObject Owner, object? Component, Guid Id, string Display)> found = [];
+        List<(SceneObject? Owner, object? Component, Guid Id, string Display)> found = [];
+        if (DataAssetStore.IsAssetType(declaredType))
+        {
+            RefreshReferenceAssets();
+            var assets = _editScene.Current.DataAssets;
+            foreach (var id in assets.Ids)
+                if (assets.TryGet<object>(id, out var asset) && declaredType.IsInstanceOfType(asset))
+                    found.Add((null, asset, id, assets.DisplayName(id)));
+            return found;
+        }
         if (declaredType == typeof(SceneObject))
         {
             foreach (var item in _editScene.Current.Objects)
@@ -53,6 +62,11 @@ public partial class MainWindow
     {
         target = null;
         error = null;
+        if (DataAssetStore.IsAssetType(declaredType))
+        {
+            error = "Drop a project data asset file, not a scene object.";
+            return false;
+        }
         var scene = _editScene.Current;
         SceneObject? draggedObject = null;
         foreach (var item in scene.Objects)
@@ -193,7 +207,7 @@ public partial class MainWindow
             List<ReferenceOption> options = [new ReferenceOption(null, "None")];
             foreach (var candidate in candidates)
             {
-                var value = declaredType == typeof(SceneObject) ? (object)candidate.Owner : candidate.Component;
+                var value = declaredType == typeof(SceneObject) ? candidate.Owner : candidate.Component;
                 options.Add(new ReferenceOption(value, candidate.Display));
             }
             var selected = options[0];
@@ -207,7 +221,9 @@ public partial class MainWindow
                 }
                 else
                 {
-                    selected = new ReferenceOption(current, $"Detached: {current.GetType().Name}");
+                    selected = DataAssetStore.IsAssetType(declaredType) && _editScene.Current.DataAssets.TryGetId(current, out var assetId)
+                        ? new ReferenceOption(current, $"Missing: {assetId:D}")
+                        : new ReferenceOption(current, $"Detached: {current.GetType().Name}");
                     options.Add(selected);
                     info.Text = selected.Display;
                 }
@@ -233,7 +249,8 @@ public partial class MainWindow
                 combo.SelectedItem = selected;
             }
             finally { refreshing = false; }
-            ToolTip.SetTip(combo, $"{storePath} : {FriendlyTypeName(declaredType)} — Select, Clear, or drop a Stuffs row");
+            var source = DataAssetStore.IsAssetType(declaredType) ? "a project asset file" : "a Stuffs row";
+            ToolTip.SetTip(combo, $"{storePath} : {FriendlyTypeName(declaredType)} — Select, Clear, or drop {source}");
         }
         combo.SelectionChanged += (_, _) =>
         {
@@ -251,6 +268,22 @@ public partial class MainWindow
                 return;
             assign(null);
         };
+        combo.AddHandler(DragDrop.DragOverEvent, (_, e) =>
+        {
+            if (!e.DataTransfer.Contains(DataAssetIdFormat)) return;
+            e.Handled = true;
+            e.DragEffects = !IsPlaying && DroppedDataAsset(e, declaredType) is not null
+                ? DragDropEffects.Copy : DragDropEffects.None;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        combo.AddHandler(DragDrop.DropEvent, (_, e) =>
+        {
+            if (!e.DataTransfer.Contains(DataAssetIdFormat)) return;
+            e.Handled = true;
+            e.DragEffects = DragDropEffects.None;
+            if (IsPlaying || DroppedDataAsset(e, declaredType) is not { } asset) return;
+            assign(asset);
+            e.DragEffects = DragDropEffects.Copy;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         combo.AddHandler(DragDrop.DragOverEvent, (sender, e) =>
         {
             if (!e.DataTransfer.Contains(SceneObjectIdFormat))

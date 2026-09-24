@@ -114,12 +114,13 @@ public partial class MainWindow
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
         // Use the editing factory for constructor injection with a service set separate from Play.
-        var restored = _sceneSerializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
+        var serializer = new SceneSerializer(_components.Registry, BuildProjectAssetStore(_components.Registry));
+        var restored = serializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
         // This first scene only validates the file; it is never adopted by the editor.
         ComponentAssets.DisposeComponents(restored.Objects.SelectMany(item => item.Components));
         if (!await ConfirmUnsavedChanges()) return;
         // Saving the old scene during confirmation may overwrite the file just selected.
-        restored = _sceneSerializer.Deserialize(File.ReadAllText(path), out var membersChanged, EditSession.Factory);
+        restored = serializer.Deserialize(File.ReadAllText(path), out var membersChanged, EditSession.Factory);
         SetCurrentScene(restored, path);
         if (membersChanged) MarkSceneChanged();
         SetFileStatus($"Loaded: {path}");

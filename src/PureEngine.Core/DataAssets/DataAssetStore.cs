@@ -1,3 +1,6 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
 namespace PureEngine.Core;
 
 /// <summary>
@@ -8,9 +11,76 @@ namespace PureEngine.Core;
 public sealed class DataAssetStore
 {
     private readonly Dictionary<Guid, (Type Type, string TypeId, object Instance)> _entries = [];
+    private sealed record Identity(Guid Id);
+    private readonly ConditionalWeakTable<object, Identity> _identities = [];
+    private readonly Dictionary<Guid, string> _paths = [];
 
-    private DataAssetStore()
+    public DataAssetStore()
     {
+    }
+
+    public static bool IsAssetType(Type type) =>
+        type.IsDefined(typeof(DataAssetAttribute), inherit: false);
+
+    public bool TryGetId(object instance, out Guid id)
+    {
+        if (_identities.TryGetValue(instance, out var identity))
+        {
+            id = identity.Id;
+            return true;
+        }
+        id = Guid.Empty;
+        return false;
+    }
+
+    public string DisplayName(Guid id) => _paths.GetValueOrDefault(id) ?? id.ToString("D");
+
+    /// <summary>Refreshes an editing snapshot without changing live root identities. Never call during Play.</summary>
+    public void Refresh(DataAssetStore source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (ReferenceEquals(source, this)) return;
+        foreach (var id in _entries.Keys.Except(source._entries.Keys).ToArray()) _entries.Remove(id);
+        _paths.Clear();
+        foreach (var (id, path) in source._paths) _paths.Add(id, path);
+        foreach (var (id, entry) in source._entries)
+        {
+            var instance = entry.Instance;
+            if (_entries.TryGetValue(id, out var previous) && previous.Type == entry.Type)
+            {
+                instance = previous.Instance;
+                foreach (var member in ComponentSchema.GetInspectorMembers(entry.Type))
+                {
+                    if (member is FieldInfo field) field.SetValue(instance, field.GetValue(entry.Instance));
+                    else if (member is PropertyInfo property) property.SetValue(instance, property.GetValue(entry.Instance));
+                }
+            }
+            _entries[id] = (entry.Type, entry.TypeId, instance);
+            _identities.GetValue(instance, _ => new Identity(id));
+        }
+    }
+
+    public object? Find(Guid id, Type type)
+    {
+        if (!_entries.TryGetValue(id, out var entry)) return null;
+        if (!type.IsInstanceOfType(entry.Instance))
+            throw new InvalidDataException($"Asset {id:D} is not a {type.FullName}.");
+        return entry.Instance;
+    }
+
+    /// <summary>Copies assets for an independent scene/run, retaining shared identity within the copy.</summary>
+    public DataAssetStore Clone(ComponentRegistry registry)
+    {
+        var copy = new DataAssetStore();
+        var serializer = new DataAssetSerializer(registry);
+        foreach (var (id, entry) in _entries)
+        {
+            var (instance, _) = serializer.Deserialize(serializer.Serialize(entry.Instance, id));
+            copy._entries.Add(id, (instance.GetType(), entry.TypeId, instance));
+            copy._identities.Add(instance, new Identity(id));
+            copy._paths.Add(id, DisplayName(id));
+        }
+        return copy;
     }
 
     /// <summary>Asset IDs in this store.</summary>
@@ -45,6 +115,7 @@ public sealed class DataAssetStore
             return store;
         }
         var serializer = new DataAssetSerializer(registry);
+        var duplicated = new HashSet<Guid>();
         foreach (var file in files)
         {
             var relative = Path.GetRelativePath(rootDirectory, file).Replace('\\', '/');
@@ -73,11 +144,16 @@ public sealed class DataAssetStore
             }
             if (membersChanged)
                 problems.Add($"{relative}: fields changed; re-save to clean up old names.");
-            if (!store._entries.TryAdd(id, (instance.GetType(), typeId, instance)))
+            if (duplicated.Contains(id) || !store._entries.TryAdd(id, (instance.GetType(), typeId, instance)))
             {
-                problems.Add($"{relative}: duplicate data asset ID {id:D}; keeping the first file.");
+                duplicated.Add(id);
+                store._entries.Remove(id);
+                store._paths.Remove(id);
+                problems.Add($"{relative}: duplicate data asset ID {id:D}; excluded from resolution.");
                 continue;
             }
+            store._identities.Add(instance, new Identity(id));
+            store._paths.Add(id, relative);
         }
         diagnostics = problems;
         return store;

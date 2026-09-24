@@ -3,8 +3,8 @@ using System.Reflection;
 namespace PureEngine.Core;
 
 /// <summary>
-/// SceneObject・登録Componentへの直接参照の型区分。保存はID、実行は解決済みの通常C#参照を使う。
-/// ObjectRef案は旧案とし、こちらの区分を正本とする。
+/// Classifies direct scene, component, and data asset references.
+/// Persistence stores IDs; running code uses resolved C# instances.
 /// </summary>
 public static class SceneReferenceTypes
 {
@@ -30,6 +30,8 @@ public static class SceneReferenceTypes
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(registry);
         if (IsSceneObjectReference(type))
+            return true;
+        if (DataAssetStore.IsAssetType(type))
             return true;
         return IsComponentReference(type, registry);
     }
@@ -86,7 +88,7 @@ public static class SceneReferenceTypes
         return type.GetConstructor(Type.EmptyTypes) is not null;
     }
 
-    /// <summary>Inspector・保存対象として扱えるか。値型・参照・参照を含む入れ子のいずれか。</summary>
+    /// <summary>Accepts values, references, and nested values containing references for editing and persistence.</summary>
     public static bool IsSupportedInspectorType(Type type, ComponentRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(type);

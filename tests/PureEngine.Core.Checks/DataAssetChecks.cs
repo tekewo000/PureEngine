@@ -105,12 +105,11 @@ static class DataAssetChecks
             File.WriteAllText(Path.Combine(root, "Broken.pure.asset.yaml"), "not: yaml: :");
             File.WriteAllText(Path.Combine(root, "Notes.txt"), "ignored");
             var store = DataAssetStore.ScanFolder(root, registry, out var diagnostics);
-            if (store.Ids.Count != 2 || diagnostics.Count != 2)
+            if (store.Ids.Count != 1 || diagnostics.Count != 2)
                 throw new InvalidOperationException(
-                    $"Store must load 2 assets with 2 diagnostics, got {store.Ids.Count} and {diagnostics.Count}.");
-            // First file wins on duplicates; scan order is ordinal by path.
-            if (store.Get<PotionFixture>(firstId).Power != 9)
-                throw new InvalidOperationException("Duplicate IDs must keep the first file.");
+                    $"Store must load 1 asset with 2 diagnostics, got {store.Ids.Count} and {diagnostics.Count}.");
+            if (store.TryGet<object>(firstId, out _))
+                throw new InvalidOperationException("Duplicate IDs must not resolve.");
             try
             {
                 _ = store.Get<WeaponFixture>(secondId);
@@ -121,7 +120,7 @@ static class DataAssetChecks
                 throw new InvalidOperationException("TryGet failed for a stored asset.");
             if (store.TryGet(Guid.NewGuid(), out PotionFixture? _))
                 throw new InvalidOperationException("TryGet accepted a missing ID.");
-            if (store.GetAll<WeaponFixture>().Count != 0 || store.GetAll<PotionFixture>().Count != 2)
+            if (store.GetAll<WeaponFixture>().Count != 0 || store.GetAll<PotionFixture>().Count != 1)
                 throw new InvalidOperationException("GetAll returned the wrong assets.");
             var missing = DataAssetStore.ScanFolder(Path.Combine(root, "Absent"), registry, out var empty);
             if (missing.Ids.Count != 0 || empty.Count != 0)

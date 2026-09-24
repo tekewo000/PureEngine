@@ -191,7 +191,22 @@ public class WeaponData
 - 値の規則はシーンと同じで、`[Inspector]` の付いた対応型だけを保存します。`SceneObject` やComponentへの参照は保存できません。
 - メニューに使えない型がある場合は理由を表示します。同じメニュー場所の重複も報告します。
 - Project欄でアセットを選ぶとInspectorに読み込み、そのまま編集して **Save Data Asset**（Ctrl+S）で保存します。編集中はファイル名に `*` が付きます。シーンとは別に未保存を管理し、切り替え・終了時は保存確認が出ます。
-- ゲーム実行中は `DataAssetStore` で読みます。コンストラクタで受け取ってIDや型で引きます。
+- Componentの `[Inspector]` メンバーにはアセットのクラス型をそのまま指定できます。ドロップダウンから選ぶか、Project欄の `.pure.asset.yaml` ファイルを欄へD&Dしてください。`get; init;` と `get; set;` の両方に対応します。押している間はInspectorを切り替えず、ドラッグせず離したときだけアセット編集を開きます。
+
+```csharp
+public class Fighter
+{
+    [Inspector] public WeaponData? Weapon { get; init; }
+
+    [Start] public void Start()
+    {
+        if (Weapon is { } weapon) Log.Info($"Attack: {weapon.Attack}");
+    }
+}
+```
+
+- 保存するのはIDだけです。ファイルを移動・改名しても同じIDを読み込みます。欠落時は `null` とMissing表示になり、Clearしない限り保存にIDを残します。ファイルを戻してシーンを開き直すと復旧します。`DataAssetRef<T>` や明示的なResolveは不要です。
+- 一括取得が必要な場合は、従来どおり `DataAssetStore` をコンストラクタで受け取ってIDや型で引けます。
 
 ```csharp
 public class Shop

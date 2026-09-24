@@ -94,7 +94,7 @@ public partial class MainWindow : Window
         SceneSurface.AddHandler(PointerPressedEvent, OnScenePointerPressed, RoutingStrategies.Tunnel);
         ProjectFiles.AddHandler(PointerPressedEvent, OnAssetPressed, RoutingStrategies.Tunnel);
         ProjectFiles.AddHandler(PointerMovedEvent, OnAssetMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
-        ProjectFiles.AddHandler(PointerReleasedEvent, (_, _) => _assetPress = null,
+        ProjectFiles.AddHandler(PointerReleasedEvent, OnAssetReleased,
             RoutingStrategies.Tunnel, handledEventsToo: true);
         foreach (var surface in new Control[] { SceneSurface, InspectorPane })
         {
@@ -121,11 +121,18 @@ public partial class MainWindow : Window
     {
         _assetPress = null;
         _dragTypes = null;
+        _pressedDataAsset = null;
         if (!e.GetCurrentPoint(ProjectFiles).Properties.IsLeftButtonPressed) return;
         var entry = ((e.Source as Visual)?.GetSelfAndVisualAncestors()
             .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as ProjectExplorerEntry);
         if (entry is null) return;
-        if (entry.ComponentType is not null)
+        if (entry.Kind == ProjectExplorerKind.DataAsset)
+        {
+            if (IsPlaying) return;
+            _pressedDataAsset = entry;
+            e.Handled = true; // Select only on release, preserving the Inspector during a drag.
+        }
+        else if (entry.ComponentType is not null)
         {
             _dragTypes = [entry.ComponentType];
         }
@@ -155,6 +162,20 @@ public partial class MainWindow : Window
         var delta = e.GetPosition(ProjectFiles) - _assetPressPosition;
         if (Math.Abs(delta.X) < 4 && Math.Abs(delta.Y) < 4) return;
         var press = _assetPress;
+        if (_pressedDataAsset is { } entry)
+        {
+            _pressedDataAsset = null;
+            _assetPress = null;
+            RefreshReferenceAssets();
+            var assets = _editScene.Current.DataAssets;
+            var relative = Path.GetRelativePath(_project!.RootDirectory, entry.FullPath!).Replace('\\', '/');
+            var id = assets.Ids.FirstOrDefault(id => assets.DisplayName(id) == relative);
+            if (id == Guid.Empty) return;
+            using var transfer = new DataTransfer();
+            transfer.Add(DataTransferItem.Create(DataAssetIdFormat, id.ToString("D")));
+            await DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Copy);
+            return;
+        }
         var types = _dragTypes!;
         _assetPress = null;
         _dragTypes = null;

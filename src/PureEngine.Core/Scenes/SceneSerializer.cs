@@ -7,7 +7,7 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace PureEngine.Core;
 
 /// <summary>Version 3 saves component IDs and ID references. Version 1/2 remain readable with migration protection. Restoring never mutates the caller's current scene.</summary>
-public sealed class SceneSerializer(ComponentRegistry registry)
+public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? assets = null)
 {
     private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = [];
     private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
@@ -21,7 +21,9 @@ public sealed class SceneSerializer(ComponentRegistry registry)
     public string Serialize(Scene scene) => _writer.Value.Serialize(Capture(scene, forSave: true));
 
     /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
-    public Scene Clone(Scene scene, Func<Type, object>? factory = null) => Restore(Capture(scene, forSave: false), factory, out _);
+    public Scene Clone(Scene scene, Func<Type, object>? factory = null) =>
+        new SceneSerializer(registry, assets ?? scene.DataAssets.Clone(registry))
+            .Restore(Capture(scene, forSave: false), factory, out _);
 
     private SceneDocument Capture(Scene scene, bool forSave)
     {
@@ -101,7 +103,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             document.Objects.Add(saved);
         }
         if (scene.References.HasLegacy)
-            throw new InvalidDataException("旧インライン値が残っています。再割り当てまたは明示破棄するまで保存・Cloneできません。");
+            throw new InvalidDataException("Legacy inline values must be reassigned or explicitly discarded before saving or cloning.");
         return document;
     }
 
@@ -130,7 +132,7 @@ public sealed class SceneSerializer(ComponentRegistry registry)
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
 
-        var scene = new Scene();
+        var scene = new Scene { DataAssets = assets ?? new DataAssetStore() };
         var created = new List<object>();
         try
         {

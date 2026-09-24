@@ -4,8 +4,8 @@ using System.Reflection;
 namespace PureEngine.Core;
 
 /// <summary>
-/// 参照値の保存・復元Codec。単体・配列／List／辞書・埋め込み値内の参照を扱う。
-/// 定常実行では使わず、準備・保存・Cloneの境界でのみ使う。ID検索は呼び出し側の索引で行い、都度の全走査を避ける。
+/// Persists references in scalar slots, arrays, lists, dictionaries, and nested values.
+/// Runs only at preparation, save, and clone boundaries, using caller-owned identity indexes.
 /// </summary>
 internal static class SceneReferenceCodec
 {
@@ -53,7 +53,7 @@ internal static class SceneReferenceCodec
         if (scene.References.TryGetLegacy(ownerId, path, out _))
         {
             if (forSave)
-                throw new InvalidDataException($"{path}: 旧インライン値が残っています。再割り当てまたは明示破棄するまで保存できません。");
+                throw new InvalidDataException($"{path}: legacy inline values must be reassigned or explicitly discarded before saving.");
             return null;
         }
         return null;
@@ -65,6 +65,12 @@ internal static class SceneReferenceCodec
         Dictionary<object, Guid> componentToId,
         Scene scene)
     {
+        if (DataAssetStore.IsAssetType(declaredType))
+        {
+            if (!declaredType.IsInstanceOfType(value) || !scene.DataAssets.TryGetId(value, out var assetId))
+                throw new InvalidDataException("Asset reference must belong to the scene's asset snapshot.");
+            return assetId;
+        }
         if (declaredType == typeof(SceneObject))
         {
             if (value is not SceneObject target)
@@ -250,6 +256,12 @@ internal static class SceneReferenceCodec
         {
             if (targetId == Guid.Empty)
                 throw new InvalidDataException($"{displayPath}: reference ID must not be empty.");
+            if (DataAssetStore.IsAssetType(declaredType))
+            {
+                var asset = scene.DataAssets.Find(targetId, declaredType);
+                if (asset is null) scene.References.SetMissing(ownerId, path, targetId);
+                return asset;
+            }
             if (declaredType == typeof(SceneObject))
             {
                 if (objectsById.TryGetValue(targetId, out var targetObject))
