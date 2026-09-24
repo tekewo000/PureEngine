@@ -364,6 +364,8 @@ Button実装に先立ち、Imageと将来のSpriteRendererの共通基底とし�
 
 ### Stuffsの親子ツリーとドラッグ＆ドロップ（2026-09-23）
 
+Inspector参照D&Dの選択競合を修正。Stuffs行の左クリック選択をreleaseまで遅らせ、ドラッグ開始時はInspector対象を維持する。ドラッグ元はMove（階層操作）とCopy（参照代入）の両方を許可する。`HierarchySelectionChecks`でHeadlessのMouseDown／MouseMove／MouseUpを通した参照代入と選択維持、通常クリックでの選択を確認し、`./tools/code-quality.ps1 -Check`を通過した。今回の修正の実ウィンドウ操作確認は未実施。
+
 Stuffsをフラットな一覧から親子のツリー表示へ変え、行のドラッグ＆ドロップで子付け・前後並べ替え・ルート化ができるようにした。Coreの `Parent`／`Children`／`SetParent`／`SetSiblingIndex` はそのまま使い、ルート同士の並べ替えだけ `Scene.SetRootSiblingIndex` を追加した。Editor側に `HierarchyNode`＋`HierarchyDrop` を置き、D&D実行本体をUI非依存で検証できるようにした。Single選択・Undoなしは維持し、保存形式（version 2）の変更はなし。namespaceは変更していない。
 
 - ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェック通過。

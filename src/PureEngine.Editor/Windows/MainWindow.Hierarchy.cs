@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -152,8 +153,13 @@ public partial class MainWindow
         var point = e.GetCurrentPoint(SceneObjects);
         if (!point.Properties.IsLeftButtonPressed) return;
         if (IsPlaying) return;
-        var node = FindHierarchyNode(e.Source as Visual);
+        var source = e.Source as Visual;
+        if (source?.GetSelfAndVisualAncestors().OfType<ToggleButton>().Any() == true) return;
+        var node = FindHierarchyNode(source);
         if (node is null) return;
+        // Suppress the TreeView press selection so a drag keeps the Inspector on its current target.
+        // A press without a drag completes the click on release.
+        e.Handled = true;
         _hierarchyPress = e;
         _hierarchyPressPosition = e.GetPosition(SceneObjects);
         _hierarchyDragId = node.Ref.Id;
@@ -176,14 +182,21 @@ public partial class MainWindow
         _hierarchyDragId = null;
         using var data = new DataTransfer();
         data.Add(DataTransferItem.Create(SceneObjectIdFormat, draggedId.ToString("D")));
-        try { await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Move); }
+        // Hierarchy drops move objects; Inspector reference drops copy their reference.
+        try { await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Move | DragDropEffects.Copy); }
         finally { ClearHierarchyDropIndicator(); }
     }
 
     private void OnHierarchyPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        if (e.InitialPressMouseButton is not MouseButton.Left) return;
+        var dragId = _hierarchyDragId;
         _hierarchyPress = null;
         _hierarchyDragId = null;
+        // A drag clears the press state when it starts, so a remaining ID means a click.
+        if (dragId is not { } id) return;
+        if (FindObject(id) is not { } item) return;
+        SelectSceneObject(item, focus: true);
     }
 
     private static HierarchyNode? FindHierarchyNode(Visual? source) =>

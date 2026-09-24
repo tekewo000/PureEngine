@@ -111,6 +111,7 @@ internal static class Program
             UiImageEditorChecks.Run(editor);
             // Isolated Scene View editors; closed before the unsaved flow so window counts stay intact.
             SceneViewEditorChecks.Run();
+            HierarchySelectionChecks.Run();
             GameButtonChecks.Run();
             // Inspector checks leave unsaved objects; discard them so the following flow starts clean.
             editor.Close();
