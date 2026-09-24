@@ -423,7 +423,7 @@ public partial class MainWindow
         menu.IsEnabled = enabled;
         menu.Items.Clear();
         if (!enabled) return;
-        var descriptors = DataAssetDescriptor.DescribeAll(_components.Registry, out var diagnostics);
+        var descriptors = DataAssetDescriptor.DescribeAll(_components.Registry, out var diagnostics, _components.DataAssetTypes);
         foreach (var problem in diagnostics)
             menu.Items.Add(new MenuItem { Header = $"Invalid: {problem}", IsEnabled = false });
         if (descriptors.Count == 0)
@@ -448,7 +448,11 @@ public partial class MainWindow
                 }
                 parent = folder;
             }
-            var leaf = new MenuItem { Header = parts[^1], Tag = descriptor.Type };
+            var leaf = new MenuItem
+            {
+                Header = parts[^1],
+                Tag = (descriptor.TypeId, ReferenceEquals(menu, TreeCreateDataAssetMenu)),
+            };
             leaf.Click += OnExplorerCreateDataAsset;
             parent.Items.Add(leaf);
         }
@@ -457,16 +461,18 @@ public partial class MainWindow
     /// <summary>Creates a data asset file of the menu-selected type in the target folder. Leaves the scene being edited untouched.</summary>
     private async void OnExplorerCreateDataAsset(object? sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem { Tag: Type type }) return;
+        if (sender is not MenuItem { Tag: ValueTuple<string, bool> selection }) return;
         await RunFileOperation(async () =>
         {
-            if (_project is null) return;
+            if (_project is null || RejectWhenPlaying("Create Data Asset")) return;
+            var type = _components.Registry.GetType(selection.Item1);
             if (!DataAssetDescriptor.TryCreate(type, _components.Registry, out var descriptor, out var error) || descriptor is null)
             {
                 SetFileStatus(error ?? $"{type.FullName}: invalid data asset type.", true);
                 return;
             }
             var folder = ExplorerTargetFolder("");
+            if (selection.Item2) ExplorerSelectionIsFolder(out folder, out _);
             var name = _project.NextDataAssetName(folder, descriptor.DisplayName);
             var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
             _project.ValidateDataAssetPath(path);

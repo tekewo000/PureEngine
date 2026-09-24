@@ -44,6 +44,13 @@ public sealed record DataAssetDescriptor(Type Type, string TypeId, string MenuPa
             error = $"{type.FullName}: every [Inspector] member must be a supported value type without scene references.";
             return false;
         }
+        foreach (var member in ComponentSchema.GetInspectorMembers(type))
+        {
+            var memberType = member is FieldInfo field ? field.FieldType : ((PropertyInfo)member).PropertyType;
+            if (!SceneReferenceTypes.ContainsReference(memberType, registry)) continue;
+            error = $"{type.FullName}.{member.Name}: scene references cannot be stored in data assets.";
+            return false;
+        }
         if (!TryNormalizeMenuPath(attribute.MenuPath, type.Name, out var menuPath, out var displayName, out var menuError))
         {
             error = $"{type.FullName}: {menuError}";
@@ -64,13 +71,14 @@ public sealed record DataAssetDescriptor(Type Type, string TypeId, string MenuPa
     }
 
     /// <summary>Lists descriptors for registered data asset types. Unusable types are reported as diagnostics instead of throwing.</summary>
-    public static IReadOnlyList<DataAssetDescriptor> DescribeAll(ComponentRegistry registry, out IReadOnlyList<string> diagnostics)
+    public static IReadOnlyList<DataAssetDescriptor> DescribeAll(ComponentRegistry registry, out IReadOnlyList<string> diagnostics,
+        IEnumerable<Type>? declaredTypes = null)
     {
         ArgumentNullException.ThrowIfNull(registry);
         List<DataAssetDescriptor> found = [];
         List<string> problems = [];
         var seenMenus = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var type in registry.Types.OrderBy(t => t.FullName, StringComparer.Ordinal))
+        foreach (var type in registry.Types.Concat(declaredTypes ?? []).Distinct().OrderBy(t => t.FullName, StringComparer.Ordinal))
         {
             if (type.GetCustomAttribute<DataAssetAttribute>(inherit: false) is null) continue;
             if (!TryCreate(type, registry, out var descriptor, out var error) || descriptor is null)
@@ -92,7 +100,7 @@ public sealed record DataAssetDescriptor(Type Type, string TypeId, string MenuPa
     private static bool IsAssetShape(Type type)
     {
         if (!type.IsClass || type.IsAbstract) return false;
-        if (type.ContainsGenericParameters || type.IsGenericTypeDefinition) return false;
+        if (type.ContainsGenericParameters || type.IsGenericType) return false;
         if (typeof(Delegate).IsAssignableFrom(type)) return false;
         if (type.Name.Contains('<', StringComparison.Ordinal)) return false;
         if (!type.IsVisible) return false;

@@ -2,7 +2,7 @@ using PureEngine.Core;
 
 namespace PureEngine.Editor;
 
-/// <summary>Creates and reads data asset files. Writes atomically through the shared scene file writer.</summary>
+/// <summary>Creates and reads data asset files. Publishes complete files without replacing existing assets.</summary>
 public static class DataAssetFile
 {
     /// <summary>Creates a default asset of the given type and writes it to the path. Returns the new asset ID.</summary>
@@ -14,7 +14,18 @@ public static class DataAssetFile
         var serializer = new DataAssetSerializer(registry);
         var instance = serializer.CreateInstance(type);
         var id = Guid.NewGuid();
-        SceneFile.Write(Path.GetFullPath(path), serializer.Serialize(instance, id));
+        var yaml = serializer.Serialize(instance, id);
+        path = Path.GetFullPath(path);
+        var temporary = Path.Combine(Path.GetDirectoryName(path)!, $".{Guid.NewGuid():N}.tmp");
+        try
+        {
+            SceneFile.Write(temporary, yaml);
+            File.Move(temporary, path);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
         return id;
     }
 

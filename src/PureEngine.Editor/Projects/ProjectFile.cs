@@ -182,7 +182,7 @@ public sealed class ProjectFile
             .Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
         if (string.IsNullOrWhiteSpace(clean)) clean = "DataAsset";
         var name = $"{clean}.pure.asset.yaml";
-        for (var number = 2; File.Exists(Path.Combine(directory, name)); number++)
+        for (var number = 2; File.Exists(Path.Combine(directory, name)) || Directory.Exists(Path.Combine(directory, name)); number++)
             name = $"{clean}{number}.pure.asset.yaml";
         return name;
     }

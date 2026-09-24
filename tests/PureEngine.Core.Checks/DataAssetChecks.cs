@@ -23,6 +23,8 @@ static class DataAssetChecks
         registry.Register<PotionFixture>("user.potion");
         registry.Register<RefFixture>("user.ref");
         registry.Register<LegacyNameFixture>("user.legacy");
+        registry.Register<BadMenuFixture>("user.bad-menu");
+        registry.Register<UnsupportedFixture>("user.unsupported");
 
         Check(DataAssetDescriptor.TryCreate(typeof(WeaponFixture), registry, out var weapon, out _)
             && weapon is { MenuPath: "WeaponFixture", DisplayName: "WeaponFixture", TypeId: "user.weapon" },
@@ -44,7 +46,8 @@ static class DataAssetChecks
 
         registry.Register<AnotherPotionFixture>("user.potion2");
         var listed = DataAssetDescriptor.DescribeAll(registry, out var diagnostics);
-        Check(listed.Count == 4 && diagnostics.Any(text => text.Contains("duplicate")),
+        Check(listed.Count == 3 && diagnostics.Any(text => text.Contains("duplicate"))
+            && diagnostics.Any(text => text.Contains("scene references")),
             "Duplicate data asset menus must keep the first type and report the clash.");
 
         var serializer = new DataAssetSerializer(registry);
@@ -152,14 +155,23 @@ static class DataAssetChecks
                 {
                     public int Value { get; set; }
                 }
+                [DataAsset]
+                public abstract class InvalidAsset { }
+                [DataAsset]
+                internal class HiddenAsset { }
                 """);
             var compiled = UserCodeCompiler.CompileFiles([file]);
             if (!compiled.Success)
                 throw new InvalidOperationException("Data asset fixture failed to compile: "
                     + string.Join("; ", compiled.Diagnostics.Select(d => d.Message)));
             if (compiled.AttachableTypes.Count != 2
-                || compiled.DataAssetTypes.SingleOrDefault()?.Name != "LootData")
+                || compiled.DataAssetTypes.Count != 3)
                 throw new InvalidOperationException("Only [DataAsset] types must be reported as data assets.");
+            using var owner = new ProjectComponents();
+            owner.Adopt(compiled);
+            var descriptors = DataAssetDescriptor.DescribeAll(owner.Registry, out var diagnostics, owner.DataAssetTypes);
+            if (descriptors.Count != 1 || diagnostics.Count != 2)
+                throw new InvalidOperationException("Invalid declarations must be diagnosed even when they cannot be registered.");
         }
         finally { Directory.Delete(root, recursive: true); }
     }
@@ -180,6 +192,18 @@ static class DataAssetChecks
             var id = DataAssetFile.Create(path, typeof(WeaponFixture), registry);
             var second = project.NextDataAssetName("", "WeaponFixture");
             if (second == name) throw new InvalidOperationException("Data asset names must not collide.");
+            Directory.CreateDirectory(Path.Combine(project.RootDirectory, second));
+            if (project.NextDataAssetName("", "WeaponFixture") == second)
+                throw new InvalidOperationException("Data asset names must avoid directories too.");
+            var original = File.ReadAllText(path);
+            try
+            {
+                DataAssetFile.Create(path, typeof(WeaponFixture), registry);
+                throw new InvalidOperationException("Creation must not replace an existing asset.");
+            }
+            catch (IOException) { }
+            if (File.ReadAllText(path) != original || Directory.EnumerateFiles(project.RootDirectory, "*.tmp").Any())
+                throw new InvalidOperationException("Rejected creation must preserve the asset and remove staging files.");
             var (instance, loadedId, typeId) = DataAssetFile.Load(path, registry);
             if (loadedId != id || typeId != "user.weapon" || instance.GetType() != typeof(WeaponFixture))
                 throw new InvalidOperationException("Data asset file identity did not survive.");
@@ -190,7 +214,7 @@ static class DataAssetChecks
             }
             catch (InvalidDataException) { }
         }
-        finally { Directory.Delete(Path.Combine(root, "AssetGame"), recursive: true); }
+        finally { Directory.Delete(root, recursive: true); }
     }
 }
 

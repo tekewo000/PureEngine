@@ -30,7 +30,7 @@ public sealed class UserCodeCompileResult
     internal AssemblyLoadContext? LoadContext { get; set; }
     /// <summary>Attachable types. Empty on failure.</summary>
     public IReadOnlyList<Type> AttachableTypes { get; internal set; } = [];
-    /// <summary>Subset of attachable types marked with [DataAsset]. Empty on failure.</summary>
+    /// <summary>All directly marked data asset types, including invalid declarations for editor diagnostics. Empty on failure.</summary>
     public IReadOnlyList<Type> DataAssetTypes { get; internal set; } = [];
     /// <summary>Full path to the attachable types in that file. Keeps the folder structure for display and drag-and-drop.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<Type>> FileTypes { get; internal set; }
@@ -291,7 +291,7 @@ public static class UserCodeCompiler
 
         var attachable = allTypes.Where(IsAttachable).OrderBy(t => t.FullName, StringComparer.Ordinal).ToArray();
         var fileTypes = BuildFileMap(compilation, attachable);
-        var dataAssets = attachable
+        var dataAssets = allTypes
             .Where(type => type.IsDefined(typeof(DataAssetAttribute), inherit: false))
             .ToArray();
 

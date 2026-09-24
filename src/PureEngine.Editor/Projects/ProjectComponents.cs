@@ -35,7 +35,7 @@ public sealed class ProjectComponents : IDisposable
         get { lock (_sync) return _userCode?.AttachableTypes ?? []; }
     }
 
-    /// <summary>Subset of custom types marked with [DataAsset]. Used for the Create Data Asset menu. Empty on failure.</summary>
+    /// <summary>Directly marked custom types, including invalid declarations for Create Data Asset diagnostics. Empty on failure.</summary>
     public IReadOnlyList<Type> DataAssetTypes
     {
         get { lock (_sync) return _userCode?.DataAssetTypes ?? []; }
