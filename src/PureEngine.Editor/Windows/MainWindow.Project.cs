@@ -23,6 +23,7 @@ public partial class MainWindow
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
+        if (!await ConfirmCloseDataAsset()) return;
         if (!await ConfirmUnsavedChanges()) return;
         SetCurrentScene(new Scene(), null);
         MarkSceneChanged();

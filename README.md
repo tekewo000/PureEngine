@@ -190,7 +190,21 @@ public class WeaponData
 - 作成先はメニューを開いたフォルダで、ファイルは `.pure.asset.yaml` です。ID・型・値の版・データ本体を持ち、アセットIDやパスはクラスに書きません。
 - 値の規則はシーンと同じで、`[Inspector]` の付いた対応型だけを保存します。`SceneObject` やComponentへの参照は保存できません。
 - メニューに使えない型がある場合は理由を表示します。同じメニュー場所の重複も報告します。
-- Inspectorでの編集とゲーム実行中の読み込みは未対応です。仕様は[設計書のData Assets節](docs/EngineArchitecture.md#data-assets)を参照してください。
+- Project欄でアセットを選ぶとInspectorに読み込み、そのまま編集して **Save Data Asset**（Ctrl+S）で保存します。編集中はファイル名に `*` が付きます。シーンとは別に未保存を管理し、切り替え・終了時は保存確認が出ます。
+- ゲーム実行中は `DataAssetStore` で読みます。コンストラクタで受け取ってIDや型で引きます。
+
+```csharp
+public class Shop
+{
+    private readonly DataAssetStore _assets;
+    public Shop(DataAssetStore assets) => _assets = assets;
+
+    [Start] public void Start() => Log.Info($"Shop has {_assets.GetAll<WeaponData>().Count} weapons.");
+}
+```
+
+- ストアはスナップショットです。プロジェクトを開く・C#を反映する・Playするたびに作り直し、実行中の変更はファイルや他の実行に漏れません。仕様は[設計書のData Assets節](docs/EngineArchitecture.md#data-assets)を参照してください。
+- Playで使うのは保存済みの値です。Inspectorの変更をゲームへ反映する前にアセットを保存してください。ストア内のインスタンス自体は通常の可変classで、同じ実行内の読み込み先では共有されます。
 
 ## ZedなどでC#を編集する
 

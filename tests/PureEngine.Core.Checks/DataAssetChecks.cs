@@ -82,7 +82,52 @@ static class DataAssetChecks
 
         CheckCompilerDetection();
         CheckFileRoundTrip(registry);
-        Console.WriteLine("PASS: data asset descriptors, menus, YAML round-trip, and file creation.");
+        CheckStore(registry);
+        Console.WriteLine("PASS: data asset descriptors, menus, YAML round-trip, file creation, and store lookup.");
+    }
+
+    private static void CheckStore(ComponentRegistry registry)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "DataAssetStore-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var serializer = new DataAssetSerializer(registry);
+            var firstId = Guid.NewGuid();
+            File.WriteAllText(Path.Combine(root, "Sword.pure.asset.yaml"),
+                serializer.Serialize(new WeaponFixture { Name = "Sword", Attack = 10 }, firstId));
+            var secondId = Guid.NewGuid();
+            Directory.CreateDirectory(Path.Combine(root, "Nested"));
+            File.WriteAllText(Path.Combine(root, "Nested", "Potion.pure.asset.yaml"),
+                serializer.Serialize(new PotionFixture { Power = 3 }, secondId));
+            File.WriteAllText(Path.Combine(root, "Duplicate.pure.asset.yaml"),
+                serializer.Serialize(new PotionFixture { Power = 9 }, firstId));
+            File.WriteAllText(Path.Combine(root, "Broken.pure.asset.yaml"), "not: yaml: :");
+            File.WriteAllText(Path.Combine(root, "Notes.txt"), "ignored");
+            var store = DataAssetStore.ScanFolder(root, registry, out var diagnostics);
+            if (store.Ids.Count != 2 || diagnostics.Count != 2)
+                throw new InvalidOperationException(
+                    $"Store must load 2 assets with 2 diagnostics, got {store.Ids.Count} and {diagnostics.Count}.");
+            // First file wins on duplicates; scan order is ordinal by path.
+            if (store.Get<PotionFixture>(firstId).Power != 9)
+                throw new InvalidOperationException("Duplicate IDs must keep the first file.");
+            try
+            {
+                _ = store.Get<WeaponFixture>(secondId);
+                throw new InvalidOperationException("Type mismatch accepted.");
+            }
+            catch (InvalidDataException) { }
+            if (!store.TryGet(secondId, out PotionFixture? potion) || potion?.Power != 3)
+                throw new InvalidOperationException("TryGet failed for a stored asset.");
+            if (store.TryGet(Guid.NewGuid(), out PotionFixture? _))
+                throw new InvalidOperationException("TryGet accepted a missing ID.");
+            if (store.GetAll<WeaponFixture>().Count != 0 || store.GetAll<PotionFixture>().Count != 2)
+                throw new InvalidOperationException("GetAll returned the wrong assets.");
+            var missing = DataAssetStore.ScanFolder(Path.Combine(root, "Absent"), registry, out var empty);
+            if (missing.Ids.Count != 0 || empty.Count != 0)
+                throw new InvalidOperationException("Missing folders must scan empty.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     private static void DropNullDescriptor(Type type, ComponentRegistry registry)

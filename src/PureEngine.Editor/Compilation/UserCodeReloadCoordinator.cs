@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 using PureEngine.Runtime;
 
@@ -9,7 +10,8 @@ public sealed class UserCodeReloadCoordinator
     public bool IsReloading { get; private set; }
 
     // Takes ownership of compiled, whether preparation succeeds or fails.
-    public UserCodeReloadOutcome Apply(EditSceneStore state, ProjectComponents components, UserCodeCompileResult compiled)
+    // extraConfigure registers reload-scoped extras (such as the data asset snapshot) into the new service set.
+    public UserCodeReloadOutcome Apply(EditSceneStore state, ProjectComponents components, UserCodeCompileResult compiled, Action<IServiceCollection>? extraConfigure = null)
     {
         if (IsReloading) throw new InvalidOperationException("Reload cannot be nested.");
         IsReloading = true;
@@ -21,7 +23,11 @@ public sealed class UserCodeReloadCoordinator
         {
             if (!compiled.Success) return new(false, compiled.Diagnostics, null);
             var registry = components.CreateCandidateRegistry(compiled);
-            services = GameSession.Create(GameServices.ForUserCode(compiled));
+            services = GameSession.Create(services =>
+            {
+                GameServices.ForUserCode(compiled)(services);
+                extraConfigure?.Invoke(services);
+            });
             candidate = SceneCodeMigrator.Migrate(state.Current, components.Registry, registry, out var membersChanged, services.Factory);
             var oldCode = components.Exchange(compiled);
             var previous = state.Replace(candidate, state.Path, state.IsDirty || membersChanged);

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 using PureEngine.Runtime;
 
@@ -68,7 +69,12 @@ public sealed class ProjectSession : IDisposable
             var registry = components.CreateCandidateRegistry(compiled);
             _ = project.ListDirectories();
             _ = project.ListFiles("Scenes");
-            services = GameSession.Create(GameServices.ForUserCode(compiled.Success ? compiled : null));
+            var assets = ScanProjectAssets(project, registry);
+            services = GameSession.Create(services =>
+            {
+                GameServices.ForUserCode(compiled.Success ? compiled : null)(services);
+                if (assets is not null) services.AddSingleton(assets);
+            });
             bool membersChanged;
             try
             {
@@ -112,7 +118,12 @@ public sealed class ProjectSession : IDisposable
             var scene = new Scene();
             var project = ProjectFile.Create(parentDirectory, name, new SceneSerializer(components.Registry).Serialize(scene));
             ProjectCodeWorkspace.Ensure(project);
-            services = GameSession.Create(GameServices.ForProject(components));
+            var assets = ScanProjectAssets(project, components.Registry);
+            services = GameSession.Create(services =>
+            {
+                GameServices.ForProject(components)(services);
+                if (assets is not null) services.AddSingleton(assets);
+            });
             return new(project, components, scene, services);
         }
         catch
@@ -120,6 +131,21 @@ public sealed class ProjectSession : IDisposable
             try { services?.Dispose(); }
             finally { components.Dispose(); }
             throw;
+        }
+    }
+
+    private static DataAssetStore? ScanProjectAssets(ProjectFile project, ComponentRegistry registry)
+    {
+        try
+        {
+            var store = DataAssetStore.ScanFolder(project.RootDirectory, registry, out var diagnostics);
+            foreach (var diagnostic in diagnostics) Log.Engine.Warning(diagnostic);
+            return store;
+        }
+        catch (Exception error)
+        {
+            Log.Engine.Error("Cannot scan data assets.", error);
+            return null;
         }
     }
 

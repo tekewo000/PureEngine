@@ -110,6 +110,7 @@ public partial class MainWindow
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
+        if (!await ConfirmCloseDataAsset()) return;
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
         // Use the editing factory for constructor injection with a service set separate from Play.
@@ -152,6 +153,9 @@ public partial class MainWindow
         // Shutdown order: dispose edit-scene components, then edit services, then request code release. Leaves other projects untouched.
         StopUserCodeWatching();
         _playTimer?.Stop();
+        _assetEdit = null;
+        _assetOwned.Clear();
+        DataAssetEditors.Children.Clear();
         var errors = new List<Exception>();
         try { ForceStopPlayForShutdown(); }
         catch (Exception error) { errors.Add(error); }
@@ -227,10 +231,11 @@ public partial class MainWindow
                 return;
             }
         }
-        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty, HasInputErrors)) return;
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty || _assetEdit is { Dirty: true }, HasInputErrors)) return;
         e.Cancel = true;
         await RunFileOperation(async () =>
         {
+            if (!await ConfirmCloseDataAsset()) return;
             if (!await ConfirmUnsavedChanges()) return;
             _allowClose = true;
             Close();
@@ -243,7 +248,10 @@ public partial class MainWindow
         if (e.Key == Key.S)
         {
             e.Handled = true;
-            await RunFileOperation(async () => await SaveSceneAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)));
+            if (_assetEdit is not null && GetSelectedSceneObject() is null)
+                await RunFileOperation(SaveDataAssetAsync);
+            else
+                await RunFileOperation(async () => await SaveSceneAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)));
         }
         else if (e.Key == Key.O)
         {

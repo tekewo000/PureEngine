@@ -294,7 +294,7 @@ public partial class MainWindow
                 if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer))
                 {
                     dictionary[key] = integer;
-                    MarkSceneChanged();
+                    MarkEdited(component);
                     MarkInvalid(box, null, intHint);
                 }
                 else
@@ -308,7 +308,7 @@ public partial class MainWindow
                 if (double.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var real) && double.IsFinite(real))
                 {
                     dictionary[key] = real;
-                    MarkSceneChanged();
+                    MarkEdited(component);
                     MarkInvalid(box, null, hint);
                 }
                 else
@@ -320,7 +320,7 @@ public partial class MainWindow
             if (float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var single) && float.IsFinite(single))
             {
                 dictionary[key] = single;
-                MarkSceneChanged();
+                MarkEdited(component);
                 MarkInvalid(box, null, hint);
             }
             else
@@ -367,7 +367,7 @@ public partial class MainWindow
                 else
                 {
                     dictionary[key] = updated;
-                    MarkSceneChanged();
+                    MarkEdited(component);
                     MarkInvalid(box, null, hint);
                 }
             };
@@ -413,7 +413,7 @@ public partial class MainWindow
                 else
                 {
                     dictionary[key] = updated;
-                    MarkSceneChanged();
+                    MarkEdited(component);
                     MarkInvalid(box, null, hint);
                 }
             };
@@ -444,7 +444,7 @@ public partial class MainWindow
             if (text.Length == 0)
             {
                 dictionary[key] = null;
-                MarkSceneChanged();
+                MarkEdited(component);
                 MarkInvalid(box, null, hint);
                 return;
             }
@@ -454,7 +454,7 @@ public partial class MainWindow
             else
             {
                 dictionary[key] = parsed;
-                MarkSceneChanged();
+                MarkEdited(component);
                 MarkInvalid(box, null, hint);
             }
         };
@@ -498,13 +498,13 @@ public partial class MainWindow
         {
             if (index < 0 || index >= array.Length) return;
             array.SetValue(element, index);
-            MarkSceneChanged();
+            MarkEdited(component);
         }
         else if (value is IList list)
         {
             if (index < 0 || index >= list.Count) return;
             list[index] = element;
-            MarkSceneChanged();
+            MarkEdited(component);
         }
     }
 
@@ -651,7 +651,7 @@ public partial class MainWindow
                     if (IsPlaying) return;
                     if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
                     dictionary[key] = value;
-                    MarkSceneChanged();
+                    MarkEdited(component);
                 });
         var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         combo.Classes.Add("inspectorCombo");
@@ -668,7 +668,7 @@ public partial class MainWindow
             if (combo.SelectedItem is null) return;
             if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
             dictionary[key] = combo.SelectedItem;
-            MarkSceneChanged();
+            MarkEdited(component);
         };
         return combo;
     }
@@ -704,7 +704,7 @@ public partial class MainWindow
                             if (IsPlaying) return;
                             if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
                             dictionary[key] = v;
-                            MarkSceneChanged();
+                            MarkEdited(component);
                         }));
             }
             create.Click += (_, _) =>
@@ -712,7 +712,7 @@ public partial class MainWindow
                 if (IsPlaying) return;
                 if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
                 dictionary[key] = Enum.ToObject(underlying, 0);
-                MarkSceneChanged();
+                MarkEdited(component);
                 refresh();
             };
             clear.Click += (_, _) =>
@@ -720,7 +720,7 @@ public partial class MainWindow
                 if (IsPlaying) return;
                 if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
                 dictionary[key] = null;
-                MarkSceneChanged();
+                MarkEdited(component);
                 refresh();
             };
             refresh();
@@ -748,7 +748,7 @@ public partial class MainWindow
                 dictionary[key] = parsed;
             else
                 return;
-            MarkSceneChanged();
+            MarkEdited(component);
         };
         return combo;
     }

@@ -284,7 +284,7 @@ public partial class MainWindow
         var entry = ProjectFiles.SelectedItem as ProjectExplorerEntry;
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var hasProject = _project is not null;
-        FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene };
+        FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset };
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
         FilesCreateCSharpMenu.IsEnabled = hasProject && !isComponents && !IsPlaying;
@@ -296,6 +296,14 @@ public partial class MainWindow
 
     private async void OnProjectFilesDoubleTapped(object? sender, TappedEventArgs e) => await OpenSelectedExplorerEntry();
     private async void OnExplorerOpen(object? sender, RoutedEventArgs e) => await OpenSelectedExplorerEntry();
+
+    /// <summary>Opens a data asset in the Inspector on selection. Scene files still need a double-click to switch.</summary>
+    private async void OnProjectFilesSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
+        if (entry.Kind != ProjectExplorerKind.DataAsset || entry.FullPath is null) return;
+        await OpenDataAssetForEdit(entry.FullPath);
+    }
 
     private async void OnProjectFilesKeyDown(object? sender, KeyEventArgs e)
     {
@@ -318,6 +326,11 @@ public partial class MainWindow
             _explorerSelectedFile = null;
             SelectExplorerNode(entry.RelativePath);
             RefreshProjectFiles();
+            return;
+        }
+        if (entry.Kind == ProjectExplorerKind.DataAsset && entry.FullPath is not null)
+        {
+            await OpenDataAssetForEdit(entry.FullPath);
             return;
         }
         if (entry.Kind != ProjectExplorerKind.Scene || entry.FullPath is null || _project is null) return;
@@ -535,6 +548,7 @@ public partial class MainWindow
             else if (isDirectory) _project.ValidateFolderPath(newFull);
             else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
+            if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
             RemapSceneReferences(oldFull!, newFull, isDirectory);
@@ -570,6 +584,7 @@ public partial class MainWindow
             }
             else return;
 
+            if (ContainsOpenDataAsset(target) && !await ConfirmCloseDataAsset()) return;
             var startup = _project.StartupScenePath;
             var targetRelative = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))
