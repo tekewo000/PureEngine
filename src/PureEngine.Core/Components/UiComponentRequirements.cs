@@ -1,6 +1,6 @@
 namespace PureEngine.Core;
 
-/// <summary>Checks the required Image/Button/UiElement combinations. Never auto-adds; used to report what is missing.</summary>
+/// <summary>Checks the required Image/Button/Text/UiElement combinations. Never auto-adds; used to report what is missing.</summary>
 public static class UiComponentRequirements
 {
     /// <summary>Returns the missing UI combinations for the given object. Empty when everything is present.</summary>
@@ -11,7 +11,8 @@ public static class UiComponentRequirements
         var hasElement = item.GetComponent<UiElement>() is not null;
         var hasImage = item.GetComponent<Image>() is not null;
         var hasButton = item.GetComponent<Button>() is not null;
-        if (hasImage || hasButton)
+        var hasText = item.GetComponent<Text>() is not null;
+        if (hasImage || hasButton || hasText)
         {
             List<string> missing = [];
             if (!hasTransform) missing.Add(nameof(Transform));

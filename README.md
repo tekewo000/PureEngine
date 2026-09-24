@@ -17,24 +17,24 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - 自作C#はProject内の任意フォルダから読み込み、元のフォルダ内のファイルをドラッグしてアタッチできる。エンジン側への手動登録は不要。組み込みサンプルのComponents一覧は表示しない。
 - Scene View／Gameは左、Stuffsは中央、Inspectorは右に配置する。
 - Project Explorerの自作C#ファイルをStuffsのオブジェクト行、または選択中オブジェクトのInspectorへドラッグ＆ドロップしてアタッチする。追加したクラス名はInspectorのComponentsに表示する。同じ型の重複、Stuffsの余白、未選択のInspectorへのドロップは受け付けない。
-- Inspectorの「Add Component」で選択中オブジェクトへEngineのComponentを検索して追加できる。候補は当該Projectの登録型（`Transform`・`UiElement`・`Image`・自作型）から探し、既存のアタッチ処理・factoryを使う。重複追加は付けない。Play中は追加できない。
+- Inspectorの「Add Component」で選択中オブジェクトへEngineのComponentを検索して追加できる。候補は当該Projectの登録型（`Transform`・`UiElement`・`Image`・`Button`・`Text`・自作型）から探し、既存のアタッチ処理・factoryを使う。重複追加は付けない。Play中は追加できない。
 - Inspectorのコンポーネントカードを右クリックして「Remove」で取り外す。削除は未保存の変更になり、保存後のシーンからも除かれる。Play中は取り外せない。親の削除はその時点の子孫ごと削除する。
 - Stuffsは親子をツリー表示する。子は親の下にインデントして並び、折りたたみ・展開ができる。名前の変更はツリーへ即時反映する。
 - Stuffsの行をドラッグ＆ドロップして親子付けと並べ替えができる。見出し行の中央50%へ落とすとその子に、上端／下端の25%へ落とすと青線の示す前後に移動する。展開済みの親も見出し行を基準に判定し、青線で行の高さは変わらない。折りたたまれた親の中央に500ms留まると自動展開する。空の余白へ落とすとルートに戻る。自分自身・自分の子孫へのドロップとPlay中の付け替えは受け付けない。
 - Stuffsの右クリックメニュー「Add Empty」は選択中があればその子として追加し、なければルートに追加する。追加後は親を展開して追加分を選択する。
-- 同じメニューの「UI → Image」はTransform・UiElement・Image、「UI → Button」はさらにButtonを付けて作成する。親への追加と選択はAdd Emptyと同じで、名前は連番で重複を避ける。Spriteは作成後にInspectorで指定する。Play中は作成できない。
+- 同じメニューの「UI → Image」はTransform・UiElement・Image、「UI → Button」はさらにButton、「UI → Text」はTransform・UiElement・Textを付けて作成する。親への追加と選択はAdd Emptyと同じで、名前は連番で重複を避ける。Spriteは作成後にInspectorで指定する。Play中は作成できない。
 - Inspectorの「Name」で名前を編集する。ツリー表示へ即時反映し、未保存になる。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。削除後は兄弟内の次の対象へ選択を移す。
 - Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Color`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。`Color` はR・G・B・Aの数値とプレビューで編集する。
-- `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える。`Sprite`がNoneのときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
+- `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える（`Button`・`Text` も同じ）。`Sprite`がNoneのときは描かない。`Text`は内容が空のときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
-- Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
-- Scene Viewの表示中の画像を左クリックで選択すると、Stuffs／Inspectorと連動して選択枠とPivotを表示する。重なりは`Order`の大きい値を手前として同じ並べ替えで判定し、手前から選ぶ。空白クリックで選択を解除する。選択中の有効なUI対象にはX／Y矢印と中央ハンドルが出て、ドラッグでTransform.LocalPositionのX・Yだけを移動する（Zは保持）。ドラッグ中はInspectorへ即時反映し、左ボタンを離したときに変わっていた場合だけ未保存になる。Esc・フォーカス喪失・キャプチャ喪失や、保存・Scene切替・Play開始・コード採用の前には開始位置へ戻し、マウスの捕捉も解除する。ドラッグ中に親・Anchor・サイズ等の配置条件が変わった場合も中断する。Fキーで選択対象を余白付きで中央に表示する（ドラッグ中やInspectorの入力中は無効）。0サイズやXY変換が潰れた対象のGizmoは無効。Play中は配置編集できない。詳細な座標・中断規則は[設計書](docs/EngineArchitecture.md#v4前半scene-viewの編集操作)、検証状況は[実装計画](docs/ImplementationPlan.md#v4前半のscene-view編集操作2026-09-23)を参照する。
+- Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・文字・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
+- Scene Viewの表示中の画像や文字を左クリックで選択すると、Stuffs／Inspectorと連動して選択枠とPivotを表示する。重なりは`Order`の大きい値を手前として同じ並べ替えで判定し、手前から選ぶ。空白クリックで選択を解除する。選択中の有効なUI対象にはX／Y矢印と中央ハンドルが出て、ドラッグでTransform.LocalPositionのX・Yだけを移動する（Zは保持）。ドラッグ中はInspectorへ即時反映し、左ボタンを離したときに変わっていた場合だけ未保存になる。Esc・フォーカス喪失・キャプチャ喪失や、保存・Scene切替・Play開始・コード採用の前には開始位置へ戻し、マウスの捕捉も解除する。ドラッグ中に親・Anchor・サイズ等の配置条件が変わった場合も中断する。Fキーで選択対象を余白付きで中央に表示する（ドラッグ中やInspectorの入力中は無効）。0サイズやXY変換が潰れた対象のGizmoは無効。Play中は配置編集できない。詳細な座標・中断規則は[設計書](docs/EngineArchitecture.md#v4前半scene-viewの編集操作)、検証状況は[実装計画](docs/ImplementationPlan.md#v4前半のscene-view編集操作2026-09-23)を参照する。
 - enumはドロップダウン、`[Flags]` はチェックボックスとNoneボタンで編集する。自作enumを含むC#も保存後に自動反映する。互換性のない定義変更はConsoleに理由を表示し、編集中の値を保持する。
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
-- GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。
+- GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。`Text` の内容・色・サイズも描く。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -58,7 +58,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - 未保存の変更はタイトルの `*` で示す。別シーンを開くときや終了時にSave／Discard／Cancelを選ぶ。
 - Inspectorに入力エラーがある間は保存しない。成否とエラー詳細は画面下部に表示する。
 
-保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority、ComponentごとのインスタンスIDと参照ID。組み込みは `core.transform`・`core.ui-element`・`core.image`・`core.button` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。`Image` の `Order`（`RendererComponent` の共通基底）もInspector値として保存・Cloneし、旧データは `Order: 0` として従来の表示を維持する。ライフサイクルのPriorityとは独立させる。
+保存対象はオブジェクトのID・名前・親子関係・兄弟順、登録済みクラスの固定ID、`[Inspector]` 付きの値、アタッチごとのPriority、ComponentごとのインスタンスIDと参照ID。組み込みは `core.transform`・`core.ui-element`・`core.image`・`core.button`・`core.text` で保存する。`Sprite` は画像IDと切り出し矩形で保存し、欠落した素材IDも失わず保持する。`Image` の `Order`（`RendererComponent` の共通基底）もInspector値として保存・Cloneし、旧データは `Order: 0` として従来の表示を維持する。ライフサイクルのPriorityとは独立させる。
 読み込みは別のSceneへ復元し、成功してから現在のSceneと入れ替える。保存は同じフォルダの一時ファイルへ書き終えてから置き換える。
 現在の形式は `version: 3`。旧形式（`version: 1` は全てルート・配列順の兄弟、`version: 2` は親子・兄弟順あり）として読み込み、次の明示保存で3へ更新する。YAMLのコメントは再保存で失われる。Editorのペイン配置は現在の保存対象に含めない。旧形式（prioritiesなし）はすべて0として読み込む。旧形式（string・int・float・boolのみのシーン）はそのまま読み込む。
 
@@ -222,7 +222,7 @@ dotnet run --project src/PureEngine.Editor
 - `.github/workflows/code-quality.yml`：push/PR時に同じ品質チェックを実行。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
-Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。Game描画とImage／Buttonの配置・操作も実装済みです。Textや単体配布、Steam連携は後続です。
+Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。Game描画とImage／Textの配置、Button操作も実装済みです。単体配布、Steam連携は後続です。
 
 ## Coreのライフサイクル実行
 
@@ -432,9 +432,15 @@ Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を
 
 完成目標の操作：StuffsでEmptyを作る → InspectorのAdd Componentで `Transform`・`UiElement`・`Image` を検索して付ける → Projectへ画像を取り込み `Sprite` 欄で選ぶ → Inspectorで配置・色・`Order`を変える → 保存 → 開き直して同じ表示になる。親を含む例も保存往復とCloneで確認する。
 
+## Text Componentの表示
+
+`Text`（`core.text`）は内容・文字色・フォントサイズ・行間を持ち、同じオブジェクトの `Transform`・`UiElement` が解決した領域へ同梱フォントで描きます。`Content = "New Text"`・`Color = White`・`FontSize = 24`・`LineSpacing = 1.2`・`Order = 0` が既定値です。左寄せ・上起点で領域幅で折り返し、内容が空のときは描きません。同じオブジェクトのImage＋Textは一単位として大きい方の `Order` で並べ替え、Imageの後にTextを描きます。独立した順序が必要なら別オブジェクトにします。
+
+操作：Stuffsの右クリックメニュー「UI → Text」で作る（選択中があればその子）→ Inspectorで内容・色・サイズ・行間を変える → 保存 → 開き直す。Scene View／Gameの描画、Scene ViewでのUiElement矩形による選択、保存・Clone・欠落メンバーの既定値読み込みに対応します。GameにはText選択機能はありません。高さ方向はUiElement矩形でクリップせず、ビューポートのみで切ります。領域外へあふれた文字は選択範囲を広げません。寄せ・フォント素材の指定、Inspectorでの複数行編集は後続です。確定した仕様は[設計書](docs/EngineArchitecture.md#uiコンポーネント)、検証状況は[実装計画](docs/ImplementationPlan.md#text-component2026-09-24)を参照してください。
+
 ## Game表示とButton操作
 
-Play中のGameタブに実行用Sceneを描き、Buttonを押すと自作C#が呼ばれてConsoleにログが出る。Text・ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は今回の対象外。確定した仕様は[設計書](docs/EngineArchitecture.md#v5前半game表示とbutton操作)、検証状況は[実装計画](docs/ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
+Play中のGameタブに実行用Sceneを描き、Buttonを押すと自作C#が呼ばれてConsoleにログが出る。Textは上記の別工程で追加済み。ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は対象外。確定した仕様は[設計書](docs/EngineArchitecture.md#v5前半game表示とbutton操作)、検証状況は[実装計画](docs/ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
 
 Stuffsで作ったオブジェクトへ `Transform`・`UiElement`・`Image`・`Button` を付け、Inspectorで配置と `Interactable` を設定する。クリック処理はButton自身の `Clicked` イベントへコードから登録する。専用のHandlerコンポーネントは不要。
 

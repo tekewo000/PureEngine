@@ -78,6 +78,11 @@ public partial class MainWindow
         return _previewImages.ContainsKey(sprite.ImageId) && !_sceneDrawFailures.Contains(item.Id);
     }
 
+    private bool IsDrawableUi(SceneObject item) => IsDrawableImage(item) || IsDrawableText(item);
+
+    private bool IsDrawableText(SceneObject item) =>
+        item.GetComponent<Core.Text>() is { Content.Length: > 0 } && !_sceneDrawFailures.Contains(item.Id);
+
     private static SceneViewMath.LayoutEntry? FindLayout(IReadOnlyList<SceneViewMath.LayoutEntry> entries, SceneObject target)
     {
         foreach (var entry in entries)
@@ -155,7 +160,7 @@ public partial class MainWindow
             e.Handled = true;
             return;
         }
-        SelectSceneObject(SceneViewMath.HitTest(entries, viewportSize, _scenePan, _sceneZoom, viewPoint, IsDrawableImage), focus: false);
+        SelectSceneObject(SceneViewMath.HitTest(entries, viewportSize, _scenePan, _sceneZoom, viewPoint, IsDrawableUi), focus: false);
         e.Handled = true;
     }
 

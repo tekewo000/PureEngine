@@ -239,12 +239,25 @@ public static class SceneViewMath
     private static Matrix3x2 ToPlane(Matrix4x4 world) =>
         new(world.M11, world.M12, world.M21, world.M22, world.M41, world.M42);
 
-    /// <summary>Returns the Order of the Image to render. Zero when there is no Image. Uses each target's own value without inheriting from the parent.</summary>
+    /// <summary>Returns the largest Order among the Image and Text on the target. Zero when there is neither.</summary>
+    /// <remarks>Image and Text on the same object draw as a unit (Image first, then Text) and sort by the larger Order. Use separate objects for independent ordering. Order is never inherited from the parent.</remarks>
     public static int GetRenderOrder(SceneObject item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        // The current render path handles Image only. Attach order of other derived types does not affect Image render order.
-        return item.GetComponent<Image>()?.Order ?? 0;
+        // The current render path handles Image and Text. Attach order of other derived types does not affect the result.
+        var order = 0;
+        var hasTarget = false;
+        if (item.GetComponent<Image>() is { Order: var imageOrder })
+        {
+            order = imageOrder;
+            hasTarget = true;
+        }
+        if (item.GetComponent<Text>() is { Order: var textOrder })
+        {
+            order = hasTarget ? Math.Max(order, textOrder) : textOrder;
+            hasTarget = true;
+        }
+        return hasTarget ? order : 0;
     }
 
     /// <summary>Stably sorts layout entries into ascending Order. Rendering and hit-testing share this step.</summary>

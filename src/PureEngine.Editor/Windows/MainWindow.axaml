@@ -489,6 +489,7 @@
                     <MenuItem x:Name="AddUiMenuItem" Header="UI">
                       <MenuItem x:Name="AddUiImageMenuItem" Header="Image" Click="OnAddUiImage" />
                       <MenuItem x:Name="AddUiButtonMenuItem" Header="Button" Click="OnAddUiButton" />
+                      <MenuItem x:Name="AddUiTextMenuItem" Header="Text" Click="OnAddUiText" />
                     </MenuItem>
                     <Separator />
                     <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
