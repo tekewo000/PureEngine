@@ -61,11 +61,13 @@ public partial class MainWindow
         {
             // Each run gets a fresh snapshot; edits made during the run never reach files or other runs.
             var assets = BuildProjectAssetStore(_components.Registry);
+            var prefabs = BuildPrefabCatalog();
             var configure = GameServices.ForProject(_components);
             session = PlaySession.Prepare(_editScene.Current, _components.Registry, services =>
             {
                 configure(services);
                 if (assets is not null) services.AddSingleton(assets);
+                services.AddSingleton(prefabs);
             });
         }
         catch (Exception error)
@@ -354,6 +356,7 @@ public partial class MainWindow
         AddObjectMenuItem.IsEnabled = enabled;
         AddUiMenuItem.IsEnabled = enabled;
         DeleteObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is not null;
+        SavePrefabMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is not null;
     }
 
     private bool RejectWhenPlaying(string action)

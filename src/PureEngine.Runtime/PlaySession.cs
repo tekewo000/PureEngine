@@ -50,6 +50,9 @@ public sealed class PlaySession : IDisposable
             }
             throw;
         }
+        // Binds game-side spawning to this run. Unregistered sessions simply spawn nothing.
+        services.Services.GetService<PrefabSpawner>()?.Bind(
+            runtime.Scene, registry, services.Factory, services.Services.GetService<PrefabCatalog>());
         return new PlaySession(services, runtime);
     }
 

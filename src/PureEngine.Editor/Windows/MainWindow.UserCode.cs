@@ -121,6 +121,7 @@ public partial class MainWindow
             // Clear drag references to the previous collectible assembly.
             _dragTypes = null;
             _assetPress = null;
+            _pressedPrefab = null;
             _assetEdit = candidateAsset;
             RefreshAssetOwned();
             RefreshHierarchy(selectedId);

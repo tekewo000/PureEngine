@@ -41,6 +41,14 @@
 
 ## 次に着手する作業
 
+### Prefab相当のコピーのみ複製（2026-09-24実装）
+
+- 単一ルート＋子孫を `.pure.prefab.yaml`（version 1・PrefabのID・objects）へ保存し、配置時は普通のSceneObjectとして複製する。リンク・Override・Variant・入れ子は作らない。内部参照だけ新IDへ付け替え、範囲外・画像・データアセット参照は維持し、MissingはScene参照の既存規則に従う。移行規則はScene流用でPrefab独自の仕様は作らない。
+- Coreに `PrefabDocument`・`PrefabSerializer`（保存・読み込み・検証・配置・巻き戻し）・`PrefabCatalog`（フォルダ走査と診断）・`PrefabSpawner`（コンストラクター注入で `Spawn`）を追加。値変換・旧名解決・membersChangedは `[Inspector]` 規則を再利用し、`SceneSerializer` の生成・Priority・メンバー走査を内部共有する。`PlaySession` 準備時に実行用Scene・factory・カタログを束縛する。
+- EditorはStuffs右クリックの保存、Projectペインの一覧・改名・削除、配置メニューとダブルクリック配置、Project→StuffsへのD&D配置（行上はその子、余白はルート、行のハイライト付き）、Play中の保存・配置・D&D禁止に対応する。保存は既存ファイルを上書きしない。実行中はPlay開始時にカタログを作り直し、編集用と各Play実行で共有しない。
+- 回帰チェック（保存往復・新ID・内部／外部参照・コレクションと入れ子・Missing・Priority・旧名と不明項目・型変更と未知型の拒否・構造拒否・巻き戻し・カタログ走査・スポナー束縛・2回のPlay分離とStart／Update生成）を Core Checks の `PrefabChecks` に、保存・一覧・配置・親付け・不正ファイル・ダブルクリック・Playガードを Editor Checks の `PrefabEditorChecks` に追加。ローカルの `./tools/code-quality.ps1 -Check`（提案レベルの解析・警告ゼロのビルド・Core/Editor Checks）は通過。実画面の手動操作・CIは未確認として区別する。
+- 設計は [EngineArchitecture.md](EngineArchitecture.md#prefabs)、操作は [README](../README.md#プレハブを使う)を参照。回帰チェックは配置メニュー経路に加え、D&DのDragOver／Dropの実経路とPlayガードを確認する。ドラッグ開始のOS側ループは対象外。
+
 ### データアセットの作成と保存（2026-09-24実装）
 
 - 直接参照対応：`[Inspector] public TestDataAssets DataAssets { get; init; }` の宣言を変えず、プロジェクトのアセットをドロップダウン・D&Dで割り当てる。公開ラッパー案は採用せず、保存IDをエンジン側で解決する。Coreで共有・Clone/Play分離・コレクション・Missing/復旧を、Editorで実際のヘッドレスポインターD&D・Clear・保存再Open・C#再反映・2回のPlayを検証する。実画面の手動操作およびユーザーのTestProjectの書き換えは行わない。品質ゲートとCIの結果はこの変更のPRで追跡する。

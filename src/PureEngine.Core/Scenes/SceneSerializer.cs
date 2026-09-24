@@ -107,7 +107,7 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
         return document;
     }
 
-    private static Dictionary<string, object?>? CapturePriorities(SceneObject item, object component)
+    internal static Dictionary<string, object?>? CapturePriorities(SceneObject item, object component)
     {
         var (start, update, destroy) = item.ReadAttachedPriorities(component);
         if (start == 0 && update == 0 && destroy == 0) return null;
@@ -314,13 +314,13 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
     }
 
     /// <summary>
-    /// Component creation point (restore/Clone): creates new runtime and authoring instances from the type.
+    /// Component creation point (restore/Clone/prefab): creates new runtime and authoring instances from the type.
     /// Without a factory, uses the legacy parameterless creation; with a factory, uses the factory result.
     /// A factory failure is reported as-is without retrying parameterless creation to hide it.
     /// The factory contract is to return a new non-null instance of the exact requested type;
     /// shared dependencies belong on the injected service side.
     /// </summary>
-    private static object CreateComponent(Type type, Func<Type, object>? factory, string typeId, string objectName)
+    internal static object CreateComponent(Type type, Func<Type, object>? factory, string typeId, string objectName)
     {
         if (factory is null) return Activator.CreateInstance(type)!;
         object? created;
@@ -342,13 +342,13 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
         return created;
     }
 
-    private static MemberInfo[] Members(Type type) => InspectorMembers.GetValue(type, static type =>
+    internal static MemberInfo[] Members(Type type) => InspectorMembers.GetValue(type, static type =>
         [.. ComponentSchema.GetInspectorMemberNames(type).Values.Distinct().OrderBy(member => member.Name, StringComparer.Ordinal)]);
 
-    private static Type MemberType(MemberInfo member) => member is FieldInfo field
+    internal static Type MemberType(MemberInfo member) => member is FieldInfo field
         ? field.FieldType : ((PropertyInfo)member).PropertyType;
 
-    private static (int Start, int Update, int Destroy) ReadPriorities(ComponentDocument data, Type type)
+    internal static (int Start, int Update, int Destroy) ReadPriorities(ComponentDocument data, Type type)
     {
         if (data.Priorities is null) return (0, 0, 0);
         var parsed = new Dictionary<string, int>(StringComparer.Ordinal);
