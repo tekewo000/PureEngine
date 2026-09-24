@@ -35,6 +35,12 @@ public sealed class ProjectComponents : IDisposable
         get { lock (_sync) return _userCode?.AttachableTypes ?? []; }
     }
 
+    /// <summary>Directly marked custom types, including invalid declarations for Create Data Asset diagnostics. Empty on failure.</summary>
+    public IReadOnlyList<Type> DataAssetTypes
+    {
+        get { lock (_sync) return _userCode?.DataAssetTypes ?? []; }
+    }
+
     public IReadOnlyDictionary<string, IReadOnlyList<Type>> UserFileTypes
     {
         get { lock (_sync) return new Dictionary<string, IReadOnlyList<Type>>(_userFileTypes, StringComparer.OrdinalIgnoreCase); }

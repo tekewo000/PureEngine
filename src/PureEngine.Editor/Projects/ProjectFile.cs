@@ -161,6 +161,32 @@ public sealed class ProjectFile
             || path.StartsWith(ScenesDirectory + Path.DirectorySeparatorChar, PathComparison);
     }
 
+    /// <summary>Data asset file extension. Distinct from image sidecars (.pureasset.yaml) and scenes (.pure.scene.yaml).</summary>
+    public static bool IsDataAssetFileName(string fileName) =>
+        fileName.EndsWith(".pure.asset.yaml", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Rejects paths escaping the project and enforces the data asset extension.</summary>
+    public void ValidateDataAssetPath(string path)
+    {
+        path = Path.GetFullPath(path);
+        ValidateProjectPath(RootDirectory, path);
+        if (!IsDataAssetFileName(path))
+            throw new InvalidDataException("Save data assets as .pure.asset.yaml inside the project folder.");
+    }
+
+    /// <summary>Returns a non-duplicated data asset name within the specified folder.</summary>
+    public string NextDataAssetName(string relativeDirectory, string baseName)
+    {
+        var directory = ResolveDirectoryPath(relativeDirectory);
+        var clean = string.Join('_', (string.IsNullOrWhiteSpace(baseName) ? "DataAsset" : baseName.Trim())
+            .Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+        if (string.IsNullOrWhiteSpace(clean)) clean = "DataAsset";
+        var name = $"{clean}.pure.asset.yaml";
+        for (var number = 2; File.Exists(Path.Combine(directory, name)) || Directory.Exists(Path.Combine(directory, name)); number++)
+            name = $"{clean}{number}.pure.asset.yaml";
+        return name;
+    }
+
     /// <summary>Returns a non-duplicated scene name within the specified folder.</summary>
     public string NextSceneName(string relativeDirectory)
     {

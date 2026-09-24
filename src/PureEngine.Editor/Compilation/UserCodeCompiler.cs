@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using PureEngine.Core;
 
 namespace PureEngine.Editor;
 
@@ -29,6 +30,8 @@ public sealed class UserCodeCompileResult
     internal AssemblyLoadContext? LoadContext { get; set; }
     /// <summary>Attachable types. Empty on failure.</summary>
     public IReadOnlyList<Type> AttachableTypes { get; internal set; } = [];
+    /// <summary>All directly marked data asset types, including invalid declarations for editor diagnostics. Empty on failure.</summary>
+    public IReadOnlyList<Type> DataAssetTypes { get; internal set; } = [];
     /// <summary>Full path to the attachable types in that file. Keeps the folder structure for display and drag-and-drop.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<Type>> FileTypes { get; internal set; }
         = new Dictionary<string, IReadOnlyList<Type>>(StringComparer.OrdinalIgnoreCase);
@@ -146,6 +149,7 @@ public static class UserCodeCompiler
                 Diagnostics = [],
                 SourceFiles = [],
                 AttachableTypes = [],
+                DataAssetTypes = [],
                 FileTypes = new Dictionary<string, IReadOnlyList<Type>>(StringComparer.OrdinalIgnoreCase),
             };
         }
@@ -287,6 +291,9 @@ public static class UserCodeCompiler
 
         var attachable = allTypes.Where(IsAttachable).OrderBy(t => t.FullName, StringComparer.Ordinal).ToArray();
         var fileTypes = BuildFileMap(compilation, attachable);
+        var dataAssets = allTypes
+            .Where(type => type.IsDefined(typeof(DataAssetAttribute), inherit: false))
+            .ToArray();
 
         return new UserCodeCompileResult
         {
@@ -297,6 +304,7 @@ public static class UserCodeCompiler
             LoadedAssembly = assembly,
             LoadContext = context,
             AttachableTypes = attachable,
+            DataAssetTypes = dataAssets,
             FileTypes = fileTypes,
         };
     }
