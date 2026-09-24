@@ -19,6 +19,7 @@ public enum ProjectExplorerKind
     Scene,
     File,
     Component,
+    DataAsset,
 }
 
 /// <summary>One row in the Project Explorer right pane. Shows folders, scene files, plain files, and compiled classes in a unified view.</summary>
@@ -36,6 +37,7 @@ public sealed record ProjectExplorerEntry(
     {
         ProjectExplorerKind.Folder => "Folder",
         ProjectExplorerKind.Scene => "Scene",
+        ProjectExplorerKind.DataAsset => "Data Asset",
         ProjectExplorerKind.File => "File",
         _ => "C#",
     };
@@ -50,6 +52,8 @@ public sealed record ProjectExplorerEntry(
     public bool IsFolder => Kind == ProjectExplorerKind.Folder;
 
     public bool IsScene => Kind == ProjectExplorerKind.Scene;
+
+    public bool IsDataAsset => Kind == ProjectExplorerKind.DataAsset;
 
     public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
         && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
@@ -166,9 +170,15 @@ public partial class MainWindow
                     if (file.EndsWith(".pureasset.yaml", StringComparison.OrdinalIgnoreCase)) continue;
                     var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
                     var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
+                    var isDataAsset = !isScene && ProjectFile.IsDataAssetFileName(file);
                     var isStartup = isScene && string.Equals(relative, startup, StringComparison.Ordinal);
                     var full = Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar));
-                    if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    if (isDataAsset)
+                    {
+                        entries.Add(new ProjectExplorerEntry(
+                            ProjectExplorerKind.DataAsset, file, "Data Asset", relative, relative, full, null, false));
+                    }
+                    else if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                     {
                         // Shows custom C# files in their folder layout. Does not require a dedicated folder or aggregation into the Components list.
                         var types = _components.GetTypesForFile(full);
@@ -263,6 +273,7 @@ public partial class MainWindow
         TreeCreateFolderMenu.IsEnabled = canWrite;
         TreeCreateCSharpMenu.IsEnabled = canWrite && !IsPlaying;
         TreeCreateSceneMenu.IsEnabled = canWrite && _project!.IsUnderScenes(folder);
+        RefreshDataAssetMenu(TreeCreateDataAssetMenu, canWrite && !IsPlaying);
         var renamable = canWrite && folder != "" && folder != "Scenes";
         TreeRenameMenu.IsEnabled = renamable;
         TreeDeleteMenu.IsEnabled = renamable;
@@ -278,8 +289,9 @@ public partial class MainWindow
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
         FilesCreateCSharpMenu.IsEnabled = hasProject && !isComponents && !IsPlaying;
         FilesCreateSceneMenu.IsEnabled = hasProject && !isComponents && _project!.IsUnderScenes(folder);
-        FilesRenameMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File };
-        FilesDeleteMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File };
+        RefreshDataAssetMenu(FilesCreateDataAssetMenu, hasProject && !isComponents && !IsPlaying);
+        FilesRenameMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset };
+        FilesDeleteMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset };
     }
 
     private async void OnProjectFilesDoubleTapped(object? sender, TappedEventArgs e) => await OpenSelectedExplorerEntry();
@@ -392,6 +404,76 @@ public partial class MainWindow
         SetFileStatus($"Created C#: {className}.cs");
     });
 
+    /// <summary>Rebuilds the Create Data Asset submenu from registered [DataAsset] types. Shows diagnostics when a type is unusable.</summary>
+    private void RefreshDataAssetMenu(MenuItem menu, bool enabled)
+    {
+        menu.IsEnabled = enabled;
+        menu.Items.Clear();
+        if (!enabled) return;
+        var descriptors = DataAssetDescriptor.DescribeAll(_components.Registry, out var diagnostics, _components.DataAssetTypes);
+        foreach (var problem in diagnostics)
+            menu.Items.Add(new MenuItem { Header = $"Invalid: {problem}", IsEnabled = false });
+        if (descriptors.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "No data assets (add [DataAsset] to a class)", IsEnabled = false });
+            return;
+        }
+        var folders = new Dictionary<string, MenuItem>(StringComparer.Ordinal);
+        foreach (var descriptor in descriptors.OrderBy(d => d.MenuPath, StringComparer.Ordinal))
+        {
+            var parts = descriptor.MenuPath.Split('/');
+            var parent = menu;
+            var prefix = "";
+            for (var i = 0; i < parts.Length - 1; i++)
+            {
+                prefix = prefix.Length == 0 ? parts[i] : $"{prefix}/{parts[i]}";
+                if (!folders.TryGetValue(prefix, out var folder))
+                {
+                    folder = new MenuItem { Header = parts[i] };
+                    folders.Add(prefix, folder);
+                    parent.Items.Add(folder);
+                }
+                parent = folder;
+            }
+            var leaf = new MenuItem
+            {
+                Header = parts[^1],
+                Tag = (descriptor.TypeId, ReferenceEquals(menu, TreeCreateDataAssetMenu)),
+            };
+            leaf.Click += OnExplorerCreateDataAsset;
+            parent.Items.Add(leaf);
+        }
+    }
+
+    /// <summary>Creates a data asset file of the menu-selected type in the target folder. Leaves the scene being edited untouched.</summary>
+    private async void OnExplorerCreateDataAsset(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: ValueTuple<string, bool> selection }) return;
+        await RunFileOperation(async () =>
+        {
+            if (_project is null || RejectWhenPlaying("Create Data Asset")) return;
+            var type = _components.Registry.GetType(selection.Item1);
+            if (!DataAssetDescriptor.TryCreate(type, _components.Registry, out var descriptor, out var error) || descriptor is null)
+            {
+                SetFileStatus(error ?? $"{type.FullName}: invalid data asset type.", true);
+                return;
+            }
+            var folder = ExplorerTargetFolder("");
+            if (selection.Item2) ExplorerSelectionIsFolder(out folder, out _);
+            var name = _project.NextDataAssetName(folder, descriptor.DisplayName);
+            var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
+            _project.ValidateDataAssetPath(path);
+            if (File.Exists(path) || Directory.Exists(path))
+                throw new IOException("A folder or file with the same name already exists.");
+            DataAssetFile.Create(path, type, _components.Registry);
+            _explorerFolder = folder;
+            _explorerSelectedFile = path;
+            RefreshProjectExplorer();
+            SetFileStatus($"Created data asset: {folder}/{name}");
+            await Task.CompletedTask;
+        });
+    }
+
     private async void OnExplorerRename(object? sender, RoutedEventArgs e) => await RenameSelectedExplorerEntry();
     private async void OnExplorerDelete(object? sender, RoutedEventArgs e) => await DeleteSelectedExplorerEntry();
     private async void OnExplorerRefresh(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
@@ -418,7 +500,7 @@ public partial class MainWindow
             string? oldFull = null, newFull = null;
             var isTreeFolder = false;
             if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
-                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File })
+                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset })
             {
                 oldFull = entry.FullPath!;
             }
@@ -442,6 +524,9 @@ public partial class MainWindow
             if (name is null) return;
             if (isScene && !name.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
                 name += ".pure.scene.yaml";
+            if (!isScene && !isDirectory && ProjectFile.IsDataAssetFileName(oldFull!)
+                && !ProjectFile.IsDataAssetFileName(name))
+                name += ".pure.asset.yaml";
             if (name == oldName) return;
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                 throw new ArgumentException("Specify a valid name.");
@@ -473,7 +558,7 @@ public partial class MainWindow
             string? target = null;
             var isDirectory = false;
             if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
-                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File })
+                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset })
             {
                 target = entry.FullPath!;
                 isDirectory = entry.Kind == ProjectExplorerKind.Folder;
