@@ -9,7 +9,7 @@ public static class SceneCodeMigrator
         ComponentRegistry newRegistry, Func<Type, object>? factory = null) => Migrate(source, oldRegistry, newRegistry, out _, factory);
 
     public static Scene Migrate(Scene source, ComponentRegistry oldRegistry,
-        ComponentRegistry newRegistry, out bool membersChanged, Func<Type, object>? factory = null)
+        ComponentRegistry newRegistry, out bool membersChanged, Func<Type, object>? factory = null, DataAssetStore? assets = null)
     {
         // Numeric conversion must not hide a schema change.
         foreach (var item in source.Objects)
@@ -31,7 +31,7 @@ public static class SceneCodeMigrator
 
         // Reuse persistence validation, identity/Priority restoration and failure cleanup.
         var yaml = new SceneSerializer(oldRegistry).Serialize(source);
-        return new SceneSerializer(newRegistry).Deserialize(yaml, out membersChanged, factory);
+        return new SceneSerializer(newRegistry, assets).Deserialize(yaml, out membersChanged, factory);
     }
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field

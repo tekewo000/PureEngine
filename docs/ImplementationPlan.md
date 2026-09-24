@@ -43,6 +43,7 @@
 
 ### データアセットの作成と保存（2026-09-24実装）
 
+- 直接参照対応：`[Inspector] public TestDataAssets DataAssets { get; init; }` の宣言を変えず、プロジェクトのアセットをドロップダウン・D&Dで割り当てる。公開ラッパー案は採用せず、保存IDをエンジン側で解決する。Coreで共有・Clone/Play分離・コレクション・Missing/復旧を、Editorで実際のヘッドレスポインターD&D・Clear・保存再Open・C#再反映・2回のPlayを検証する。実画面の手動操作およびユーザーのTestProjectの書き換えは行わない。品質ゲートとCIの結果はこの変更のPRで追跡する。
 - 継承なしの普通のクラスに `[DataAsset]` を付けて Create Data Asset メニューから作る。対象はpublic・非abstract・非ジェネリックでpublicな引数なしコンストラクターを持つクラス。メニューパス省略時は型名。使えない型・重複メニューは理由を表示する。
 - Coreに `DataAssetAttribute`（`Inherited = false`・任意のメニューパス）・`DataAssetDescriptor`・`DataAssetDocument`・`DataAssetSerializer` を追加。値の変換・旧名解決・membersChanged報告はシーンの `[Inspector]` 規則を再利用し、シーン参照は拒否する。ファイルは `.pure.asset.yaml`（version 1・ID・typeId・values）。
 - Editorはコンパイル結果に `DataAssetTypes` を公開し、ProjectペインのTree／Files両メニューにフォルダ階層付きの作成 submenu を出す。作成・一覧・改名・削除に対応し、改名では拡張子を維持する。

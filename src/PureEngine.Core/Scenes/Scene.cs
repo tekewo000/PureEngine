@@ -12,8 +12,10 @@ public sealed class Scene
     private readonly HashSet<Guid> _componentIds = [];
     internal SceneRuntime? Runtime { get; set; }
 
-    /// <summary>Scene所有の参照管理情報。Missing IDと旧値保持を担い、定常実行では触らない。</summary>
+    /// <summary>Scene-owned missing IDs and legacy values, used only at editing and persistence boundaries.</summary>
     public SceneReferenceStore References { get; } = new();
+
+    public DataAssetStore DataAssets { get; internal set; } = new();
 
     public Scene() => Objects = new ReadOnlyObservableCollection<SceneObject>(_objects);
 

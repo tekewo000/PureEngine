@@ -78,7 +78,7 @@ public sealed class ProjectSession : IDisposable
             bool membersChanged;
             try
             {
-                scene = new SceneSerializer(registry).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
+                scene = new SceneSerializer(registry, assets).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
             }
             catch (Exception error) when (!compiled.Success)
             {

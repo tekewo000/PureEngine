@@ -28,7 +28,8 @@ public sealed class UserCodeReloadCoordinator
                 GameServices.ForUserCode(compiled)(services);
                 extraConfigure?.Invoke(services);
             });
-            candidate = SceneCodeMigrator.Migrate(state.Current, components.Registry, registry, out var membersChanged, services.Factory);
+            candidate = SceneCodeMigrator.Migrate(state.Current, components.Registry, registry, out var membersChanged,
+                services.Factory, services.Services.GetService<DataAssetStore>());
             var oldCode = components.Exchange(compiled);
             var previous = state.Replace(candidate, state.Path, state.IsDirty || membersChanged);
             var previousServices = state.ReplaceServices(services);
