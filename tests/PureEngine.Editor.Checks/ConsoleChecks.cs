@@ -54,10 +54,8 @@ static class ConsoleChecks
     private static MainWindow CreateEditor()
     {
         _ = Log.Drain();
-        var editor = new MainWindow();
+        var editor = CreateConsoleWindow();
         EnsureChecks(editor);
-        // Console tests drive their own logs; Headless has no GPU interop and its delayed failure is unrelated.
-        Control<Grid>(editor, "SceneViewport").Children.Clear();
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         // Deterministic: stop play timer, drain console manually.
@@ -66,6 +64,15 @@ static class ConsoleChecks
         Call(editor, "ClearConsole");
         _ = Log.Drain();
         Dispatcher.UIThread.RunJobs();
+        return editor;
+    }
+
+    private static MainWindow CreateConsoleWindow()
+    {
+        var editor = new MainWindow();
+        // Console checks own the log stream. Neither viewport may initialize native rendering in Headless.
+        Control<Grid>(editor, "SceneViewport").Children.Clear();
+        Control<Grid>(editor, "GameViewport").Children.Clear();
         return editor;
     }
 
@@ -560,7 +567,7 @@ static class ConsoleChecks
     private static void CloseReopen()
     {
         _ = Log.Drain();
-        var first = new MainWindow();
+        var first = CreateConsoleWindow();
         first.Show();
         Dispatcher.UIThread.RunJobs();
         Field<DispatcherTimer?>(first, "_playTimer")?.Stop();
@@ -577,7 +584,7 @@ static class ConsoleChecks
 
         // Queued while no window: survives in the bounded queue.
         Log.Info("between-windows");
-        var second = new MainWindow();
+        var second = CreateConsoleWindow();
         second.Show();
         Dispatcher.UIThread.RunJobs();
         Field<DispatcherTimer?>(second, "_playTimer")?.Stop();
