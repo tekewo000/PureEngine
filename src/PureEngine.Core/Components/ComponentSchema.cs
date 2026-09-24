@@ -60,6 +60,7 @@ public static class ComponentSchema
     /// <summary>
     /// Lists public readable/writable fields and properties marked with <see cref="InspectorAttribute"/>.
     /// Non-public members, readonly fields, getter-only properties, statics, and indexers are excluded.
+    /// Members are ordered base class first, then metadata token order within each class.
     /// </summary>
     public static IReadOnlyList<MemberInfo> GetInspectorMembers(Type type)
     {
@@ -91,7 +92,20 @@ public static class ComponentSchema
             found.Add(p);
         }
 
-        found.Sort((a, b) => a.MetadataToken.CompareTo(b.MetadataToken));
+        // Base class members come first so shared members such as RendererComponent.Order
+        // keep a stable position across derived components. Members of the same class
+        // keep their existing metadata token order (fields before properties).
+        found.Sort(static (a, b) =>
+        {
+            var aType = a.DeclaringType!;
+            var bType = b.DeclaringType!;
+            if (aType != bType)
+            {
+                if (aType.IsAssignableFrom(bType)) return -1;
+                if (bType.IsAssignableFrom(aType)) return 1;
+            }
+            return a.MetadataToken.CompareTo(b.MetadataToken);
+        });
         return found;
     }
 

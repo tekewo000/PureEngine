@@ -9,12 +9,13 @@ static class UiComponentChecks
         SpriteRoundTrip();
         SpriteRejections();
         OrderRoundTrip();
+        InspectorMemberOrder();
         Requirements();
         ParentRoundTrip();
         ParentRejections();
         SiblingOrder();
         RemoveCascade();
-        Console.WriteLine("PASS: Sprite YAML round-trip/clone, render Order save/clone, UI requirements, parent save/reopen, sibling order, and subtree removal.");
+        Console.WriteLine("PASS: Sprite YAML round-trip/clone, render Order save/clone, Inspector base-first order, UI requirements, parent save/reopen, sibling order, and subtree removal.");
     }
 
     private static void Check(bool condition, string message)
@@ -148,6 +149,20 @@ static class UiComponentChecks
             "Old data without Order must load as Order 0.");
         Check(membersChanged, "Missing Order must be reported as added members.");
         Check(serializer.Serialize(legacy).Contains("Order:"), "Resaving legacy data must connect Order.");
+    }
+
+    private static void InspectorMemberOrder()
+    {
+        // Base class members come first so shared members keep a stable Inspector position.
+        Check(ComponentSchema.GetInspectorMembers(typeof(Image)).Select(member => member.Name)
+            .SequenceEqual(["Order", "Sprite", "Color"]),
+            "Image Inspector members must list base Order before Sprite and Color.");
+        Check(ComponentSchema.GetInspectorMembers(typeof(Text)).Select(member => member.Name)
+            .SequenceEqual(["Order", "Content", "Color", "FontSize", "LineSpacing"]),
+            "Text Inspector members must list base Order first.");
+        Check(ComponentSchema.GetInspectorMembers(typeof(DerivedProbe)).Select(member => member.Name)
+            .SequenceEqual(["BaseValue", "DerivedValue"]),
+            "Derived Inspector members must follow base members.");
     }
 
     private static void Requirements()
@@ -307,5 +322,15 @@ static class UiComponentChecks
     {
         [Inspector] public Sprite? MaybeSprite { get; set; }
         [Inspector] public List<Sprite> Sprites { get; set; } = [];
+    }
+
+    private class BaseProbe
+    {
+        [Inspector] public int BaseValue { get; set; }
+    }
+
+    private sealed class DerivedProbe : BaseProbe
+    {
+        [Inspector] public int DerivedValue { get; set; }
     }
 }
