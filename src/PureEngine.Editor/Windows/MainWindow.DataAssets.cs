@@ -18,7 +18,12 @@ public partial class MainWindow
     }
 
     private DataAssetEditState? _assetEdit;
+    private bool _assetSelectionChanging;
     private readonly HashSet<object> _assetOwned = [with(ReferenceEqualityComparer.Instance)];
+
+    private bool ContainsOpenDataAsset(string path) => _assetEdit is { } state
+        && (string.Equals(state.Path, path, PathComparison())
+            || state.Path.StartsWith(Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar, PathComparison()));
 
     /// <summary>Whether a data asset file is open in the Inspector. For tests.</summary>
     internal bool IsDataAssetActive => _assetEdit is not null;
@@ -96,13 +101,20 @@ public partial class MainWindow
     private async Task OpenDataAssetCore(string path)
     {
         if (_assetEdit is not null && string.Equals(_assetEdit.Path, Path.GetFullPath(path), PathComparison())) return;
+        if (_assetEdit is null && HasInputErrors)
+            throw new InvalidOperationException("Fix the scene Inspector input errors before opening a data asset.");
+        _project?.ValidateDataAssetPath(path);
+        // Validate the destination before closing the current editing document.
+        var (instance, id) = new DataAssetSerializer(_components.Registry).Deserialize(
+            File.ReadAllText(path), out var typeId, out var membersChanged);
         if (!await ConfirmCloseDataAsset())
         {
             ReselectAssetFile();
             return;
         }
-        var (instance, id, typeId) = DataAssetFile.Load(Path.GetFullPath(path), _components.Registry);
-        _assetEdit = new DataAssetEditState(Path.GetFullPath(path), instance, id, typeId);
+        _assetEdit = new DataAssetEditState(Path.GetFullPath(path), instance, id, typeId) { Dirty = membersChanged };
+        ComponentEditors.Children.Clear();
+        NameError.IsVisible = false;
         _invalidFields.Clear();
         SelectSceneObject(null, focus: false);
         _explorerSelectedFile = _assetEdit.Path;
@@ -131,6 +143,7 @@ public partial class MainWindow
 
     private void RefreshDataAssetInspector()
     {
+        if (DataAssetInspector.IsVisible && _invalidFields.Count > 0) return;
         var state = _assetEdit;
         if (state is null)
         {
@@ -165,6 +178,7 @@ public partial class MainWindow
     /// <summary>Saves the open asset. Returns false when input errors or serialization fail, keeping the dirty state.</summary>
     private async Task<bool> SaveDataAssetAsync()
     {
+        if (IsPlaying) return false;
         var state = _assetEdit;
         if (state is null) return true;
         var saveBlock = EditorOperationGate.SaveBlockReason(_invalidFields.Count > 0);
@@ -207,7 +221,7 @@ public partial class MainWindow
     {
         var state = _assetEdit;
         if (state is null) return true;
-        if (!state.Dirty)
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(state.Dirty, _invalidFields.Count > 0))
         {
             CloseDataAssetForEdit();
             return true;
@@ -250,43 +264,18 @@ public partial class MainWindow
         _assetEdit = null;
         _assetOwned.Clear();
         _invalidFields.Clear();
+        DataAssetEditors.Children.Clear();
         DataAssetInspector.IsVisible = false;
         RefreshObjectInspector();
     }
 
-    /// <summary>Captures the open asset before a code reload so the new types can rebind afterward.</summary>
-    private string? CaptureDataAssetForReload()
+    /// <summary>Validates the open asset against candidate code before either document adopts the new types.</summary>
+    private DataAssetEditState? PrepareDataAssetReload(ComponentRegistry registry)
     {
         var state = _assetEdit;
         if (state is null) return null;
-        try
-        {
-            return new DataAssetSerializer(_components.Registry).Serialize(state.Instance, state.Id);
-        }
-        catch (Exception error)
-        {
-            SetFileStatus($"Cannot preserve data asset across reload: {error.GetBaseException().Message}", true);
-            return null;
-        }
-    }
-
-    /// <summary>Rebinds the open asset to reloaded types. Keeps the old instance with an error when migration fails.</summary>
-    private void RebindDataAssetAfterReload(string? yaml)
-    {
-        var state = _assetEdit;
-        if (state is null || yaml is null) return;
-        try
-        {
-            var (instance, id) = new DataAssetSerializer(_components.Registry).Deserialize(yaml, out _, out var membersChanged);
-            state.Instance = instance;
-            state.Id = id;
-            state.Dirty = state.Dirty || membersChanged;
-            RefreshAssetOwned();
-            RefreshDataAssetInspector();
-        }
-        catch (Exception error)
-        {
-            SetFileStatus($"Data asset kept on previous code: {error.GetBaseException().Message} Close and reopen it to recover.", true);
-        }
+        var yaml = new DataAssetSerializer(_components.Registry).Serialize(state.Instance, state.Id);
+        var (instance, id) = new DataAssetSerializer(registry).Deserialize(yaml, out var typeId, out var membersChanged);
+        return new DataAssetEditState(state.Path, instance, id, typeId) { Dirty = state.Dirty || membersChanged };
     }
 }

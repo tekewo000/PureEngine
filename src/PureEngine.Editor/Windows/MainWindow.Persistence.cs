@@ -153,6 +153,9 @@ public partial class MainWindow
         // Shutdown order: dispose edit-scene components, then edit services, then request code release. Leaves other projects untouched.
         StopUserCodeWatching();
         _playTimer?.Stop();
+        _assetEdit = null;
+        _assetOwned.Clear();
+        DataAssetEditors.Children.Clear();
         var errors = new List<Exception>();
         try { ForceStopPlayForShutdown(); }
         catch (Exception error) { errors.Add(error); }
@@ -228,7 +231,7 @@ public partial class MainWindow
                 return;
             }
         }
-        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty, HasInputErrors)) return;
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty || _assetEdit is { Dirty: true }, HasInputErrors)) return;
         e.Cancel = true;
         await RunFileOperation(async () =>
         {

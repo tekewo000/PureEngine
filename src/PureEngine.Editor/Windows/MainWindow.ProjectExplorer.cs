@@ -548,6 +548,7 @@ public partial class MainWindow
             else if (isDirectory) _project.ValidateFolderPath(newFull);
             else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
+            if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
             RemapSceneReferences(oldFull!, newFull, isDirectory);
@@ -583,6 +584,7 @@ public partial class MainWindow
             }
             else return;
 
+            if (ContainsOpenDataAsset(target) && !await ConfirmCloseDataAsset()) return;
             var startup = _project.StartupScenePath;
             var targetRelative = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))

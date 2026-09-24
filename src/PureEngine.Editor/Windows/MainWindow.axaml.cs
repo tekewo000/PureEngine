@@ -916,10 +916,19 @@ public partial class MainWindow : Window
 
     private async void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
     {
-        if (_hierarchyRefreshing) return;
-        if (GetSelectedSceneObject() is not null && !await ConfirmCloseDataAsset())
+        if (_hierarchyRefreshing || _assetSelectionChanging) return;
+        if (GetSelectedSceneObject() is not null && _assetEdit is not null)
         {
-            SelectSceneObject(null, focus: false);
+            _assetSelectionChanging = true;
+            try
+            {
+                await RunFileOperation(async () =>
+                {
+                    if (!await ConfirmCloseDataAsset()) SelectSceneObject(null, focus: false);
+                    else RefreshObjectInspector();
+                });
+            }
+            finally { _assetSelectionChanging = false; }
             return;
         }
         if (_sceneMoveKind is not PureEngine.Core.SceneViewMath.GizmoKind.None

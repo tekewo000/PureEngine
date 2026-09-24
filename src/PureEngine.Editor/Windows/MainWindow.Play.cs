@@ -343,6 +343,7 @@ public partial class MainWindow
     {
         SceneObjects.IsEnabled = enabled;
         ObjectInspector.IsEnabled = enabled;
+        DataAssetInspector.IsEnabled = enabled;
         ProjectTree.IsEnabled = enabled;
         ProjectFiles.IsEnabled = enabled;
         NewSceneMenu?.IsEnabled = enabled;

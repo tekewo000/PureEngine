@@ -90,12 +90,25 @@ public partial class MainWindow
             return;
         }
         var selectedId = GetSelectedSceneObject()?.Id;
-        // Snapshots use the candidate registry so the adopted service set and the store agree on new types.
-        var reloadedAssets = BuildProjectAssetStore(_components.CreateCandidateRegistry(compiled));
-        Action<IServiceCollection>? assetConfigure = reloadedAssets is null
-            ? null
-            : services => services.AddSingleton(reloadedAssets);
-        var assetYaml = CaptureDataAssetForReload();
+        DataAssetEditState? candidateAsset = null;
+        Action<IServiceCollection>? assetConfigure = null;
+        try
+        {
+            if (compiled.Success)
+            {
+                var registry = _components.CreateCandidateRegistry(compiled);
+                candidateAsset = PrepareDataAssetReload(registry);
+                var reloadedAssets = BuildProjectAssetStore(registry);
+                if (reloadedAssets is not null) assetConfigure = services => services.AddSingleton(reloadedAssets);
+            }
+        }
+        catch (Exception error)
+        {
+            UserCodeCompileTracker.Release(compiled);
+            Log.Engine.Error("Cannot apply C# changes. Keeping the previous scene and data asset.", error);
+            SetFileStatus(error.GetBaseException().Message, true);
+            return;
+        }
         var outcome = _reloadCoordinator.Apply(_editScene, _components, compiled, assetConfigure);
         foreach (var diagnostic in outcome.Diagnostics)
         {
@@ -108,8 +121,9 @@ public partial class MainWindow
             // Clear drag references to the previous collectible assembly.
             _dragTypes = null;
             _assetPress = null;
+            _assetEdit = candidateAsset;
+            RefreshAssetOwned();
             RefreshHierarchy(selectedId);
-            RebindDataAssetAfterReload(assetYaml);
             RefreshObjectInspector();
             UpdateSceneTitle();
         }

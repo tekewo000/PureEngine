@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -26,6 +27,13 @@ static class DataAssetEditorChecks
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
         }
+        static void Answer(string answer)
+        {
+            var desktop = (IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+            Program.Until(() => desktop.Windows.Any(window => window.Title == "Unsaved Data Asset"));
+            var dialog = desktop.Windows.Single(window => window.Title == "Unsaved Data Asset");
+            Click(dialog.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, answer)));
+        }
         static object? Call(MainWindow window, string name, params object?[] args)
         {
             var result = typeof(MainWindow).GetMethod(name,
@@ -44,6 +52,16 @@ static class DataAssetEditorChecks
             {
                 [Inspector] public string Name { get; set; } = "Iron";
                 [Inspector] public int Attack { get; set; } = 10;
+            }
+            public sealed class AssetReader(DataAssetStore assets)
+            {
+                public int InitialAttack { get; private set; }
+                [Start] public void Start()
+                {
+                    var sword = assets.GetAll<SwordData>()[0];
+                    InitialAttack = sword.Attack;
+                    sword.Attack = 99;
+                }
             }
             """);
         created.Dispose();
@@ -83,6 +101,10 @@ static class DataAssetEditorChecks
             Check(Control<TextBlock>(editor, "DataAssetTitle").Text!.StartsWith("* "),
                 "Asset edit must mark the asset dirty.");
             Check(!editor.Title!.StartsWith("* "), "Asset edit must not mark the scene dirty.");
+            editor.Close();
+            Answer("Cancel");
+            Check(editor.IsVisible && Box(editor, "SwordData.Attack").Text == "25",
+                "Closing with only a dirty asset must confirm and Cancel must preserve the input.");
             Click(Control<Button>(editor, "SaveDataAssetButton"));
             Program.Until(() => !Control<TextBlock>(editor, "DataAssetTitle").Text!.StartsWith("* "));
             Check(File.ReadAllText(path).Contains("Attack: 25"), "Save must write the edited value to the file.");
@@ -96,14 +118,53 @@ static class DataAssetEditorChecks
             Check(Control<TextBlock>(editor, "DataAssetInvalid").IsVisible, "Invalid asset input must show an error badge.");
             Click(Control<Button>(editor, "SaveDataAssetButton"));
             Check(!File.ReadAllText(path).Contains("abc"), "Invalid input must not reach the file.");
+            editor.Close();
+            Answer("Cancel");
+            Check(editor.IsVisible && Box(editor, "SwordData.Attack").Text == "abc",
+                "Invalid-only input must require confirmation and survive Cancel.");
             attack.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
             Dispatcher.UIThread.RunJobs();
             Check(attack.Text == "25", $"Esc must restore the last saved value, got '{attack.Text}'.");
             Check(!Control<TextBlock>(editor, "DataAssetInvalid").IsVisible, "Esc must clear the asset error.");
             Click(Control<Button>(editor, "SaveDataAssetButton"));
 
+            // Failed asset migration must reject code adoption, not leave an unsavable old-type instance.
+            var sourcePath = Path.Combine(root, "Sword.cs");
+            var source = File.ReadAllText(sourcePath);
+            File.WriteAllText(sourcePath, source.Replace("int Attack", "bool Attack").Replace("= 10;", "= false;"));
+            Call(editor, "ReloadUserCode");
+            Check(ReferenceEquals(session.Components.DataAssetTypes.Single(), type),
+                "Incompatible data asset fields must preserve the active code.");
+            Check(Box(editor, "SwordData.Attack").Text == "25", "Failed reload must preserve asset data.");
+            File.WriteAllText(sourcePath, source);
+            Call(editor, "ReloadUserCode");
+            Check(!ReferenceEquals(session.Components.DataAssetTypes.Single(), type)
+                && Box(editor, "SwordData.Attack").Text == "25", "Compatible reload must rebind and preserve the asset.");
+
+            var state = (EditSceneStore)typeof(MainWindow).GetField("_editScene",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
+            var readerType = session.Components.UserTypes.Single(candidate => candidate.Name == "AssetReader");
+            var editServices = (PureEngine.Runtime.GameSession)typeof(MainWindow).GetProperty("EditSession",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
+            session.Components.TryAttach(state.Current.AddEmpty(), readerType, editServices.Factory);
+            for (var run = 0; run < 2; run++)
+            {
+                Call(editor, "StartPlay");
+                Check(editor.IsPlaying && !Control<StackPanel>(editor, "DataAssetInspector").IsEnabled,
+                    "Play must disable the data asset Inspector.");
+                var play = (PureEngine.Runtime.PlaySession)typeof(MainWindow).GetProperty("ActivePlay",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
+                var reader = play.Runtime.Scene.Objects.SelectMany(item => item.Components).Single();
+                Check((int)readerType.GetProperty("InitialAttack")!.GetValue(reader)! == 25,
+                    "Each Play must inject a fresh snapshot with the saved value.");
+                Call(editor, "StopPlay");
+                Check(Control<StackPanel>(editor, "DataAssetInspector").IsEnabled, "Stop must restore the asset Inspector.");
+            }
+            Check(File.ReadAllText(path).Contains("Attack: 25") && Box(editor, "SwordData.Attack").Text == "25",
+                "Runtime mutations must not change the file or the editing instance.");
+
             // Leaving through hierarchy selection closes the clean asset and shows scene components.
-            var target = session.Scene.AddEmpty();
+            var target = state.Current.AddEmpty();
             target.Rename("Knight");
             Call(editor, "SyncHierarchyForTest");
             Call(editor, "SelectSceneObjectForTest", target);
@@ -117,6 +178,6 @@ static class DataAssetEditorChecks
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
-        Console.WriteLine("PASS: data asset Inspector open, edit, save validation, and selection handoff.");
+        Console.WriteLine("PASS: data asset Inspector edit/save, unsaved and invalid close guards, transactional reload, Play guard, and selection handoff.");
     }
 }
