@@ -20,7 +20,7 @@ public static class ComponentAssets
     /// <summary>
     /// Built-in type registration policy (A4): each project owner (ProjectComponents) registers
     /// into its own registry on creation. Holds no shared static registration. Survives user.* replacement.
-    /// Transform, UiElement, Image, and Button follow the same search, add, and save path as ordinary components.
+    /// Transform, UiElement, Image, Button, and Text follow the same search, add, and save path as ordinary components.
     /// </summary>
     public static void RegisterBuiltins(ComponentRegistry registry)
     {
@@ -29,6 +29,7 @@ public static class ComponentAssets
         registry.Register<UiElement>("core.ui-element");
         registry.Register<Image>("core.image");
         registry.Register<Button>("core.button");
+        registry.Register<Text>("core.text");
         registry.Register<Samples.PlayerStats>("sample.player-stats");
         registry.Register<Samples.RoundSettings>("sample.round-settings");
         registry.Register<Samples.InjectedPlayer>("sample.injected-player");

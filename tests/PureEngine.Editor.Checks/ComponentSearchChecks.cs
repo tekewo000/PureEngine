@@ -10,11 +10,13 @@ internal static class ComponentSearchChecks
         Check(registry.Ids.Contains("core.transform"), "Transform must be registered.");
         Check(registry.Ids.Contains("core.ui-element"), "UiElement must be registered.");
         Check(registry.Ids.Contains("core.image"), "Image must be registered.");
+        Check(registry.Ids.Contains("core.text"), "Text must be registered.");
 
         var all = ComponentAssets.SearchCandidates(registry, "");
         Check(all.Any(candidate => candidate.TypeId == "core.transform")
             && all.Any(candidate => candidate.TypeId == "core.ui-element")
-            && all.Any(candidate => candidate.TypeId == "core.image"),
+            && all.Any(candidate => candidate.TypeId == "core.image")
+            && all.Any(candidate => candidate.TypeId == "core.text"),
             "Search without query must list engine UI components.");
         var filtered = ComponentAssets.SearchCandidates(registry, "image");
         Check(filtered.Any(candidate => candidate.TypeId == "core.image")
@@ -24,6 +26,9 @@ internal static class ComponentSearchChecks
             "Search must filter by name and typeId.");
         Check(ComponentAssets.SearchCandidates(registry, "no-such-component-xyz").Count == 0,
             "Search with no match must be empty.");
+        var textFiltered = ComponentAssets.SearchCandidates(registry, "text");
+        Check(textFiltered.Any(candidate => candidate.TypeId == "core.text"),
+            "Search must find Text by name.");
 
         using var services = PureEngine.Runtime.GameSession.Create(GameServices.Configure);
         var target = new SceneObject("Target");

@@ -49,7 +49,15 @@ public static class GameSceneRenderer
             catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
             {
                 diagnostics.Add(new Diagnostic(entry.Object.Id, entry.Object.Name, error.GetBaseException().Message));
-                continue;
+                hasImage = false;
+            }
+            try
+            {
+                UiTextRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, clip, null);
+            }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
+            {
+                diagnostics.Add(new Diagnostic(entry.Object.Id, entry.Object.Name, error.GetBaseException().Message));
             }
             DrawButtonOverlay(draw, entry, clip, states, hasImage);
         }

@@ -86,7 +86,7 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）
 - 自作クラス：publicな引数なしコンストラクタを持つclassで、すべての `[Inspector]` メンバーが対応型であるもの。単体・配列・リスト要素・辞書値・入れ子で同じ変換を使う。参照型のためnull可。抽象クラス・ジェネリック・struct・`object` 自体・再帰（自分を直接・間接に含む）は対象外。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する
 
-`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite`・`Color` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
+`Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）・`Button`（`core.button`）・`Text`（`core.text`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite`・`Color` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
 
 ライフサイクルのPriorityはエンジン側のアタッチ設定として表示・保存するもので、ゲーム側メンバーの `[Inspector]` 指定とは別に扱う。
 
@@ -215,7 +215,7 @@ Update Priority    0
 - `SceneDocument` はversionとobjects、各オブジェクトはid・name・parentId・siblingIndex・componentsを持つ保存用データ。`version: 2` で保存し、`version: 1` は全てルート・配列順の兄弟として読み込む。次の明示保存で2へ更新し、読み込み時にファイルを書き換えない。
 - 親子は同じScene内だけで結び、欠落Parent・自己参照・循環、欠落・重複・負数・範囲外のsiblingIndexを拒否する。ルートの兄弟順は文書順に従う。親削除はその時点の子孫ごと削除する。実行中は対象子孫を全て削除予約する。
 - 各componentはtypeIdとvaluesを持つ。valuesは `[Inspector]` が付いた対応型（上記のInspector節）のみ。string・コレクション・`Transform`・`Sprite`・`Nullable` のnullにも対応する。有限でないfloat／double（NaN・Infinity）は保存・読み込みとも拒否する。
-- `ComponentRegistry` で固定文字列IDとC#型を明示登録する。Assetsと読み込みは同じ登録表を使う。C#のクラス名・名前空間を変更しても固定IDは維持する。組み込みは `core.transform`・`core.ui-element`・`core.image` で登録する。
+- `ComponentRegistry` で固定文字列IDとC#型を明示登録する。Assetsと読み込みは同じ登録表を使う。C#のクラス名・名前空間を変更しても固定IDは維持する。組み込みは `core.transform`・`core.ui-element`・`core.image`・`core.button`・`core.text` で登録する。
 - `SceneSerializer` はCoreに置き、Sceneと保存用データの変換・検証・YamlDotNetによるYAML処理を行う。Avaloniaに依存しない。`Clone`（Play時の複製を含む）では配列・リスト・辞書・`Transform`・`Sprite` を深く複製し、親子はClone先へ解決して編集用と実行用・編集用とClone先の共有を残さない。
 - ファイル選択、保存先、未保存状態、確認・エラー表示、ファイルの置き換えはEditorが担当する。
 - 読み込みでは保存時のオブジェクトIDを復元する。全体の復元に成功してから編集中のSceneを入れ替え、ライフサイクルは実行しない。素材欠落はIDを保持したまま警告とし、構造エラーと同じ理由で開けなくしない。
@@ -438,17 +438,17 @@ ProjectFile.ValidateProjectPathをシーン・フォルダ・素材で共有し�
 
 #### UIコンポーネント
 
-最初に用意するのは**UiElement・Text・Image・Button**。全て同じSceneObjectへ付けて組み合わせる普通のComponentとし、描画順以外の専用の基底クラスや別のRectTransformは作らない。位置・回転・拡縮は既存Transformを使い、UiElementに二重に持たせない。現在のコード上の表記は`UiElement`に揃える。Imageは既存のグローバル名前空間のクラスをそのまま使い、`RendererComponent`から派生させる（namespaceの宣言形式は変更しない）。`UiElement`（`core.ui-element`）・`Image`（`core.image`）は組み込み登録済み。Text／Buttonの実装と登録は後続。将来のSpriteRendererも同じ基底を使うが、本体・SortingLayer・Zによる奥行き制御は今回の対象外とする。
+最初に用意するのは**UiElement・Text・Image・Button**。全て同じSceneObjectへ付けて組み合わせる普通のComponentとし、描画順以外の専用の基底クラスや別のRectTransformは作らない。位置・回転・拡縮は既存Transformを使い、UiElementに二重に持たせない。現在のコード上の表記は`UiElement`に揃える。Imageは既存の`PureEngine.Core`名前空間のクラスを使い、`RendererComponent`から派生させる（namespaceの宣言形式は変更しない）。`UiElement`（`core.ui-element`）・`Image`（`core.image`）・`Button`（`core.button`）・`Text`（`core.text`）は組み込み登録済み。将来のSpriteRendererも同じ基底を使うが、本体・SortingLayer・Zによる奥行き制御は今回の対象外とする。
 
 | Component | 責任・データ |
 | --- | --- |
 | `Transform`（既存） | `LocalPosition`・`LocalRotation`・`LocalScale`。既存のLocalMatrixの意味・計算は変更しない |
 | `UiElement`（データ定義あり） | `SizeDelta = (100,100)`、`AnchorMin = AnchorMax = (0,0)`、`Pivot = (0.5,0.5)` |
-| `Text`（予定） | 文字を領域へ描く。文字列・フォント・サイズ・行間・色等の詳細は後続で定義 |
+| `Text` | UiElementの領域へ同梱フォントで描く。`Content = "New Text"`・`Color = White`・`FontSize = 24`・`LineSpacing = 1.2`・`RendererComponent.Order = 0`。左寄せ・上起点で領域幅で折り返し、空文字は描画なし。Imageと同じオブジェクトではImageの後に描く |
 | `Image`（描画確認用の接続済み） | `Sprite? Sprite`と`Color Color = Color.White`、`RendererComponent.Order = 0`。nullは描画なし、ColorはRGBA乗算。UiElementの領域へStretchする |
-| `Button`（予定） | 領域内のクリック判定と処理の通知。見た目はImage／Textとの組み合わせで作る |
+| `Button` | 領域内のクリック判定と処理の通知。見た目はImage／Textとの組み合わせで作る |
 
-UiElementはTransformと組み合わせる。現時点の「Transformが必要」というコメントだけでは依存関係は強制されないため、登録と依存検証は今後の実装対象。構築途中のAttach順序を妨げず、完成したSceneを検証するときの不足の扱いを揃える。Text／Image／Buttonは同じオブジェクトのUiElementが解決した領域を使う。
+UiElementはTransformと組み合わせる。登録とInspectorの依存警告は実装済み。構築途中のAttach順序は強制せず、不足するTransform／UiElementをInspectorで通知する。Text／Image／Buttonは同じオブジェクトのUiElementが解決した領域を使う。Textは幅で折り返すが高さではクリップせず、ビューポートのクリップだけを適用する。Scene Viewの選択はUiElement矩形を使い、あふれた文字は選択範囲に含めない。描画診断はオブジェクト単位の選択／Game入力除外に使うため、一部が描画できても診断があるオブジェクトは操作対象から外れる。Image失敗時もTextとフォーカス枠の描画は継続し、画像用tintは重ねない。
 
 InputField・DropDown・Slider、Toggle／Checkbox・ScrollView・ProgressBarは後続候補。最初の4Componentを作るために専用Canvas Componentを必須にしない。以前のUiCanvas必須・TransformとRectTransformの併用禁止という案は採用しない。
 
@@ -464,19 +464,19 @@ Visible・Opacity・ClipChildrenや画面全体の解像度設定は引き続き
 
 #### Image Componentから描画への接続
 
-`RendererComponent`はOrderを保持する共通基底であり、継承しただけで新しい描画形式が登録されるわけではない。現在のScene View描画対象はImageのみのため、整列時も実際に描くImageのOrderを取得する。同じSceneObjectへ別の派生Componentを先に付けてもImageのOrderを上書きしない。SpriteRenderer等の描画接続を追加するときは、その描画対象ごとにOrderを扱う。
+`RendererComponent`はOrderを保持する共通基底であり、継承しただけで新しい描画形式が登録されるわけではない。現在のScene View描画対象はImageとTextのため、整列時はそのオブジェクトが持つ描画対象のOrderのうち大きい方を取得する。同じSceneObjectにImageとTextがある場合は一単位として扱い、Image→Textの順に描く。独立した順序が必要なら別オブジェクトにする。SpriteRenderer等の描画接続を追加するときは、その描画対象ごとにOrderを扱う。
 
 `PureEngine.Rendering.UiImageRenderer.Draw`は、同じSceneObjectのTransformとUiElementを読み、UiLayoutでサイズと配置行列を計算する。ImageがありSpriteが非nullなら、呼び出し側のID→画像バイト列の辞書から素材を取得し、DrawListへ渡す。Imageなし／Sprite=nullのオブジェクトも配置結果を返すので、画像のない親グループに使える。子にはこの戻り値を渡す。走査順・親子の所属・素材データの所有は呼び出し側の責任で、描画アダプターはSceneを書き換えたりライフサイクルを呼んだりしない。単体描画ではOrderを使わず、配置も変えない。
 
 配置計算済みの描画は`UiImageRenderer.DrawEntry`に集約し、単体の`Draw`と一括走査の両方から使う。一括走査は配置の失敗原因を診断へ残し、失敗した対象の子には親領域を受け渡す。素材解決だけが失敗した場合は、その対象の有効な配置を子へ引き継ぐ。
 
-現在の2D描画は配置行列のXYへの正投影。Quaternionによる変換はUiLayoutで適用した後にXYを取り出し、Z値での奥行き並べ替えはしない。透視変換は明示的に拒否する。編集中Sceneの一括走査（`EditSceneRenderer`）では親子の配置計算を済ませてから、`RendererComponent.Order`の昇順へ安定並べ替えして描く。大きい値を手前にし、負数も許可する。同値は親→子・兄弟順を維持し、Orderは親から継承せず各描画対象の値を使う。画像の表示は矩形いっぱいへのStretch。0サイズ・退化したXY変換は描画を省略する。Transform／UiElement不足、画像ID欠落、壊れた画像、切り出し範囲外は例外とし、現在のViewportは既存の停止・診断経路で通知する。ライフサイクルのPriorityとは独立させる。
+現在の2D描画は配置行列のXYへの正投影。Quaternionによる変換はUiLayoutで適用した後にXYを取り出し、Z値での奥行き並べ替えはしない。透視変換は明示的に拒否する。編集中Sceneの一括走査（`EditSceneRenderer`）では親子の配置計算を済ませてから、`RendererComponent.Order`の昇順へ安定並べ替えして描く。大きい値を手前にし、負数も許可する。同値は親→子・兄弟順を維持し、Orderは親から継承せず各描画対象の値を使う。ImageとTextが同じオブジェクトにある場合は大きい方のOrderで並べ替える。画像の表示は矩形いっぱいへのStretch。0サイズ・退化したXY変換は描画を省略する。Transform／UiElement不足、画像ID欠落、壊れた画像、切り出し範囲外は例外とし、現在のViewportは既存の停止・診断経路で通知する。ライフサイクルのPriorityとは独立させる。
 
 DrawListのSprite用Imageオーバーロードは、元画像を初回だけデコードし、Spriteの領域を独立したアトラス領域へコピーする。キーは画像ID＋切り出し矩形（全体指定は別キー）なので、同じ画像の異なる切り出しを混同せず、線形補間でも隣のSprite領域を直接参照しない。画像IDのバイト列を変更する呼び出し側はキャッシュを無効化する。EditorのRefreshはVulkanViewportへ無効化を予約し、前回の表示処理を待った次の直列フレーム内でDrawList.ResetAtlasを適用する。CPUアトラスの項目と配置をクリアしRevisionを進めることで、同じIDでも新しい画素をGPUへ再転送する。明示Refreshではアトラス全体を再構築し、GPUデバイスや描画先を作り直さない。元画像サイズはV2と同じく各軸2046ピクセル以下、アトラスは2048×2048に制限する。
 
 `ImageRenderingSample`は検証専用Sceneに通常のTransform・UiElement・Imageを付けて親子を作る。Viewportは表示寸法で毎フレーム配置を再計算する。全体画像・部分切り出し・Color／Alpha・親子回転・右下固定・横Stretch・null Spriteを確認する。背景と説明文字は既存DrawListで描き、Text Component実装とは区別する。
 
-Imageの `Sprite`・`Color`・`Order` はInspector・YAML・Cloneで扱う。`Order` は `RendererComponent` の共通基底に `[Inspector] public int Order { get; set; }` として持ち、既定値は0。旧データは `Order = 0` として従来の表示を維持する。`Sprite` の選択肢はProjectの `Assets/` 索引から作り、None解除と欠落IDの保持に対応する。検証用の画像辞書を制作データの保存先にしない。`Sprite` は素材データのまま維持し、描画順を持たせない。
+Imageの `Sprite`・`Color`・`Order` はInspector・YAML・Cloneで扱う。`Text` の `Content`・`Color`・`FontSize`・`LineSpacing`・`Order` もInspector・YAML・Cloneで扱い、旧データは既定値（`Content = "New Text"` ほか）として読み込む。`Order` は `RendererComponent` の共通基底に `[Inspector] public int Order { get; set; }` として持ち、既定値は0。旧データは `Order = 0` として従来の表示を維持する。`Sprite` の選択肢はProjectの `Assets/` 索引から作り、None解除と欠落IDの保持に対応する。検証用の画像辞書を制作データの保存先にしない。`Sprite` は素材データのまま維持し、描画順を持たせない。
 
 #### 配置計算の置き場所と入出力
 
@@ -532,7 +532,7 @@ V3は共通の座標変換・矩形包含・クリップ包含を用意し、実
 
 #### ボタンとゲームコードの接続
 
-Button自身が `IUiButtonHandler` を実装し、更新境界で受けたクリックを `Clicked` イベントへ渡す。接続と実行の仕様は[実装済みのV5前半](#v5前半game表示とbutton操作)、登録例と現在の接続範囲は[README](../README.md#game表示とbutton操作)を参照する。Text・ObjectRefによる対象参照は後続の計画であり、現時点のクリック接続には要求しない。
+Button自身が `IUiButtonHandler` を実装し、更新境界で受けたクリックを `Clicked` イベントへ渡す。接続と実行の仕様は[実装済みのV5前半](#v5前半game表示とbutton操作)、登録例と現在の接続範囲は[README](../README.md#game表示とbutton操作)を参照する。Text表示は実装済みだがクリック接続には要求しない。ObjectRefによる対象参照は後続の計画。
 
 #### 保存形式・移行・Inspector
 

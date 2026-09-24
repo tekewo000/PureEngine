@@ -856,6 +856,9 @@ public partial class MainWindow : Window
     private void OnAddUiButton(object? sender, RoutedEventArgs e) =>
         AddUiObject("Button", [typeof(Core.Transform), typeof(UiElement), typeof(Core.Image), typeof(Core.Button)]);
 
+    private void OnAddUiText(object? sender, RoutedEventArgs e) =>
+        AddUiObject("Text", [typeof(Core.Transform), typeof(UiElement), typeof(Core.Text)]);
+
     /// <summary>Creates the required UI setup using the current parent selection and the Component creation path.</summary>
     private void AddUiObject(string baseName, Type[] componentTypes)
     {

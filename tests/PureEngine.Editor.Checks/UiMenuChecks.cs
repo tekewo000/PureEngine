@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using PureEngine.Core;
 using PureEngine.Editor;
 using UiButton = PureEngine.Core.Button;
+using UiText = PureEngine.Core.Text;
 
 static class UiMenuChecks
 {
@@ -33,8 +34,9 @@ static class UiMenuChecks
             var menu = editor.FindControl<Grid>("SceneSurface")!.ContextMenu!;
             var ui = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "UI"));
             MenuItem[] subs = [.. ui.Items.OfType<MenuItem>()];
-            Check(subs.Length == 2 && Equals(subs[0].Header, "Image") && Equals(subs[1].Header, "Button"),
-                "UI submenu must contain Image and Button.");
+            Check(subs.Length == 3 && Equals(subs[0].Header, "Image") && Equals(subs[1].Header, "Button")
+                && Equals(subs[2].Header, "Text"),
+                "UI submenu must contain Image, Button, and Text.");
             Click(subs[0]);
             var image = scene.Objects.Single();
             Check(image.Name == "Image" && image.Components.Count == 3 && image.GetComponent<PureEngine.Core.Image>() is not null
@@ -67,12 +69,30 @@ static class UiMenuChecks
             Check(!editor.IsPlaying && ui.IsEnabled, "UI submenu must return after Stop.");
             Click(subs[1]);
             Check(scene.Objects[3].Name == "Button (1)", "UI creation must work again after Stop.");
+            Click(subs[2]);
+            var textParent = scene.Objects[3];
+            var label = scene.Objects[4];
+            Check(label.Name == "Text" && label.Components.Count == 3 && label.GetComponent<UiText>() is { Content: "New Text" }
+                && UiComponentRequirements.GetMissing(label).Count == 0, "Text creation must include its layout requirements and readable defaults.");
+            Check(ReferenceEquals(label.Parent, textParent) && ReferenceEquals((objects.SelectedItem as HierarchyNode)?.Ref, label),
+                "Text creation must follow Add Empty's selected-parent rule and select the child.");
+            Check(editor.FindControl<StackPanel>("ComponentEditors")!.Children.Count == 3,
+                "Inspector must show all three Text components.");
+            Click(subs[2]);
+            Check(scene.Objects[5].Name == "Text (1)", "Repeated Text names must not collide.");
+            var textSerializer = new SceneSerializer(components.Registry);
+            var textYaml = textSerializer.Serialize(scene);
+            var textRestored = textSerializer.Deserialize(textYaml);
+            Check(textRestored.Objects[4].GetComponent<UiText>()!.Content == "New Text"
+                && ReferenceEquals(textRestored.Objects[4].Parent, textRestored.Objects[3])
+                && textSerializer.Serialize(textRestored) == textYaml,
+                "Text values and hierarchy must survive save/load.");
 
             store.MarkClean();
             var selected = objects.SelectedItem;
             components.Registry.Unregister(typeof(UiButton));
             Click(subs[1]);
-            Check(scene.Objects.Count == 4 && !store.IsDirty && ReferenceEquals(objects.SelectedItem, selected),
+            Check(scene.Objects.Count == 6 && !store.IsDirty && ReferenceEquals(objects.SelectedItem, selected),
                 "Attachment failure must roll back the new object without changing selection or dirty state.");
             Check(editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("Could not attach Button"),
                 "Attachment failure must be reported.");

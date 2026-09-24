@@ -74,6 +74,14 @@ public static class EditSceneRenderer
             {
                 diagnostics.Add(new Diagnostic(entry.Object.Id, entry.Object.Name, error.GetBaseException().Message));
             }
+            try
+            {
+                UiTextRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, clip, view);
+            }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
+            {
+                diagnostics.Add(new Diagnostic(entry.Object.Id, entry.Object.Name, error.GetBaseException().Message));
+            }
         }
     }
 

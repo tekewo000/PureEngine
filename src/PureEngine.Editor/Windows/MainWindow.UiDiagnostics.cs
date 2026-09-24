@@ -78,7 +78,7 @@ public partial class MainWindow
     private void UpdateUiWarning(TextBlock warning, SceneObject item, object component)
     {
         var missing = UiComponentRequirements.GetMissing(item);
-        var relevant = component is Core.Image or Core.Button
+        var relevant = component is Core.Image or Core.Button or Core.Text
             ? missing
             : component is PureEngine.Core.UiElement
                 ? missing.Where(name => name == "Transform").ToList()

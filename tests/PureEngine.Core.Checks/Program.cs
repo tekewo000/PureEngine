@@ -140,6 +140,7 @@ InspectorValueChecks.Run();
 SceneReferenceChecks.Run();
 UiComponentChecks.Run();
 UiButtonChecks.Run();
+UiTextChecks.Run();
 SceneViewChecks.Run();
 HierarchyLifetimeChecks.Run();
 ProjectPersistenceChecks.Run();

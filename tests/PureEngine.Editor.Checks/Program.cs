@@ -69,6 +69,7 @@ internal static class Program
             desktop.MainWindow = launcher;
             launcher.Show();
             Dispatcher.UIThread.RunJobs();
+            UiTextEditorChecks.Run();
             PlayConnectionChecks.Run();
             ProjectDropChecks.Run();
             UiMenuChecks.Run();
