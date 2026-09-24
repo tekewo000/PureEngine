@@ -82,6 +82,7 @@ internal static class Program
             UserCodeBackgroundChecks.Run(root);
             IntegratedArchitectureChecks.Run(root);
             ProjectAssetChecks.Run(root);
+            DataAssetEditorChecks.Run(root);
             UiEndToEndChecks.Run(root);
             SpriteReopenChecks.Run(root);
             Control<TextBox>(launcher, "ProjectLocation").Text = root;

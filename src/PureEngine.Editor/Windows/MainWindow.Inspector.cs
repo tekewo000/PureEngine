@@ -581,7 +581,7 @@ public partial class MainWindow
                     transform.LocalScale = WithVector3Axis(transform.LocalScale, capturedAxis, value);
                 else
                     transform.LocalRotation = WithQuaternionAxis(transform.LocalRotation, capturedAxis, value);
-                MarkSceneChanged();
+                MarkEdited(component);
                 MarkInvalid(box, null, hint);
             };
             box.KeyDown += (_, e) =>
@@ -785,7 +785,7 @@ public partial class MainWindow
             if (GetMemberValue(component, member) is not IDictionary dictionary) return;
             var key = UniqueDictionaryKey(dictionary);
             dictionary.Add(key, DefaultElementValue(valueType));
-            MarkSceneChanged();
+            MarkEdited(component);
             refresh();
         };
         clear.Click += (_, _) =>
@@ -793,7 +793,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             if (GetMemberValue(component, member) is IDictionary dictionary)
                 dictionary.Clear();
-            MarkSceneChanged();
+            MarkEdited(component);
             refresh();
         };
         setNull.Click += (_, _) =>
@@ -840,7 +840,7 @@ public partial class MainWindow
             var preserved = dictionary[key];
             dictionary.Remove(key);
             dictionary.Add(next, preserved);
-            MarkSceneChanged();
+            MarkEdited(component);
             MarkInvalid(keyBox, null, "Dictionary key — must be unique and non-empty");
             refresh();
         };
@@ -864,7 +864,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             if (GetMemberValue(component, member) is IDictionary dictionary)
                 dictionary.Remove(key);
-            MarkSceneChanged();
+            MarkEdited(component);
             refresh();
         };
         row.Children.Add(remove);
@@ -887,7 +887,7 @@ public partial class MainWindow
                 if (GetMemberValue(component, member) is not IDictionary dictionary) return;
                 if (!dictionary.Contains(key)) return;
                 dictionary[key] = box.Text ?? "";
-                MarkSceneChanged();
+                MarkEdited(component);
             };
             box.KeyDown += (_, e) =>
             {
@@ -916,7 +916,7 @@ public partial class MainWindow
                 var value = check.IsChecked == true;
                 check.Content = value ? "True" : "False";
                 target[key] = value;
-                MarkSceneChanged();
+                MarkEdited(component);
             };
             return check;
         }
@@ -1272,7 +1272,7 @@ public partial class MainWindow
         else if (value is IList list)
         {
             list.Add(defaultValue);
-            MarkSceneChanged();
+            MarkEdited(component);
         }
     }
 
@@ -1286,7 +1286,7 @@ public partial class MainWindow
         else if (value is IList list)
         {
             list.Clear();
-            MarkSceneChanged();
+            MarkEdited(component);
         }
     }
 
@@ -1313,7 +1313,7 @@ public partial class MainWindow
         {
             if (index < 0 || index >= list.Count) return;
             list.RemoveAt(index);
-            MarkSceneChanged();
+            MarkEdited(component);
         }
     }
 

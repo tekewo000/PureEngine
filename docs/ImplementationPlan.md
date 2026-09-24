@@ -41,6 +41,14 @@
 
 ## 次に着手する作業
 
+### データアセットの作成と保存（2026-09-24実装）
+
+- 継承なしの普通のクラスに `[DataAsset]` を付けて Create Data Asset メニューから作る。対象はpublic・非abstract・非ジェネリックでpublicな引数なしコンストラクターを持つクラス。メニューパス省略時は型名。使えない型・重複メニューは理由を表示する。
+- Coreに `DataAssetAttribute`（`Inherited = false`・任意のメニューパス）・`DataAssetDescriptor`・`DataAssetDocument`・`DataAssetSerializer` を追加。値の変換・旧名解決・membersChanged報告はシーンの `[Inspector]` 規則を再利用し、シーン参照は拒否する。ファイルは `.pure.asset.yaml`（version 1・ID・typeId・values）。
+- Editorはコンパイル結果に `DataAssetTypes` を公開し、ProjectペインのTree／Files両メニューにフォルダ階層付きの作成 submenu を出す。作成・一覧・改名・削除に対応し、改名では拡張子を維持する。
+- 回帰チェック（記述子判定・メニュー表記・YAML往復・旧名・コンパイル検出・ファイル作成）を Core Checks に追加。設計は [EngineArchitecture.md](EngineArchitecture.md#data-assets)、操作は [README](../README.md#データアセットを作る) を参照。
+- つなぎ込み（2026-09-24実装）：Project欄の選択でInspectorに読み込み、シーンと同じ行エディターで編集・保存する。dirtyはアセット到達集合の所有で振り分け、未保存は切替・終了時に確認する。C#再反映はYAMLを新旧の型IDで付け替える。実行中はCoreの `DataAssetStore` を編集用・Play用のサービスに登録し、スナップショットとして読み取る。回帰チェック（ストア走査・Editorの開く・編集・保存検証・選択引継ぎ）を追加し、ローカルの `./tools/code-quality.ps1 -Check` は通過。実画面・CIは未確認として区別する。
+
 ### SceneObject・ComponentのID参照とInspector接続（2026-09-23合意・実装済み）
 
 **実装済み。全SceneObject・全ComponentにIDを付け、保存ではID参照、ゲーム実行中は解決済みの通常のC#参照を使う。** ユーザーが重視するのはエンジン自身とゲーム実行時の性能、および使う側のルールの単純さ。Inspectorに割り当てたときだけIDを発行する方式、ゲーム側に `ObjectRef<T>`／都度の `Resolve` を要求する方式は採用しない。ローカルの `./tools/code-quality.ps1 -Check` は通過。実画面のStuffs→欄D&D・保存→再Open・PlayでのButton接続の目視、CI実行は未確認として区別する。10,000件のローカル性能比較は下記レビュー修正後の測定で確認した。

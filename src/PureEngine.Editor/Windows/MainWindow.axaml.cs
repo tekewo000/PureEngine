@@ -243,6 +243,16 @@ public partial class MainWindow : Window
     {
         ComponentEditors.Children.Clear();
         _invalidFields.Clear();
+        if (_assetEdit is not null && GetSelectedSceneObject() is null)
+        {
+            AttachedClasses.IsVisible = false;
+            NoComponentsHint.IsVisible = false;
+            AttachError.IsVisible = false;
+            ComponentsHeader.Text = "Components";
+            RefreshDataAssetInspector();
+            return;
+        }
+        DataAssetInspector.IsVisible = false;
         var item = GetSelectedSceneObject();
         var components = item?.Components.ToArray() ?? [];
         AttachedClasses.IsVisible = item is not null;
@@ -260,6 +270,11 @@ public partial class MainWindow : Window
         ComponentsError.IsVisible = _invalidFields.Count > 0;
         ComponentsError.Text = $"Error {_invalidFields.Count}";
         ToolTip.SetTip(ComponentsError, _invalidFields.Count > 0
+            ? $"{_invalidFields.Count} field(s) have invalid input — fix the highlighted fields to save."
+            : null);
+        DataAssetInvalid.IsVisible = _invalidFields.Count > 0;
+        DataAssetInvalid.Text = $"Error {_invalidFields.Count}";
+        ToolTip.SetTip(DataAssetInvalid, _invalidFields.Count > 0
             ? $"{_invalidFields.Count} field(s) have invalid input — fix the highlighted fields to save."
             : null);
     }
@@ -559,7 +574,7 @@ public partial class MainWindow : Window
                             case PropertyInfo property: property.SetValue(owner, value); break;
                             default: throw new NotSupportedException($"Unsupported member: {member.Name}");
                         }
-                        MarkSceneChanged();
+                        MarkEdited(owner);
                         capturedRefresh2();
                     },
                     objectType, capturedAutomation2, capturedId2, capturedBase);
@@ -759,7 +774,8 @@ public partial class MainWindow : Window
 
     private void MarkInvalid(TextBox box, string? message, string? validTip = null)
     {
-        if (!box.GetVisualAncestors().Contains(ComponentEditors)) return;
+        if (!box.GetVisualAncestors().Contains(ComponentEditors)
+            && !box.GetVisualAncestors().Contains(DataAssetEditors)) return;
         if (message is null)
         {
             box.ClearValue(TextBox.BorderBrushProperty);
@@ -841,7 +857,7 @@ public partial class MainWindow : Window
             case PropertyInfo property: property.SetValue(component, value); break;
             default: throw new NotSupportedException($"Unsupported member: {member.Name}");
         }
-        MarkSceneChanged();
+        MarkEdited(component);
     }
 
     private void OnScenePointerPressed(object? sender, PointerPressedEventArgs e)
@@ -898,9 +914,14 @@ public partial class MainWindow : Window
         SceneObjects.Focus();
     }
 
-    private void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
+    private async void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
     {
         if (_hierarchyRefreshing) return;
+        if (GetSelectedSceneObject() is not null && !await ConfirmCloseDataAsset())
+        {
+            SelectSceneObject(null, focus: false);
+            return;
+        }
         if (_sceneMoveKind is not PureEngine.Core.SceneViewMath.GizmoKind.None
             && !ReferenceEquals(GetSelectedSceneObject(), _dragTarget))
             CancelSceneViewDrag();
@@ -910,6 +931,13 @@ public partial class MainWindow : Window
     private void RefreshObjectInspector()
     {
         var item = GetSelectedSceneObject();
+        if (_assetEdit is not null && item is null)
+        {
+            DeleteObjectMenuItem.IsEnabled = false;
+            RefreshDataAssetInspector();
+            return;
+        }
+        DataAssetInspector.IsVisible = false;
         DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying;
         ObjectInspector.IsVisible = item is not null;
         ObjectName.Text = item?.Name ?? "";

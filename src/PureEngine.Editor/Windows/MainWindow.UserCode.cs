@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -89,7 +90,13 @@ public partial class MainWindow
             return;
         }
         var selectedId = GetSelectedSceneObject()?.Id;
-        var outcome = _reloadCoordinator.Apply(_editScene, _components, compiled);
+        // Snapshots use the candidate registry so the adopted service set and the store agree on new types.
+        var reloadedAssets = BuildProjectAssetStore(_components.CreateCandidateRegistry(compiled));
+        Action<IServiceCollection>? assetConfigure = reloadedAssets is null
+            ? null
+            : services => services.AddSingleton(reloadedAssets);
+        var assetYaml = CaptureDataAssetForReload();
+        var outcome = _reloadCoordinator.Apply(_editScene, _components, compiled, assetConfigure);
         foreach (var diagnostic in outcome.Diagnostics)
         {
             var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
@@ -102,6 +109,7 @@ public partial class MainWindow
             _dragTypes = null;
             _assetPress = null;
             RefreshHierarchy(selectedId);
+            RebindDataAssetAfterReload(assetYaml);
             RefreshObjectInspector();
             UpdateSceneTitle();
         }

@@ -2,6 +2,7 @@ using PureEngine.Runtime;
 using System.Diagnostics;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -58,7 +59,14 @@ public partial class MainWindow
         PlaySession? session;
         try
         {
-            session = PlaySession.Prepare(_editScene.Current, _components.Registry, GameServices.ForProject(_components));
+            // Each run gets a fresh snapshot; edits made during the run never reach files or other runs.
+            var assets = BuildProjectAssetStore(_components.Registry);
+            var configure = GameServices.ForProject(_components);
+            session = PlaySession.Prepare(_editScene.Current, _components.Registry, services =>
+            {
+                configure(services);
+                if (assets is not null) services.AddSingleton(assets);
+            });
         }
         catch (Exception error)
         {

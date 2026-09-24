@@ -45,7 +45,7 @@ public partial class MainWindow
                 if (IsPlaying) return;
                 if (GetMemberValue(component, member) is not IDictionary dictionary || !dictionary.Contains(key)) return;
                 dictionary[key] = value;
-                MarkSceneChanged();
+                MarkEdited(component);
             },
             valueType, automationName, ownerId, baseStorePath);
     }
