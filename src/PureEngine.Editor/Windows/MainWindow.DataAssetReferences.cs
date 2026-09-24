@@ -28,12 +28,21 @@ public partial class MainWindow
     private async void OnAssetReleased(object? sender, PointerReleasedEventArgs e)
     {
         var entry = _pressedDataAsset;
+        var prefab = _pressedPrefab;
         _pressedDataAsset = null;
+        _pressedPrefab = null;
         _assetPress = null;
-        if (entry is null || e.InitialPressMouseButton != MouseButton.Left) return;
-        if (ReferenceEquals(ProjectFiles.SelectedItem, entry))
-            await OpenDataAssetForEdit(entry.FullPath!);
-        else
-            ProjectFiles.SelectedItem = entry;
+        if (e.InitialPressMouseButton != MouseButton.Left) return;
+        if (entry is not null)
+        {
+            if (ReferenceEquals(ProjectFiles.SelectedItem, entry))
+                await OpenDataAssetForEdit(entry.FullPath!);
+            else
+                ProjectFiles.SelectedItem = entry;
+            return;
+        }
+        // Prefab clicks only select; placement stays on the menu, double-click, or drag-drop.
+        if (prefab is not null)
+            ProjectFiles.SelectedItem = prefab;
     }
 }

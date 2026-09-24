@@ -169,6 +169,7 @@ public partial class MainWindow
         catch (Exception error) { errors.Add(error); }
         _dragTypes = null;
         _assetPress = null;
+        _pressedPrefab = null;
         if (errors.Count != 0) throw new AggregateException("Editor cleanup failed.", errors);
     }
 

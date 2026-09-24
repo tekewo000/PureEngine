@@ -492,6 +492,8 @@
                       <MenuItem x:Name="AddUiTextMenuItem" Header="Text" Click="OnAddUiText" />
                     </MenuItem>
                     <Separator />
+                    <MenuItem x:Name="SavePrefabMenuItem" Header="Save as Prefab…" Click="OnSavePrefab"
+                              IsEnabled="False" />
                     <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
                               InputGesture="Delete" IsEnabled="False" />
                   </ContextMenu>
@@ -566,6 +568,7 @@
                   <ListBox.ContextMenu>
                     <ContextMenu>
                       <MenuItem x:Name="FilesOpenMenu" Header="Open" Click="OnExplorerOpen" />
+                      <MenuItem x:Name="FilesPlaceMenu" Header="Place in Scene" Click="OnExplorerPlacePrefab" />
                       <MenuItem x:Name="FilesStartupMenu" Header="Set as Startup Scene" Click="OnSetStartupScene" />
                       <Separator />
                       <MenuItem x:Name="FilesCreateFolderMenu" Header="Create Folder" Click="OnExplorerCreateFolder" />

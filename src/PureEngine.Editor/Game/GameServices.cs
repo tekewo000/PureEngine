@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using PureEngine.Core;
 using PureEngine.Editor.Samples;
 
 namespace PureEngine.Editor;
@@ -24,5 +25,6 @@ public static class GameServices
     {
         services.AddScoped<IRandomService, RandomService>();
         services.AddScoped<BattleSession>();
+        services.AddScoped<PrefabSpawner>();
     }
 }

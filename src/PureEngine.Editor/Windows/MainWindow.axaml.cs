@@ -122,6 +122,7 @@ public partial class MainWindow : Window
         _assetPress = null;
         _dragTypes = null;
         _pressedDataAsset = null;
+        _pressedPrefab = null;
         if (!e.GetCurrentPoint(ProjectFiles).Properties.IsLeftButtonPressed) return;
         var entry = ((e.Source as Visual)?.GetSelfAndVisualAncestors()
             .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as ProjectExplorerEntry);
@@ -130,6 +131,12 @@ public partial class MainWindow : Window
         {
             if (IsPlaying) return;
             _pressedDataAsset = entry;
+            e.Handled = true; // Select only on release, preserving the Inspector during a drag.
+        }
+        else if (entry.Kind == ProjectExplorerKind.Prefab && entry.FullPath is not null)
+        {
+            if (IsPlaying) return;
+            _pressedPrefab = entry;
             e.Handled = true; // Select only on release, preserving the Inspector during a drag.
         }
         else if (entry.ComponentType is not null)
@@ -174,6 +181,14 @@ public partial class MainWindow : Window
             using var transfer = new DataTransfer();
             transfer.Add(DataTransferItem.Create(DataAssetIdFormat, id.ToString("D")));
             await DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Copy);
+            return;
+        }
+        if (_pressedPrefab is { FullPath: not null } prefabEntry)
+        {
+            _pressedPrefab = null;
+            _assetPress = null;
+            using var prefabTransfer = CreatePrefabTransfer(prefabEntry.FullPath);
+            await DragDrop.DoDragDropAsync(press, prefabTransfer, DragDropEffects.Copy);
             return;
         }
         var types = _dragTypes!;
@@ -969,6 +984,7 @@ public partial class MainWindow : Window
         }
         DataAssetInspector.IsVisible = false;
         DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying;
+        SavePrefabMenuItem.IsEnabled = item is not null && !IsPlaying;
         ObjectInspector.IsVisible = item is not null;
         ObjectName.Text = item?.Name ?? "";
         var id = item?.Id.ToString() ?? "";

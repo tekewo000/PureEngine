@@ -221,6 +221,28 @@ public class Shop
 - ストアはスナップショットです。プロジェクトを開く・C#を反映する・Playするたびに作り直し、実行中の変更はファイルや他の実行に漏れません。仕様は[設計書のData Assets節](docs/EngineArchitecture.md#data-assets)を参照してください。
 - Playで使うのは保存済みの値です。Inspectorの変更をゲームへ反映する前にアセットを保存してください。ストア内のインスタンス自体は通常の可変classで、同じ実行内の読み込み先では共有されます。
 
+### プレハブを使う
+
+SceneObjectを1つ選び、子孫ごとファイル化して何度でも複製できます。配置後は普通のSceneObjectになり、元の編集は配置済みへ反映されません。リンク・個別Override・入れ子はありません。
+
+- Stuffsで対象を選んで右クリック→ **Save as Prefab…** で保存します。保存先はProject欄に表示中のフォルダで、ファイルは `.pure.prefab.yaml` です。既存ファイルの上書きはしません。
+- 配置はProject欄のファイルを右クリック→ **Place in Scene**、ダブルクリック／Enter、またはStuffsへのD&Dです。行の上ならその子、余白ならルートの末尾に置きます（メニューとダブルクリックはStuffsの選択を親にします）。Prefab内の兄弟順を保ちます。配置後はシーンが未保存になります。
+- Prefab内部の参照（子・Component・コレクションや入れ子値の中も）は複製先へつなぎ直し、範囲外・画像・データアセットへの参照はそのまま残します。対象不在はMissingとしてIDを保持し、同じIDが戻れば再接続します。メンバーの追加・改名・削除には耐え、非互換な型変更などの壊れたPrefabは配置を拒否してシーンを変えません。
+- ゲーム実行中の生成は `PrefabSpawner` をコンストラクターで受け、`Spawn` で行います。PrefabのIDはファイルの `id` です。`Start` 以降に呼び、コンストラクターでは使わないでください。追加分は次のフレームから開始します。
+
+```csharp
+public class EnemySpawner(PrefabSpawner prefabs)
+{
+    [Start] public void Start()
+    {
+        // The prefab ID is the "id" in the .pure.prefab.yaml file.
+        prefabs.Spawn(Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"));
+    }
+}
+```
+
+- Play開始時にPrefab一覧を作り直し、実行中の配置はファイルや他の実行に漏れません。Play中の保存・配置はできません。仕様は[設計書のPrefabs節](docs/EngineArchitecture.md#prefabs)を参照してください。
+
 ## ZedなどでC#を編集する
 
 新規Projectの作成時、および既存Projectを開くときに、編集用の `PureEngine.Game.csproj`・`PureEngine.Game.slnx` と不足している `global.json` を自動生成します。ゲームのターゲットは **.NET 11（net11.0）**。PureEngine.Core・DIライブラリへの参照、ライフサイクル診断用のAnalyzer参照、エンジンが使用するSDKの指定を含みます。

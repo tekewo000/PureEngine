@@ -174,6 +174,32 @@ public sealed class ProjectFile
             throw new InvalidDataException("Save data assets as .pure.asset.yaml inside the project folder.");
     }
 
+    /// <summary>Prefab file extension. Copy-only single-root subtrees, distinct from scenes and data assets.</summary>
+    public static bool IsPrefabFileName(string fileName) =>
+        fileName.EndsWith(".pure.prefab.yaml", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Rejects paths escaping the project and enforces the prefab extension.</summary>
+    public void ValidatePrefabPath(string path)
+    {
+        path = Path.GetFullPath(path);
+        ValidateProjectPath(RootDirectory, path);
+        if (!IsPrefabFileName(path))
+            throw new InvalidDataException("Save prefabs as .pure.prefab.yaml inside the project folder.");
+    }
+
+    /// <summary>Returns a non-duplicated prefab name within the specified folder.</summary>
+    public string NextPrefabName(string relativeDirectory, string baseName)
+    {
+        var directory = ResolveDirectoryPath(relativeDirectory);
+        var clean = string.Join('_', (string.IsNullOrWhiteSpace(baseName) ? "Prefab" : baseName.Trim())
+            .Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+        if (string.IsNullOrWhiteSpace(clean)) clean = "Prefab";
+        var name = $"{clean}.pure.prefab.yaml";
+        for (var number = 2; File.Exists(Path.Combine(directory, name)) || Directory.Exists(Path.Combine(directory, name)); number++)
+            name = $"{clean}{number}.pure.prefab.yaml";
+        return name;
+    }
+
     /// <summary>Returns a non-duplicated data asset name within the specified folder.</summary>
     public string NextDataAssetName(string relativeDirectory, string baseName)
     {

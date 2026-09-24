@@ -135,6 +135,7 @@ Check(projectOwner.TryAttach(otherTarget, assetType)
 Check(projectOwner.TryAttach(dropTarget, typeof(PureEngine.Editor.Samples.RoundSettings))
     && dropTarget.Components.Count == 2, "Different classes must coexist on the drop target.");
 
+PrefabChecks.Run();
 ScenePersistenceChecks.Run();
 DataAssetChecks.Run();
 DirectAssetChecks.Run();

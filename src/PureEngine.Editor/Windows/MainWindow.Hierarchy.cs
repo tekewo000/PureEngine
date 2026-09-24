@@ -216,6 +216,21 @@ public partial class MainWindow
 
     private void OnHierarchyDragOver(object? sender, DragEventArgs e)
     {
+        if (e.DataTransfer.Contains(PrefabPathFormat) && !e.DataTransfer.Contains(SceneObjectIdFormat))
+        {
+            if (IsPlaying)
+            {
+                ClearHierarchyDropIndicator();
+                e.DragEffects = DragDropEffects.None;
+            }
+            else
+            {
+                ShowPrefabDropIndicator(e);
+                e.DragEffects = DragDropEffects.Copy;
+            }
+            e.Handled = true;
+            return;
+        }
         if (!e.DataTransfer.Contains(SceneObjectIdFormat)) return;
         if (IsPlaying || GetDraggedId(e) is not { } draggedId)
         {
@@ -257,8 +272,29 @@ public partial class MainWindow
         // Moving between the text and chevron of the same row must not restart the hover delay.
         var hit = SceneSurface.InputHitTest(e.GetPosition(SceneSurface)) as Visual;
         var (container, position) = HierarchyDropTarget(e, hit);
+        // Prefab hovers always target as-child regardless of the row geometry.
+        if (e.DataTransfer.Contains(PrefabPathFormat) && !e.DataTransfer.Contains(SceneObjectIdFormat))
+            position = HierarchyDropPosition.AsChild;
         if (ReferenceEquals(container, _hierarchyDropTarget) && position == _hierarchyDropPosition) return;
         ClearHierarchyDropIndicator();
+    }
+
+    /// <summary>Highlights the Stuffs row a dragged prefab would land under. Empty areas clear the highlight.</summary>
+    private void ShowPrefabDropIndicator(DragEventArgs e)
+    {
+        var (container, _) = HierarchyDropTarget(e, e.Source as Visual);
+        if (container?.DataContext is not HierarchyNode)
+        {
+            ClearHierarchyDropIndicator();
+            return;
+        }
+        if (!ReferenceEquals(_hierarchyDropTarget, container))
+        {
+            ClearHierarchyDropIndicator();
+            _hierarchyDropTarget = container;
+            container?.Classes.Add("drop-as-child");
+        }
+        _hierarchyDropPosition = HierarchyDropPosition.AsChild;
     }
 
     private void OnHierarchyExpandTick(object? sender, EventArgs e)
@@ -282,6 +318,27 @@ public partial class MainWindow
 
     private void OnHierarchyDrop(object? sender, DragEventArgs e)
     {
+        if (e.DataTransfer.Contains(PrefabPathFormat) && !e.DataTransfer.Contains(SceneObjectIdFormat))
+        {
+            e.Handled = true;
+            e.DragEffects = DragDropEffects.None;
+            var (prefabContainer, _) = HierarchyDropTarget(e, e.Source as Visual);
+            ClearHierarchyDropIndicator();
+            if (RejectWhenPlaying("Place")) return;
+            if (e.DataTransfer.TryGetValue(PrefabPathFormat) is not { } path) return;
+            var prefabNode = prefabContainer?.DataContext as HierarchyNode;
+            try
+            {
+                PlacePrefabAt(path, prefabNode?.Ref);
+            }
+            catch
+            {
+                // PlacePrefabAt already reported the reason in the file status.
+                return;
+            }
+            e.DragEffects = DragDropEffects.Copy;
+            return;
+        }
         if (!e.DataTransfer.Contains(SceneObjectIdFormat)) return;
         e.Handled = true;
         e.DragEffects = DragDropEffects.None;

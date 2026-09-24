@@ -20,6 +20,7 @@ public enum ProjectExplorerKind
     File,
     Component,
     DataAsset,
+    Prefab,
 }
 
 /// <summary>One row in the Project Explorer right pane. Shows folders, scene files, plain files, and compiled classes in a unified view.</summary>
@@ -38,6 +39,7 @@ public sealed record ProjectExplorerEntry(
         ProjectExplorerKind.Folder => "Folder",
         ProjectExplorerKind.Scene => "Scene",
         ProjectExplorerKind.DataAsset => "Data Asset",
+        ProjectExplorerKind.Prefab => "Prefab",
         ProjectExplorerKind.File => "File",
         _ => "C#",
     };
@@ -54,6 +56,8 @@ public sealed record ProjectExplorerEntry(
     public bool IsScene => Kind == ProjectExplorerKind.Scene;
 
     public bool IsDataAsset => Kind == ProjectExplorerKind.DataAsset;
+
+    public bool IsPrefab => Kind == ProjectExplorerKind.Prefab;
 
     public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
         && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
@@ -171,12 +175,18 @@ public partial class MainWindow
                     var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
                     var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
                     var isDataAsset = !isScene && ProjectFile.IsDataAssetFileName(file);
+                    var isPrefab = !isScene && !isDataAsset && ProjectFile.IsPrefabFileName(file);
                     var isStartup = isScene && string.Equals(relative, startup, StringComparison.Ordinal);
                     var full = Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar));
                     if (isDataAsset)
                     {
                         entries.Add(new ProjectExplorerEntry(
                             ProjectExplorerKind.DataAsset, file, "Data Asset", relative, relative, full, null, false));
+                    }
+                    else if (isPrefab)
+                    {
+                        entries.Add(new ProjectExplorerEntry(
+                            ProjectExplorerKind.Prefab, file, "Prefab", relative, relative, full, null, false));
                     }
                     else if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                     {
@@ -285,13 +295,14 @@ public partial class MainWindow
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var hasProject = _project is not null;
         FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset };
+        FilesPlaceMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
         FilesCreateCSharpMenu.IsEnabled = hasProject && !isComponents && !IsPlaying;
         FilesCreateSceneMenu.IsEnabled = hasProject && !isComponents && _project!.IsUnderScenes(folder);
         RefreshDataAssetMenu(FilesCreateDataAssetMenu, hasProject && !isComponents && !IsPlaying);
-        FilesRenameMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset };
-        FilesDeleteMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset };
+        FilesRenameMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset or ProjectExplorerKind.Prefab };
+        FilesDeleteMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset or ProjectExplorerKind.Prefab };
     }
 
     private async void OnProjectFilesDoubleTapped(object? sender, TappedEventArgs e) => await OpenSelectedExplorerEntry();
@@ -314,12 +325,17 @@ public partial class MainWindow
 
     private async Task OpenSelectedExplorerEntry()
     {
+        if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
+        if (entry.Kind == ProjectExplorerKind.Prefab && entry.FullPath is not null)
+        {
+            await PlacePrefabAsync(entry.FullPath);
+            return;
+        }
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
-        if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
         if (entry.Kind == ProjectExplorerKind.Folder && entry.RelativePath is not null)
         {
             _explorerFolder = entry.RelativePath;
@@ -513,7 +529,7 @@ public partial class MainWindow
             string? oldFull = null, newFull = null;
             var isTreeFolder = false;
             if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
-                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset })
+                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset or ProjectExplorerKind.Prefab })
             {
                 oldFull = entry.FullPath!;
             }
@@ -540,6 +556,9 @@ public partial class MainWindow
             if (!isScene && !isDirectory && ProjectFile.IsDataAssetFileName(oldFull!)
                 && !ProjectFile.IsDataAssetFileName(name))
                 name += ".pure.asset.yaml";
+            if (!isScene && !isDirectory && ProjectFile.IsPrefabFileName(oldFull!)
+                && !ProjectFile.IsPrefabFileName(name))
+                name += ".pure.prefab.yaml";
             if (name == oldName) return;
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                 throw new ArgumentException("Specify a valid name.");
@@ -572,7 +591,7 @@ public partial class MainWindow
             string? target = null;
             var isDirectory = false;
             if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
-                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset })
+                && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset or ProjectExplorerKind.Prefab })
             {
                 target = entry.FullPath!;
                 isDirectory = entry.Kind == ProjectExplorerKind.Folder;
