@@ -116,7 +116,7 @@ UnityのScriptableObjectに当たる、継承なしの普通のクラスで作�
 - 実行中の読み込みはCoreの `DataAssetStore`（ID・型引き、フォルダ走査と診断）。プロジェクトを開く・C#を反映する・Playするたびにスナップショットを作り直し、編集用と各Play実行で共有しない。ゲーム側はコンストラクタ注入で受け取る。
 
 - Component内の属性付きメンバーが `[DataAsset]` 型なら、入れ子の値でもシーンComponent参照でもなく、プロジェクトのアセット参照として扱う。専用の公開ラッパーは要求しない。単体・配列・List・stringキーDictionary・入れ子メンバーは既存の参照Codec経由で `{ref: asset-id}` を保存し、Sceneのスナップショットから通常のC#インスタンスを解決する。同じスナップショット内では共有し、Clone・Playでは分離する。Missingは既存のSceneReferenceStoreでIDを保持する。
-- Editorは型の一致するアセットを候補に出し、同じ型のシーン上のインスタンスを候補に混ぜない。ファイルD&Dは専用のIDペイロードを使い、押下ではなくクリック完了時にアセットのInspectorへ移る。候補更新では保存済みアセットを再走査する。重複IDはどちらも解決せず診断する。SceneObject／登録Componentの参照欄はStuffs行、型一致Prefab、DataAssetの専用payloadを同じ行Drop経路で受け付け、Prefabは複製後にRootまたは一意なComponentを割り当てる。
+- Editorは型の一致するアセットを候補に出し、同じ型のシーン上のインスタンスを候補に混ぜない。ファイルD&Dは専用のIDペイロードを使い、押下ではなくクリック完了時にアセットのInspectorへ移る。候補更新では保存済みアセットを再走査する。重複IDはどちらも解決せず診断する。SceneObject／登録Componentの参照欄はStuffs行、型一致Prefab、DataAssetの専用payloadを同じ行Drop経路で受け付け、Prefabは非実行テンプレートのRootまたは一意なComponentを割り当て、Hierarchyには追加しない。
 - 今回の接続範囲は **Component → DataAsset**。DataAsset内から別のDataAssetやSceneを参照する保存は未対応のまま。既存のDataAsset編集と同様に、Playで使う値は明示的に保存した値であり、実行中の変更は書き戻さない。
 
 ### Prefabs
@@ -127,7 +127,8 @@ UnityのPrefabに当たる、SceneObjectの単一ルート＋子孫をファイ�
 - 値の変換・旧名解決・不明項目の無視・membersChanged報告はシーンの `[Inspector]` 規則を再利用する。メンバーの追加・改名（`FormerlySerializedAs`）・削除には耐え、非互換な型変更・未知のtypeId・ライフサイクルのないPriorityは配置を拒否して配置先を変えない。Prefabだけの別仕様は作らない。
 - 配置時は複製範囲の内部参照だけ新しいIDへ付け替え、範囲外・画像・データアセット参照は維持する。対象不在はシーン参照と同じくC#はnull＋ID保持（Missing）とし、同じIDが戻れば再接続する。配置は末尾への追加（ルートまたは指定親の末子）とし、Prefab内の兄弟順を保つ。失敗時は作りかけを除去し、実行中は予約削除に任せて二重解放しない。
 - Editor配置とゲーム実行中の動的生成は同じ配置経路を使う。EditorはStuffsの右クリック保存・Projectペインの管理（作成相当の一覧・改名・削除）・配置メニューとダブルクリック配置・Project→StuffsへのD&D配置（ファイルパス単位のペイロード、行上はその子・余白はルート、行のハイライト付き）、InspectorのSceneObject／登録Component参照欄へのD&D（選択中の親へ複製してRootまたは一意な型一致Componentを割り当て、リンクは保存しない）・Play中の保存・配置・D&D禁止に対応する。保存先はProject内の `.pure.prefab.yaml` で、既存ファイルの上書きはしない。
-- 実行中の生成は `PrefabSpawner` をゲーム側のコンストラクター注入で受け、`Spawn(prefabId, parent?)` で行う。Prefabの一覧は `PrefabCatalog`（フォルダ走査と診断、重複IDはどちらも解決せず除外）。Play準備時に実行用Scene・factory・カタログを束縛し、Start以降に使う。コンストラクターでは使わない。編集用と各Play実行で共有せず、2回目のPlayに前回の配置を持ち越さない。
+- InspectorのPrefab参照は`{ prefab: <asset id>, target: <object/component id> }`として保存する。型はSceneObject／登録Componentのまま。`PrefabReferenceStore`が別Sceneにテンプレートを復元し、同じPrefab内の参照は同じインスタンスへ解決する。通常のHierarchy・描画・ライフサイクルには登録しない。編集／Play／コード再読み込みごとに分離し、終了時にテンプレートのIDisposableも解放する。ファイル不在はnull＋両ID保持でClear可能。循環するPrefabアセット参照は拒否する。
+- 実行中の生成は `PrefabSpawner` をゲーム側のコンストラクター注入で受け、`Instantiate<T>(参照, parent?)`で対応する同じ型のコピーを返す。親省略時はルートへ生成する。既存の`Spawn(prefabId, parent?)`も利用できる。Prefabの一覧は `PrefabCatalog`（フォルダ走査と診断、重複IDはどちらも解決せず除外）。Play準備時に実行用Scene・factory・カタログを束縛し、Start以降に使う。コンストラクターでは使わない。編集用と各Play実行で共有せず、2回目のPlayに前回の配置を持ち越さない。
 
 ### ライフサイクルのメソッド
 

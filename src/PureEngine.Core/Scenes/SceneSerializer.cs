@@ -7,7 +7,7 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace PureEngine.Core;
 
 /// <summary>Version 3 saves component IDs and ID references. Version 1/2 remain readable with migration protection. Restoring never mutates the caller's current scene.</summary>
-public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? assets = null)
+public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? assets = null, PrefabCatalog? prefabs = null)
 {
     private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = [];
     private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
@@ -22,7 +22,7 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
 
     /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
     public Scene Clone(Scene scene, Func<Type, object>? factory = null) =>
-        new SceneSerializer(registry, assets ?? scene.DataAssets.Clone(registry))
+        new SceneSerializer(registry, assets ?? scene.DataAssets.Clone(registry), prefabs ?? scene.Prefabs.Catalog)
             .Restore(Capture(scene, forSave: false), factory, out _);
 
     private SceneDocument Capture(Scene scene, bool forSave)
@@ -125,14 +125,14 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
         Restore(_reader.Value.Deserialize<SceneDocument>(yaml)
             ?? throw new InvalidDataException("The scene document is empty."), factory, out membersChanged);
 
-    private Scene Restore(SceneDocument document, Func<Type, object>? factory, out bool membersChanged)
+    internal Scene Restore(SceneDocument document, Func<Type, object>? factory, out bool membersChanged, PrefabReferenceStore? references = null)
     {
         membersChanged = false;
         if (document.Version is not (1 or 2 or 3))
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
 
-        var scene = new Scene { DataAssets = assets ?? new DataAssetStore() };
+        var scene = new Scene { DataAssets = assets ?? new DataAssetStore(), Prefabs = references ?? new PrefabReferenceStore(prefabs, factory) };
         var created = new List<object>();
         try
         {
@@ -247,6 +247,7 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
         catch (Exception error)
         {
             var errors = new List<Exception> { error };
+            if (references is null) created.AddRange(scene.Prefabs.Components);
             for (var i = created.Count - 1; i >= 0; i--)
             {
                 if (created[i] is IDisposable disposable)

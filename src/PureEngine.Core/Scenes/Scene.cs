@@ -17,6 +17,11 @@ public sealed class Scene
 
     public DataAssetStore DataAssets { get; internal set; } = new();
 
+    public PrefabReferenceStore Prefabs { get; internal set; } = new();
+
+    /// <summary>Components owned by this scene, including inactive prefab templates, for resource cleanup.</summary>
+    public IEnumerable<object> OwnedComponents => Objects.SelectMany(item => item.Components).Concat(Prefabs.Components);
+
     public Scene() => Objects = new ReadOnlyObservableCollection<SceneObject>(_objects);
 
     /// <summary>Live read-only view of objects, in insertion order.</summary>

@@ -18,6 +18,15 @@ public sealed class PrefabCatalog
 
     public PrefabDocument? Find(Guid id) => _entries.TryGetValue(id, out var entry) ? entry.Document : null;
 
+    internal void Add(PrefabDocument document) => _entries[document.Id] = (DisplayName(document.Id), document);
+
+    internal PrefabCatalog Copy()
+    {
+        var copy = new PrefabCatalog();
+        foreach (var (id, entry) in _entries) copy._entries.Add(id, entry);
+        return copy;
+    }
+
     /// <summary>Loads every .pure.prefab.yaml file under the directory. Skips unreadable files with a diagnostic.</summary>
     public static PrefabCatalog ScanFolder(string rootDirectory, out IReadOnlyList<string> diagnostics)
     {

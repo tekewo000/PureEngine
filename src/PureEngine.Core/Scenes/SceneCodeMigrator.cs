@@ -31,7 +31,7 @@ public static class SceneCodeMigrator
 
         // Reuse persistence validation, identity/Priority restoration and failure cleanup.
         var yaml = new SceneSerializer(oldRegistry).Serialize(source);
-        return new SceneSerializer(newRegistry, assets).Deserialize(yaml, out membersChanged, factory);
+        return new SceneSerializer(newRegistry, assets, source.Prefabs.Catalog).Deserialize(yaml, out membersChanged, factory);
     }
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field

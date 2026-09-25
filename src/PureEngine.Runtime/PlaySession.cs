@@ -34,7 +34,7 @@ public sealed class PlaySession : IDisposable
         SceneRuntime runtime;
         try
         {
-            runtime = new SceneRuntime(source, registry, services.Factory, services.Services.GetService<DataAssetStore>());
+            runtime = new SceneRuntime(source, registry, services.Factory, services.Services.GetService<DataAssetStore>(), services.Services.GetService<PrefabCatalog>());
         }
         catch (Exception preparationError)
         {

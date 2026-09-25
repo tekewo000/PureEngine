@@ -78,7 +78,7 @@ public sealed class ProjectSession : IDisposable
             bool membersChanged;
             try
             {
-                scene = new SceneSerializer(registry, assets).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
+                scene = new SceneSerializer(registry, assets, PrefabCatalog.ScanFolder(project.RootDirectory, out _)).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
             }
             catch (Exception error) when (!compiled.Success)
             {
@@ -94,7 +94,7 @@ public sealed class ProjectSession : IDisposable
             var errors = new List<Exception> { error };
             try
             {
-                if (scene is not null) ComponentAssets.DisposeComponents(scene.Objects.SelectMany(item => item.Components));
+                if (scene is not null) ComponentAssets.DisposeComponents(scene.OwnedComponents);
             }
             catch (Exception cleanup) { errors.Add(cleanup); }
             try { services?.Dispose(); }
@@ -154,7 +154,7 @@ public sealed class ProjectSession : IDisposable
         if (_disposed || _ownershipTransferred) return;
         _disposed = true;
         var errors = new List<Exception>();
-        try { ComponentAssets.DisposeComponents(Scene.Objects.SelectMany(item => item.Components)); }
+        try { ComponentAssets.DisposeComponents(Scene.OwnedComponents); }
         catch (Exception error) { errors.Add(error); }
         try { EditServices.Dispose(); }
         catch (Exception error) { errors.Add(error); }

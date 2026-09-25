@@ -79,7 +79,7 @@ private void Start()
 ```
 
 - 参照できるのは同じSceneのSceneObjectと、Projectに登録されたComponent型（`Transform`・`UiElement`・`Image`・`Button`・自作型）。未登録の対応する自作クラスは埋め込み値になる。登録Component型の欄に `new Button()`／`new Transform()` を直接入れても埋め込み値にはならず、別Scene・未アタッチの参照先の保存は拒否する。自作のpublic具象クラスは自動登録されるため、従来埋め込みに使った型も登録対象なら参照欄になる。
-- Inspectorの参照欄は対象名・ID・None／Missing・選択／解除を表示する。SceneObject／登録Componentの欄にはStuffsの行または型が一致するPrefabファイル、DataAsset型の欄には型が一致するDataAssetファイルをドラッグ＆ドロップできる（Componentアタッチとは別形式）。Prefabを落とした場合は選択中オブジェクトの子として複製し、Rootまたは一致するComponentを割り当てる。対象がない、または候補が複数の場合は選ばない。Play中は編集できない。変更したときだけ未保存になる。
+- Inspectorの参照欄は対象名・ID・None／Missing・選択／解除を表示する。SceneObject／登録Componentの欄にはStuffsの行または型が一致するPrefabファイル、DataAsset型の欄には型が一致するDataAssetファイルをドラッグ＆ドロップできる（Componentアタッチとは別形式）。Prefabを落とした場合は生成元のRootまたは一致するComponentへの参照だけを割り当て、Hierarchyには生成しない。Clearで解除できる。対象がない、または候補が複数の場合は選ばない。Play中は編集できない。変更したときだけ未保存になる。
 - 参照を設定したいオブジェクトを選択し、参照先のStuffs行をInspectorの参照欄へドラッグする。行を押した時点では選択を切り替えず、ドラッグ中もInspectorを維持する。ドラッグせずに離すと、その行を選択する。
 - 対象を削除・取り外すとC#はnullになり、IDはMissingとして保持される。Missingのまま保存・開き直しができ、同じIDが戻れば再接続する。別の対象を選び直すと実物の値を優先する。Missingを消すときは欄のClearを使う。単なるnull代入ではMissingは消えない。
 - 旧シーン（v1／v2）はSceneObject IDを保持し、Component IDを新規発行して未保存化する。登録Component型の旧インライン値は保持して診断し、欄の再割り当て／Clearまで上書き保存・Play用Cloneを拒否する。例えば旧Button値は実際にアタッチしたButtonを選び直す。復元に失敗したときは元Scene・元ファイルを置き換えない。
@@ -227,21 +227,23 @@ SceneObjectを1つ選び、子孫ごとファイル化して何度でも複製�
 
 - Stuffsで対象を選んで右クリック→ **Save as Prefab…** で保存します。保存先はProject欄に表示中のフォルダで、ファイルは `.pure.prefab.yaml` です。既存ファイルの上書きはしません。
 - 配置はProject欄のファイルを右クリック→ **Place in Scene**、ダブルクリック／Enter、またはStuffsへのD&Dです。行の上ならその子、余白ならルートの末尾に置きます（メニューとダブルクリックはStuffsの選択を親にします）。Prefab内の兄弟順を保ちます。配置後はシーンが未保存になります。
-- PrefabファイルはSceneObject／登録ComponentのInspector参照欄にもD&Dできます。選択中オブジェクトの子としてPrefabを複製し、Rootまたは型が一致して一つだけあるComponentを割り当てます。複数候補や型不一致は割り当てず、元のPrefabとのリンクは保存しません。
+- PrefabファイルはSceneObject／登録ComponentのInspector参照欄にもD&Dできます。シーンには生成せず、Rootまたは型が一致して一つだけあるComponentへの参照を割り当てます。複数候補や型不一致は割り当てません。参照は保存・再読み込み・Playで維持され、Clearで解除できます。旧動作ですでに生成・保存された不要な子オブジェクトはStuffsで削除してください。
 - Prefab内部の参照（子・Component・コレクションや入れ子値の中も）は複製先へつなぎ直し、範囲外・画像・データアセットへの参照はそのまま残します。対象不在はMissingとしてIDを保持し、同じIDが戻れば再接続します。メンバーの追加・改名・削除には耐え、非互換な型変更などの壊れたPrefabは配置を拒否してシーンを変えません。
-- ゲーム実行中の生成は `PrefabSpawner` をコンストラクターで受け、`Spawn` で行います。PrefabのIDはファイルの `id` です。`Start` 以降に呼び、コンストラクターでは使わないでください。追加分は次のフレームから開始します。
+- ゲーム実行中の生成は `PrefabSpawner` をコンストラクターで受け、`Instantiate(参照)`で行います。戻り値は渡したSceneObject／Componentと同じ型です。親を省略するとルートに生成し、親を明示した場合だけその子にします。既存の`Spawn(prefabId)`も利用でき、IDはファイルの `id` です。`Start` 以降に呼び、コンストラクターでは使わないでください。追加分は次のフレームから開始します。
 
 ```csharp
 public class EnemySpawner(PrefabSpawner prefabs)
 {
+    [Inspector] public SceneObject? Enemy { get; set; }
+
     [Start] public void Start()
     {
-        // The prefab ID is the "id" in the .pure.prefab.yaml file.
-        prefabs.Spawn(Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"));
+        if (Enemy is not null) prefabs.Instantiate(Enemy);
     }
 }
 ```
 
+- `SceneObject?`の代わりに自作Componentクラス型のフィールドも使えます。`Instantiate`はPrefabのサブツリーを一度だけ生成し、対応するComponentを返します。割り当てた生成元ではStart／Update／Destroyは動きません。
 - Play開始時にPrefab一覧を作り直し、実行中の配置はファイルや他の実行に漏れません。Play中の保存・配置はできません。仕様は[設計書のPrefabs節](docs/EngineArchitecture.md#prefabs)を参照してください。
 
 ## ZedなどでC#を編集する

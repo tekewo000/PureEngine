@@ -70,7 +70,7 @@ public sealed class SceneRuntime : IDisposable
     /// IDisposable instances are released by the serializer in reverse creation order,
     /// and components already cloned for this runtime are disposed here without Destroy.
     /// </remarks>
-    public SceneRuntime(Scene source, ComponentRegistry registry, Func<Type, object>? factory = null, DataAssetStore? assets = null)
+    public SceneRuntime(Scene source, ComponentRegistry registry, Func<Type, object>? factory = null, DataAssetStore? assets = null, PrefabCatalog? prefabs = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(registry);
@@ -80,7 +80,7 @@ public sealed class SceneRuntime : IDisposable
 
         // Component creation point (for Play): creates runtime instances via a copy of the authoring data.
         // Without a factory, uses the legacy parameterless creation; with a factory, uses it for constructor injection.
-        Scene = new SceneSerializer(registry, assets).Clone(source, factory);
+        Scene = new SceneSerializer(registry, assets, prefabs).Clone(source, factory);
         Errors = _errors.AsReadOnly();
         try
         {
@@ -412,6 +412,12 @@ public sealed class SceneRuntime : IDisposable
         // Resource release point: after Destroy completes, release owned resources once.
         // Future constructor injection keeps this point; only the creation point changes.
         DisposeTargets(targets);
+        foreach (var component in Scene.Prefabs.Components.Reverse())
+        {
+            if (component is not IDisposable disposable) continue;
+            try { disposable.Dispose(); }
+            catch (Exception error) { _errors.Add(new SceneRuntimeError(Guid.Empty, "Prefab", component.GetType(), nameof(IDisposable.Dispose), error)); }
+        }
         foreach (var owner in _objects.Values)
             Scene.RemoveObjectImmediately(owner.Item);
     }
@@ -448,8 +454,7 @@ public sealed class SceneRuntime : IDisposable
         // Preparation-failure release point: no lifecycle ran, so only Dispose, in reverse creation order.
         var created = new List<object>();
         var errors = new List<Exception>();
-        foreach (var item in scene.Objects)
-            created.AddRange(item.Components);
+        created.AddRange(scene.OwnedComponents);
         for (var i = created.Count - 1; i >= 0; i--)
         {
             if (created[i] is IDisposable disposable)

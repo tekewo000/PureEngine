@@ -151,7 +151,18 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
 
     /// <summary>Copies the prefab and reports Inspector names added, renamed or discarded so editors can request a save.</summary>
     public SceneObject Instantiate(Scene target, PrefabDocument prefab, out bool membersChanged, SceneObject? parent = null, Func<Type, object>? factory = null)
+        => InstantiateCore(target, prefab, out membersChanged, parent, factory, null, out _);
+
+    internal object InstantiateReference(Scene target, PrefabDocument prefab, Guid targetId, SceneObject? parent, Func<Type, object>? factory)
     {
+        InstantiateCore(target, prefab, out _, parent, factory, targetId, out var reference);
+        return reference!;
+    }
+
+    private SceneObject InstantiateCore(Scene target, PrefabDocument prefab, out bool membersChanged, SceneObject? parent,
+        Func<Type, object>? factory, Guid? targetId, out object? reference)
+    {
+        reference = null;
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(prefab);
         ValidateStructure(prefab);
@@ -244,6 +255,9 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
             }
             var newRoot = newByOld[prefab.Objects!.Single(saved => saved!.ParentId is null)!.Id];
             if (parent is not null) newRoot.SetParent(parent);
+            if (targetId is { } requested)
+                reference = newByOld.TryGetValue(requested, out var referencedObject)
+                    ? referencedObject : attachedComponents.Single(item => item.NewId == idMap[requested]).Component;
             membersChanged = localChanged;
             return newRoot;
         }
@@ -308,7 +322,7 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
         return plan;
     }
 
-    private static void ValidateStructure(PrefabDocument prefab)
+    internal static void ValidateStructure(PrefabDocument prefab)
     {
         if (prefab.Version != CurrentVersion)
             throw new InvalidDataException($"Unsupported prefab version: {prefab.Version}");

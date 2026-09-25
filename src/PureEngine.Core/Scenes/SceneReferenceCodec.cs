@@ -43,13 +43,17 @@ internal static class SceneReferenceCodec
     {
         if (value is not null)
         {
+            if (PrefabReferenceStore.TryGetIdentity(value, out var prefab))
+                return EncodePrefab(prefab!.PrefabId, prefab.TargetId);
             var targetId = ResolveTargetId(value, declaredType, componentToId, scene);
             scene.References.ClearMissing(ownerId, path);
             scene.References.ClearLegacy(ownerId, path);
             return new Dictionary<string, object?> { ["ref"] = targetId.ToString("D") };
         }
         if (scene.References.TryGetMissing(ownerId, path, out var missing))
-            return new Dictionary<string, object?> { ["ref"] = missing.ToString("D") };
+            return scene.References.TryGetMissingPrefab(ownerId, path, out var prefabId)
+                ? EncodePrefab(prefabId, missing)
+                : new Dictionary<string, object?> { ["ref"] = missing.ToString("D") };
         if (scene.References.TryGetLegacy(ownerId, path, out _))
         {
             if (forSave)
@@ -58,6 +62,9 @@ internal static class SceneReferenceCodec
         }
         return null;
     }
+
+    private static Dictionary<string, object?> EncodePrefab(Guid prefabId, Guid targetId) =>
+        new() { ["prefab"] = prefabId.ToString("D"), ["target"] = targetId.ToString("D") };
 
     private static Guid ResolveTargetId(
         object value,
@@ -226,7 +233,7 @@ internal static class SceneReferenceCodec
         ref bool membersChanged)
     {
         if (SceneReferenceTypes.IsSingleReference(declaredType, registry))
-            return DecodeSingle(raw, declaredType, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
+            return DecodeSingle(raw, declaredType, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
         if (declaredType.IsArray && declaredType.GetArrayRank() == 1)
             return DecodeSequence(raw, declaredType.GetElementType()!, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, isArray: true, declaredType, ref membersChanged);
         if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(List<>))
@@ -241,6 +248,7 @@ internal static class SceneReferenceCodec
     private static object? DecodeSingle(
         object? raw,
         Type declaredType,
+        ComponentRegistry registry,
         Guid ownerId,
         string path,
         Dictionary<Guid, SceneObject> objectsById,
@@ -252,6 +260,16 @@ internal static class SceneReferenceCodec
     {
         if (raw is null)
             return null;
+        if (raw is IDictionary mapping && mapping.Contains("prefab"))
+        {
+            if (mapping.Count != 2 || mapping["prefab"] is not string prefabText || !Guid.TryParse(prefabText, out var prefabId)
+                || prefabId == Guid.Empty || mapping["target"] is not string targetText || !Guid.TryParse(targetText, out var prefabTargetId)
+                || prefabTargetId == Guid.Empty || DataAssetStore.IsAssetType(declaredType))
+                throw new InvalidDataException($"{displayPath}: a valid prefab and target identity is required.");
+            var target = scene.Prefabs.Resolve(prefabId, prefabTargetId, declaredType, registry, scene.DataAssets);
+            if (target is null) scene.References.SetMissingPrefab(ownerId, path, prefabId, prefabTargetId);
+            return target;
+        }
         if (TryReadRef(raw, out var targetId))
         {
             if (targetId == Guid.Empty)
@@ -344,7 +362,7 @@ internal static class SceneReferenceCodec
         ref bool membersChanged)
     {
         if (SceneReferenceTypes.IsSingleReference(elementType, registry))
-            return DecodeSingle(raw, elementType, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
+            return DecodeSingle(raw, elementType, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
         if (raw is null)
             return null;
         if (SceneReferenceTypes.ContainsReference(elementType, registry))
@@ -447,7 +465,7 @@ internal static class SceneReferenceCodec
             var memberDisplay = $"{displayPath}.{member.Name}";
             object? resolved;
             if (SceneReferenceTypes.IsSingleReference(memberType, registry))
-                resolved = DecodeSingle(itemRaw, memberType, ownerId, memberPath, objectsById, componentsById, scene, version, memberDisplay, ref membersChanged);
+                resolved = DecodeSingle(itemRaw, memberType, registry, ownerId, memberPath, objectsById, componentsById, scene, version, memberDisplay, ref membersChanged);
             else if (SceneReferenceTypes.ContainsReference(memberType, registry))
                 resolved = Decode(itemRaw, memberType, registry, ownerId, memberPath, objectsById, componentsById, scene, version, memberDisplay, ref membersChanged);
             else
@@ -478,6 +496,7 @@ internal static class SceneReferenceCodec
             }
             return null;
         }
+        if (PrefabReferenceStore.TryGetIdentity(liveValue, out _)) return liveValue;
         if (liveValue is SceneObject liveObject)
         {
             foreach (var (_, candidate) in objectsById)

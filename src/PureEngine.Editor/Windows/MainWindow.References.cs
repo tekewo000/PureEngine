@@ -186,7 +186,7 @@ public partial class MainWindow
     {
         target.AddHandler(DragDrop.DragOverEvent, (_, e) =>
         {
-            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (handledBoundary is not null && (e.Handled || IsSourceWithin(e.Source as Visual, handledBoundary))) return;
             if (!IsReferenceDrag(e)) return;
             e.Handled = true;
             e.DragEffects = !IsPlaying && CanDropReference(e, declaredType)
@@ -194,7 +194,7 @@ public partial class MainWindow
         }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         target.AddHandler(DragDrop.DropEvent, (_, e) =>
         {
-            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (handledBoundary is not null && (e.Handled || IsSourceWithin(e.Source as Visual, handledBoundary))) return;
             if (!IsReferenceDrag(e)) return;
             e.Handled = true;
             e.DragEffects = DragDropEffects.None;
@@ -245,7 +245,7 @@ public partial class MainWindow
     {
         target.AddHandler(DragDrop.DragOverEvent, (_, e) =>
         {
-            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (handledBoundary is not null && (e.Handled || IsSourceWithin(e.Source as Visual, handledBoundary))) return;
             if (!e.DataTransfer.Contains(ImageIdFormat)) return;
             e.Handled = true;
             e.DragEffects = !IsPlaying && DroppedImageId(e) is not null
@@ -253,7 +253,7 @@ public partial class MainWindow
         }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         target.AddHandler(DragDrop.DropEvent, (_, e) =>
         {
-            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (handledBoundary is not null && (e.Handled || IsSourceWithin(e.Source as Visual, handledBoundary))) return;
             if (!e.DataTransfer.Contains(ImageIdFormat)) return;
             e.Handled = true;
             e.DragEffects = DragDropEffects.None;
@@ -316,50 +316,17 @@ public partial class MainWindow
         error = null;
         if (!TryLoadPrefabReference(path, declaredType, out var document, out error) || document is null)
             return false;
-        var parent = GetSelectedSceneObject();
-        SceneObject? placed = null;
         try
         {
-            placed = new PrefabSerializer(_components.Registry).Instantiate(
-                _editScene.Current, document, out _, parent, EditSession.Factory);
-            if (!TryResolveObjectReference(placed, declaredType, out var value, out error))
-            {
-                var failed = placed;
-                placed = null;
-                RemovePlacedPrefab(failed);
-                return false;
-            }
-            assign(value);
+            assign(_editScene.Current.Prefabs.Assign(document, declaredType, _components.Registry, EditSession.Factory, _editScene.Current.DataAssets));
         }
         catch (Exception exception)
         {
             error = exception.GetBaseException().Message;
-            if (placed is not null)
-                RemovePlacedPrefab(placed);
             return false;
         }
-        MarkSceneChanged();
-        RefreshHierarchy(parent?.Id, expandId: parent?.Id);
-        RefreshObjectInspector();
         SetFileStatus($"Assigned prefab: {Path.GetFileName(path)}");
         return true;
-    }
-
-    private void RemovePlacedPrefab(SceneObject root)
-    {
-        var pending = new Stack<SceneObject>();
-        pending.Push(root);
-        List<object> components = [];
-        while (pending.Count > 0)
-        {
-            var current = pending.Pop();
-            components.AddRange(current.Components);
-            foreach (var child in current.Children)
-                pending.Push(child);
-        }
-        _editScene.Current.Remove(root);
-        try { ComponentAssets.DisposeComponents(components); }
-        catch (Exception error) { SetFileStatus(error.ToString(), true); }
     }
 
     private void SetSingleReference(
@@ -456,7 +423,9 @@ public partial class MainWindow
                 }
                 else
                 {
-                    selected = DataAssetStore.IsAssetType(declaredType) && _editScene.Current.DataAssets.TryGetId(current, out var assetId)
+                    selected = PrefabReferenceStore.TryGetIdentity(current, out var prefab)
+                        ? new ReferenceOption(current, $"Prefab: {BuildPrefabCatalog().DisplayName(prefab!.PrefabId)} ({prefab.TargetId:D})")
+                        : DataAssetStore.IsAssetType(declaredType) && _editScene.Current.DataAssets.TryGetId(current, out var assetId)
                         ? new ReferenceOption(current, $"Missing: {assetId:D}")
                         : new ReferenceOption(current, $"Detached: {current.GetType().Name}");
                     options.Add(selected);

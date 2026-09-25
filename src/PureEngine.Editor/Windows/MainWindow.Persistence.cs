@@ -114,10 +114,10 @@ public partial class MainWindow
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
         // Use the editing factory for constructor injection with a service set separate from Play.
-        var serializer = new SceneSerializer(_components.Registry, BuildProjectAssetStore(_components.Registry));
+        var serializer = new SceneSerializer(_components.Registry, BuildProjectAssetStore(_components.Registry), BuildPrefabCatalog());
         var restored = serializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
         // This first scene only validates the file; it is never adopted by the editor.
-        ComponentAssets.DisposeComponents(restored.Objects.SelectMany(item => item.Components));
+        ComponentAssets.DisposeComponents(restored.OwnedComponents);
         if (!await ConfirmUnsavedChanges()) return;
         // Saving the old scene during confirmation may overwrite the file just selected.
         restored = serializer.Deserialize(File.ReadAllText(path), out var membersChanged, EditSession.Factory);
@@ -143,7 +143,7 @@ public partial class MainWindow
         SyncExplorerToScene(path);
         RefreshProjectExplorer();
         if (!ReferenceEquals(previous, restored))
-            ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components));
+            ComponentAssets.DisposeComponents(previous.OwnedComponents);
     }
 
     private void CloseEditSession()
@@ -161,7 +161,7 @@ public partial class MainWindow
         try { ForceStopPlayForShutdown(); }
         catch (Exception error) { errors.Add(error); }
         var previous = _editScene.Reset();
-        try { ComponentAssets.DisposeComponents(previous.Objects.SelectMany(item => item.Components)); }
+        try { ComponentAssets.DisposeComponents(previous.OwnedComponents); }
         catch (Exception error) { errors.Add(error); }
         try { EditSession.Dispose(); }
         catch (Exception error) { errors.Add(error); }

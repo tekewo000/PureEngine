@@ -1,8 +1,8 @@
 namespace PureEngine.Core;
 
 /// <summary>
-/// Scene所有の参照管理情報。C#がnullの欄のMissing IDと、旧インライン値の保持を担う。
-/// 定常実行では使わず、準備・保存・構造変更の境界でのみ触る。毎フレーム走査しない。
+/// Scene-owned missing identities and legacy inline values for null reference slots.
+/// Used at preparation, persistence, and structural mutation boundaries, never per frame.
 /// </summary>
 public sealed class SceneReferenceStore
 {
@@ -10,6 +10,7 @@ public sealed class SceneReferenceStore
 
     private readonly Dictionary<(Guid OwnerId, string Path), Guid> _missing = [];
     private readonly Dictionary<(Guid OwnerId, string Path), object?> _legacy = [];
+    private readonly Dictionary<(Guid OwnerId, string Path), Guid> _missingPrefabs = [];
 
     public int MissingCount => _missing.Count;
 
@@ -28,19 +29,30 @@ public sealed class SceneReferenceStore
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (ownerId == Guid.Empty || targetId == Guid.Empty)
             throw new ArgumentException("Reference IDs must not be empty.");
+        _missingPrefabs.Remove((ownerId, path));
         _missing[(ownerId, path)] = targetId;
     }
+
+    internal void SetMissingPrefab(Guid ownerId, string path, Guid prefabId, Guid targetId)
+    {
+        SetMissing(ownerId, path, targetId);
+        _missingPrefabs[(ownerId, path)] = prefabId;
+    }
+
+    internal bool TryGetMissingPrefab(Guid ownerId, string path, out Guid prefabId) =>
+        _missingPrefabs.TryGetValue((ownerId, path), out prefabId);
 
     public bool ClearMissing(Guid ownerId, string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        _missingPrefabs.Remove((ownerId, path));
         return _missing.Remove((ownerId, path));
     }
 
     public void RemoveOwner(Guid ownerId)
     {
         foreach (var key in _missing.Keys.Where(key => key.OwnerId == ownerId).ToArray())
-            _missing.Remove(key);
+            ClearMissing(key.OwnerId, key.Path);
         foreach (var key in _legacy.Keys.Where(key => key.OwnerId == ownerId).ToArray())
             _legacy.Remove(key);
     }
@@ -53,7 +65,7 @@ public sealed class SceneReferenceStore
         foreach (var key in _missing.Keys.Where(key => key.OwnerId == ownerId
             && (key.Path == memberName || key.Path.StartsWith(prefix, StringComparison.Ordinal)
                 || key.Path.StartsWith(elements, StringComparison.Ordinal))).ToArray())
-            _missing.Remove(key);
+            ClearMissing(key.OwnerId, key.Path);
         foreach (var key in _legacy.Keys.Where(key => key.OwnerId == ownerId
             && (key.Path == memberName || key.Path.StartsWith(prefix, StringComparison.Ordinal)
                 || key.Path.StartsWith(elements, StringComparison.Ordinal))).ToArray())
@@ -70,6 +82,7 @@ public sealed class SceneReferenceStore
     public void MovePath(Guid ownerId, string oldPath, string newPath)
     {
         Move(_missing);
+        Move(_missingPrefabs);
         Move(_legacy);
         void Move<T>(Dictionary<(Guid OwnerId, string Path), T> entries)
         {

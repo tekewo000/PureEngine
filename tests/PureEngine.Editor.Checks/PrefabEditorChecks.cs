@@ -125,6 +125,7 @@ static class PrefabEditorChecks
             Call(editor, "SelectSceneObjectForTest", dropTarget);
             Dispatcher.UIThread.RunJobs();
             var dropFormat = (DataFormat<string>)typeof(MainWindow).GetField("PrefabPathFormat", Static)!.GetValue(null)!;
+            var referenceCount = store.Current.Objects.Count;
             var partCombo = editor.GetVisualDescendants().OfType<ComboBox>()
                 .Single(combo => Equals(AutomationProperties.GetName(combo), "PrefabDropTarget.Part"));
             using (var dragData = new DataTransfer())
@@ -138,8 +139,8 @@ static class PrefabEditorChecks
             Dispatcher.UIThread.RunJobs();
             var assignedPartObject = store.Current.Objects.FirstOrDefault(item =>
                 item.Components.Any(candidate => ReferenceEquals(candidate, dropHolder.Part)));
-            Check(assignedPartObject is not null,
-                "Prefab component drop must assign the matching placed component.");
+            Check(assignedPartObject is null && dropHolder.Part is { Power: 9 } && store.Current.Objects.Count == referenceCount,
+                "Prefab component drop must assign a template without placing objects.");
             var textCombo = editor.GetVisualDescendants().OfType<ComboBox>()
                 .Single(combo => Equals(AutomationProperties.GetName(combo), "PrefabDropTarget.Text"));
             var textRow = textCombo.GetVisualAncestors().OfType<Grid>().First();
@@ -155,7 +156,7 @@ static class PrefabEditorChecks
             Dispatcher.UIThread.RunJobs();
             var assignedTextObject = store.Current.Objects.FirstOrDefault(item =>
                 item.Components.Any(candidate => ReferenceEquals(candidate, dropHolder.Text)));
-            Check(assignedTextObject is not null, "Prefab Text drop must assign the matching placed component.");
+            Check(assignedTextObject is null && dropHolder.Text is { Content: "Prefab text" } && store.Current.Objects.Count == referenceCount, "Prefab Text row drop must assign an inactive template only.");
             var rootCombo = editor.GetVisualDescendants().OfType<ComboBox>()
                 .Single(combo => Equals(AutomationProperties.GetName(combo), "PrefabDropTarget.Root"));
             using (var dragData = new DataTransfer())
@@ -165,7 +166,57 @@ static class PrefabEditorChecks
                 rootCombo.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, rootCombo, default, KeyModifiers.None));
             }
             Dispatcher.UIThread.RunJobs();
-            Check(dropHolder.Root is not null && dropTarget.Children.Contains(dropHolder.Root), "Prefab SceneObject drop must assign the placed root.");
+            Check(dropHolder.Root is not null && dropTarget.Children.Count == 0 && store.Current.Objects.Count == referenceCount,
+                "Prefab SceneObject drop must assign the template root without parenting or duplication.");
+            var serializer = new SceneSerializer(session.Components.Registry, prefabs: catalog);
+            var saved = serializer.Serialize(store.Current);
+            var restored = serializer.Deserialize(saved);
+            var restoredHolder = restored.Objects.Single(item => item.Id == dropTarget.Id).GetComponent<PrefabDropTarget>()!;
+            Check(restored.Objects.Count == referenceCount && restoredHolder.Part is { Power: 9 }
+                && restoredHolder.Root?.Children.Single().GetComponent<PrefabEditorPart>() == restoredHolder.Part,
+                "Saved class references must resolve to one shared prefab template outside the hierarchy.");
+            var runScene = serializer.Clone(store.Current);
+            var runHolder = runScene.Objects.Single(item => item.Id == dropTarget.Id).GetComponent<PrefabDropTarget>()!;
+            Check(!ReferenceEquals(runHolder.Part, dropHolder.Part), "Play must receive independent prefab template instances.");
+            var spawner = new PrefabSpawner();
+            spawner.Bind(runScene, session.Components.Registry, null, catalog);
+            var spawned = spawner.Instantiate(runHolder.Part!);
+            var spawnedOwner = runScene.Objects.Single(item => item.Components.Contains(spawned));
+            Check(spawned.Power == 9 && spawnedOwner.Parent?.Parent is null && runScene.Objects.Count == referenceCount + 2,
+                "Instantiate(component) must create exactly one subtree and return its matching component.");
+            Check(runScene.Remove(spawnedOwner.Parent!) && runScene.Objects.Count == referenceCount,
+                "The instantiated prefab must be removable without affecting its template.");
+            foreach (var fieldName in new[] { "Part", "Text", "Root" })
+            {
+                var clear = editor.GetVisualDescendants().OfType<Avalonia.Controls.Button>()
+                    .Single(button => Equals(AutomationProperties.GetName(button), $"PrefabDropTarget.{fieldName}.Clear"));
+                clear.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+            }
+            Check(dropHolder.Part is null && dropHolder.Text is null && dropHolder.Root is null
+                && store.Current.Objects.Count == referenceCount, "Clear must remove all prefab references without leaving generated objects.");
+            var cleared = serializer.Deserialize(serializer.Serialize(store.Current)).Objects.Single(item => item.Id == dropTarget.Id).GetComponent<PrefabDropTarget>()!;
+            Check(cleared.Part is null && cleared.Root is null, "Cleared class references must remain cleared after reload.");
+            var row = new Grid();
+            var field = new StackPanel();
+            var sourceControl = new Border();
+            row.Children.Add(field);
+            field.Children.Add(sourceControl);
+            var assigned = 0;
+            void assignOnce(object? _)
+            {
+                assigned++;
+                field.Children.Clear();
+            }
+            Call(editor, "AttachReferenceDropHandlers", field, typeof(SceneObject), (Action<object?>)assignOnce, null);
+            Call(editor, "AttachReferenceDropHandlers", row, typeof(SceneObject), (Action<object?>)assignOnce, field);
+            using (var transfer = new DataTransfer())
+            {
+                var sceneFormat = (DataFormat<string>)typeof(MainWindow).GetField("SceneObjectIdFormat", Static)!.GetValue(null)!;
+                transfer.Add(DataTransferItem.Create(sceneFormat, dropTarget.Id.ToString("D")));
+                sourceControl.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, transfer, sourceControl, default, KeyModifiers.None));
+            }
+            Check(assigned == 1, "A source detached during Drop must not trigger the parent row assignment again.");
             store.Current.Remove(dropTarget);
             typeof(EditSceneStore).GetMethod("SetDirtyForTest", Instance)!.Invoke(store, [false]);
         }

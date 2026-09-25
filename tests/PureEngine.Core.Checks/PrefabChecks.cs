@@ -12,6 +12,7 @@ static class PrefabChecks
 {
     public static void Run()
     {
+        TemplateReferences();
         Roundtrip();
         ExternalAndMissing();
         Tolerance();
@@ -94,6 +95,54 @@ static class PrefabChecks
         File.WriteAllText(Path.Combine(directory, "Weapon.pure.asset.yaml"),
             new DataAssetSerializer(registry).Serialize(new PrefabWeapon { Attack = attack }, id));
         return DataAssetStore.ScanFolder(directory, registry, out _);
+    }
+
+    private static void TemplateReferences()
+    {
+        var registry = Registry();
+        var source = new Scene();
+        var root = source.AddEmpty();
+        root.Attach(new PrefabPart { Value = 42 });
+        var document = new PrefabSerializer(registry).Capture(source, root);
+        document.Id = Guid.NewGuid();
+        var scene = new Scene();
+        var host = scene.AddEmpty();
+        var broken = PrefabSerializer.Parse(PrefabSerializer.Serialize(document));
+        broken.Objects![0].Components![0].Values!["Value"] = "invalid";
+        Reject(() => scene.Prefabs.Assign(broken, typeof(PrefabPart), registry), "Invalid templates must reject assignment.");
+        var template = (PrefabPart)scene.Prefabs.Assign(document, typeof(PrefabPart), registry);
+        var templateRoot = (SceneObject)scene.Prefabs.Assign(document, typeof(SceneObject), registry);
+        host.Attach(new PrefabHolder { Single = template, Owner = templateRoot, Tags = [template],
+            Map = new() { ["main"] = template }, Config = new PrefabConfig { Primary = template } });
+        var serializer = new SceneSerializer(registry);
+        var yaml = serializer.Serialize(scene);
+        Check(scene.Objects.Count == 1 && host.Children.Count == 0, "Template assignments must never join the hierarchy.");
+        var clone = serializer.Clone(scene);
+        var holder = clone.Objects.Single().GetComponent<PrefabHolder>()!;
+        Check(holder.Single is { Value: 42 } && !ReferenceEquals(holder.Single, template)
+            && ReferenceEquals(holder.Single, holder.Owner!.GetComponent<PrefabPart>())
+            && ReferenceEquals(holder.Single, holder.Tags.Single()) && ReferenceEquals(holder.Single, holder.Map["main"])
+            && ReferenceEquals(holder.Single, holder.Config!.Primary), "Clone must isolate and reconnect typed prefab references in every slot.");
+        var migrated = SceneCodeMigrator.Migrate(scene, registry, registry);
+        Check(migrated.Objects.Single().GetComponent<PrefabHolder>()!.Single is { Value: 42 }, "Code reload must preserve typed prefab references.");
+        var missing = serializer.Deserialize(yaml);
+        Check(missing.Objects.Single().GetComponent<PrefabHolder>()!.Single is null && missing.References.MissingCount == 5,
+            "Unavailable prefabs must retain their asset and target identities as Missing.");
+        Check(serializer.Serialize(missing) == yaml, "Saving Missing prefab references must preserve both IDs.");
+        var cloneSerializer = new PrefabSerializer(registry);
+        var holderPrefab = cloneSerializer.Capture(scene, host);
+        holderPrefab.Id = Guid.NewGuid();
+        var placed = cloneSerializer.Instantiate(scene, holderPrefab);
+        Check(ReferenceEquals(placed.GetComponent<PrefabHolder>()!.Single, template), "Prefab copies must preserve external template identities.");
+        var spawner = new PrefabSpawner();
+        spawner.Bind(clone, registry, null, null);
+        var instance = spawner.Instantiate(holder.Single!);
+        Check(instance.Value == 42 && !ReferenceEquals(instance, holder.Single) && clone.Objects.Count == 2,
+            "Instantiate must return the requested component of exactly one new subtree.");
+        var instanceRoot = clone.Objects.Single(item => item.Components.Contains(instance));
+        Check(instanceRoot.Parent is null && clone.Remove(instanceRoot) && clone.Objects.Count == 1,
+            "Instances must default to roots and remain removable.");
+        Reject(() => spawner.Instantiate(new PrefabPart()), "Unassigned component instances must not spawn prefabs.");
     }
 
     private static void Roundtrip()
@@ -370,7 +419,11 @@ static class PrefabChecks
             var spawnScene = new Scene();
             var host = spawnScene.AddEmpty();
             host.Rename("Spawner");
-            host.Attach(new SpawnerProbe(new PrefabSpawner()) { PrefabId = prefabId.ToString("D"), SpawnInUpdate = 1 });
+            host.Attach(new SpawnerProbe(new PrefabSpawner())
+            {
+                Template = (PrefabLifecycle)spawnScene.Prefabs.Assign(catalog.Find(prefabId)!, typeof(PrefabLifecycle), registry, assets: assets),
+                SpawnInUpdate = 1,
+            });
             for (var run = 0; run < 2; run++)
             {
                 using var play = PlaySession.Prepare(spawnScene, registry, services =>
@@ -379,6 +432,7 @@ static class PrefabChecks
                     services.AddSingleton(catalog);
                     services.AddSingleton(DataAssetStore.ScanFolder(directory, registry, out _));
                 });
+                var runTemplate = play.Runtime.Scene.Objects.Single().GetComponent<SpawnerProbe>()!.Template!;
                 play.Start();
                 play.Step(0.1f);
                 play.Step(0.1f);
@@ -395,7 +449,9 @@ static class PrefabChecks
                 }
                 var guns = play.Runtime.Scene.Objects.Where(item => item.Name == "Gun").ToArray();
                 Check(guns.Length == 2 && guns.All(gun => gun.Parent is not null), "Spawned children must keep their parents.");
+                Check(runTemplate.Starts == 0 && runTemplate.Destroys == 0, "Prefab templates must never run lifecycle callbacks.");
                 play.Stop();
+                Check(runTemplate.Disposed == 1 && runTemplate.Destroys == 0, "Stopping must dispose template resources exactly once without Destroy.");
             }
             Check(assets.Get<PrefabWeapon>(source.WeaponId).Attack == 23, "Play runs must not mutate editing assets.");
         }
@@ -427,12 +483,14 @@ static class PrefabChecks
         [Inspector] public PrefabWeapon? Weapon { get; set; }
     }
 
-    public sealed class PrefabLifecycle
+    public sealed class PrefabLifecycle : IDisposable
     {
         [Inspector] public int Hp { get; set; }
         public int Starts;
         public int Updates;
         public int Destroys;
+        public int Disposed;
+        public void Dispose() => Disposed++;
 #pragma warning disable CA1822 // Reflection tests require these lifecycle members to remain instance members.
         [Start] private void OnStart() => Starts++;
         [Update] private void Tick() => Updates++;
@@ -443,16 +501,16 @@ static class PrefabChecks
     public sealed class SpawnerProbe(PrefabSpawner spawner)
     {
         public PrefabSpawner Spawner { get; } = spawner;
-        [Inspector] public string PrefabId { get; set; } = "";
+        [Inspector] public PrefabLifecycle? Template { get; set; }
         [Inspector] public int SpawnInUpdate { get; set; }
 #pragma warning disable CA1822 // Reflection tests require these lifecycle members to remain instance members.
-        [Start] private void OnStart() => Spawner.Spawn(Guid.Parse(PrefabId));
+        [Start] private void OnStart() => Spawner.Instantiate(Template!);
         [Update] private void Tick()
         {
             if (SpawnInUpdate == 1)
             {
                 SpawnInUpdate = 2;
-                Spawner.Spawn(Guid.Parse(PrefabId));
+                Spawner.Instantiate(Template!);
             }
         }
 #pragma warning restore CA1822

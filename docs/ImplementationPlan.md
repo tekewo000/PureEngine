@@ -43,10 +43,11 @@
 
 ### Inspector参照欄へのD&D拡張（2026-09-25実装）
 
-- SceneObject／登録Componentの参照欄を、ComboBoxだけでなく欄全体の行で受け付ける。Stuffsの行は従来どおり同じSceneのIDを解決し、Prefabファイルは選択中オブジェクトの子として複製してからRootまたは型一致Componentを一意に選んで割り当てる。DataAssetは型一致時だけ既存のID経路で割り当てる。
+- SceneObject／登録Componentの参照欄を、ComboBoxだけでなく欄全体の行で受け付ける。Stuffsの行は従来どおり同じSceneのIDを解決し、PrefabファイルはHierarchy外の生成元Rootまたは型一致Componentを一意に選んで割り当てる（2026-09-25修正）。DataAssetは型一致時だけ既存のID経路で割り当てる。
 - Projectの画像ファイルを`Sprite`欄へドラッグできる経路を追加し、登録済みImage IDをそのまま設定する。SceneObject、Component、DataAsset、PrefabのDragOver／Drop、型不一致・複数候補・Play中拒否、参照欄の行全体へのDropをEditor Checksで確認する。
 - 参照欄とSprite欄の行に透明な背景を設定し、ラベルと入力欄の間の余白もヒットテスト対象にする。Editor Checksの画像DropはSprite未設定からの割り当てを検証する。余白への実画面Dropは未確認。
-- Prefab参照は既存のコピーのみ仕様に従い、Prefabアセットへのライブリンクや永続化的Prefab参照は追加しない。SceneObjectdropは複製Root、Component dropは複製サブツリー内の唯一の型一致Componentを割り当てる。実画面の手動D&DとCIは未確認として区別する。
+- InspectorへのPrefab割り当てで生成される経路を削除。クラス型フィールドに非実行テンプレートを割り当て、保存・Play・コード再読み込みに引き継ぐ。`PrefabSpawner.Instantiate<T>`で明示的に生成する。Drop中の画面更新後に親行で再処理される経路も修正。保存形式と寿命の正本は[設計書](EngineArchitecture.md#prefabs)。
+- 回帰チェックに欄／行Dropでオブジェクト数不変、Clearと保存往復、型付き生成と削除、Missing ID保持、コレクション参照、Play分離、テンプレートのライフサイクル非実行とDisposeを追加。ローカルの`./tools/code-quality.ps1 -Check`（提案レベル解析・警告ゼロビルド・Core/Editor Checks）は通過。当初はDLLロックを避けた別出力先で検証し、Editor終了後に通常出力先でも同じチェックを再実行して通過した。実画面の手動D&DとCIは未確認。
 
 
 ### Prefab相当のコピーのみ複製（2026-09-24実装）
