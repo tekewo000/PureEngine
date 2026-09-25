@@ -3,6 +3,10 @@
              x:Class="PureEngine.Editor.App"
              RequestedThemeVariant="Dark">
   <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://PureEngine.Editor/Resources/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
     <SolidColorBrush x:Key="EditorBackgroundBrush" Color="#1A1C20" />
     <SolidColorBrush x:Key="EditorViewportBrush" Color="#121419" />
     <SolidColorBrush x:Key="EditorSurfaceBrush" Color="#23262C" />
@@ -23,6 +27,7 @@
     <SolidColorBrush x:Key="EditorInfoBrush" Color="#7AB5F0" />
     <SolidColorBrush x:Key="EditorWarningBrush" Color="#E0B45A" />
     <SolidColorBrush x:Key="EditorErrorBrush" Color="#E06A5A" />
+      </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />

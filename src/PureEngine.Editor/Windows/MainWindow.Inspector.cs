@@ -2,6 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -442,7 +443,18 @@ public partial class MainWindow
     /// <summary>Fixed-width remove button so collection rows align vertically.</summary>
     private static Avalonia.Controls.Button BuildRemoveButton(string automationName)
     {
-        var remove = new Avalonia.Controls.Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), MinWidth = 28, VerticalAlignment = VerticalAlignment.Center };
+        var remove = new Avalonia.Controls.Button
+        {
+            Padding = new Avalonia.Thickness(6, 2),
+            MinWidth = 28,
+            VerticalAlignment = VerticalAlignment.Center,
+            Content = new PathIcon
+            {
+                Data = (StreamGeometry?)Application.Current?.FindResource("Icon.DismissCircle"),
+                Width = 12,
+                Height = 12,
+            },
+        };
         remove.SetValue(AutomationProperties.NameProperty, automationName);
         return remove;
     }
