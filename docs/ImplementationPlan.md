@@ -48,6 +48,7 @@
 - 参照欄とSprite欄の行に透明な背景を設定し、ラベルと入力欄の間の余白もヒットテスト対象にする。Editor Checksの画像DropはSprite未設定からの割り当てを検証する。余白への実画面Dropは未確認。
 - InspectorへのPrefab割り当てで生成される経路を削除。クラス型フィールドに非実行テンプレートを割り当て、保存・Play・コード再読み込みに引き継ぐ。`PrefabSpawner.Instantiate<T>`で明示的に生成する。Drop中の画面更新後に親行で再処理される経路も修正。保存形式と寿命の正本は[設計書](EngineArchitecture.md#prefabs)。
 - 回帰チェックに欄／行Dropでオブジェクト数不変、Clearと保存往復、型付き生成と削除、Missing ID保持、コレクション参照、Play分離、テンプレートのライフサイクル非実行とDisposeを追加。ローカルの`./tools/code-quality.ps1 -Check`（提案レベル解析・警告ゼロビルド・Core/Editor Checks）は通過。当初はDLLロックを避けた別出力先で検証し、Editor終了後に通常出力先でも同じチェックを再実行して通過した。実画面の手動D&DとCIは未確認。
+- Stuffs行Dropの解決規則を修正（2026-09-25）：ドラッグした行自身の一致を優先し、自身に無い場合だけ子孫から一意に探す。従来は子孫込みで数えていたため、子を持つ親（例：TestBtn＋子text）のTransform欄へ落とすと複数候補で拒否されていた。親自身・子のみ・複数／不在の回帰チェックを追加し、同じ品質スクリプトで通過。
 
 
 ### Prefab Editorタブ
