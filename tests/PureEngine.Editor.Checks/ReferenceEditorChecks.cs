@@ -157,8 +157,8 @@ static class ReferenceEditorChecks
             .Any(button => Equals(button.GetValue(AutomationProperties.NameProperty) as string, automationName));
         Check(HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Add"), "Reference lists must keep Add.");
         Check(HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Null"), "Reference lists must keep a separate Set Null.");
-        Check(!HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Clear"), "Reference lists must not carry a header Clear; rows remove individually.");
-        Check(!HasButton(editor, $"{nameof(TestRefHolder)}.Buttons.Clear"), "Reference arrays must not carry a header Clear; rows remove individually.");
+        Check(HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Clear"), "Reference lists must offer bulk clear.");
+        Check(HasButton(editor, $"{nameof(TestRefHolder)}.Buttons.Clear"), "Reference arrays must offer bulk clear.");
         Check(holder.Target is null, "Target deletion must null the reference.");
         Check(scene.References.TryGetMissing(holderComponentId, "Target", out var missing) && missing == targetButtonId,
             "Deletion must keep the Missing ID.");

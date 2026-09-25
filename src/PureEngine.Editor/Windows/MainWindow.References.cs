@@ -621,9 +621,11 @@ public partial class MainWindow
             var value = GetMemberValue(owner, member);
             var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             root.Children.Add(actions);
-            void action(string label, string suffix, Action edit)
+            void action(string label, string suffix, Action edit, string? tip = null)
             {
                 var button = BuildHeaderButton(label, $"{automationName}.{suffix}");
+                if (tip is not null)
+                    ToolTip.SetTip(button, tip);
                 button.Click += (_, _) => { if (!IsPlaying) { edit(); changed(); } };
                 actions.Children.Add(button);
             }
@@ -650,6 +652,11 @@ public partial class MainWindow
                 assign(null);
                 _editScene.Current.References.RemovePathsForMember(ownerId, path);
             });
+            action("\U0001F5D1", "Clear", () =>
+            {
+                assign(type.IsArray ? Array.CreateInstance(elementType, 0) : Activator.CreateInstance(type));
+                _editScene.Current.References.RemovePathsForMember(ownerId, path);
+            }, "Remove all rows. The empty collection stays.");
             var keys = mapping ? ((System.Collections.IDictionary)value).Keys.Cast<string>().ToArray() : [];
             var count = mapping ? keys.Length : ((System.Collections.IList)value).Count;
             for (var i = 0; i < count; i++)

@@ -54,61 +54,14 @@ public partial class MainWindow
         return panel;
     }
 
+    /// <summary>Member-level Color editor: the preview swatch opens the picker. Dense element rows keep numeric boxes.</summary>
     private StackPanel BuildColorEditor(object component, MemberInfo member, string automationName)
     {
         var preview = BuildColorPreview(GetMemberValue(component, member), $"{automationName}.Preview");
-        string[] channels = ["R", "G", "B", "A"];
-        var boxes = channels.Select(channel => BuildColorComponentBox(component, member, automationName, channel, preview)).ToList();
-        var panel = BuildAxisGrid(channels, boxes);
-        ToolTip.SetTip(panel, "Color (r, g, b, a) — Press Esc in a field to revert");
         var root = new StackPanel { Spacing = 6 };
         root.Children.Add(preview);
-        root.Children.Add(panel);
         AttachColorPicker(preview, root, () => GetMemberValue(component, member), picked => SetMemberValue(component, member, picked), automationName);
         return root;
-    }
-
-    private TextBox BuildColorComponentBox(object component, MemberInfo member, string automationName, string channel, Border preview)
-    {
-        var box = new TextBox
-        {
-            Text = FormatColorChannel(GetMemberValue(component, member), channel),
-            FontSize = 12,
-            TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        box.Classes.Add("inspectorField");
-        box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
-        const string hint = "Enter a number — Press Esc to revert";
-        ToolTip.SetTip(box, hint);
-        box.TextChanged += (_, _) =>
-        {
-            if (IsPlaying) return;
-            if (IsSyncingInspectorForSceneView()) return;
-            if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value)
-                || !float.IsFinite(value))
-            {
-                MarkInvalid(box, "Enter a number");
-                return;
-            }
-            var current = GetMemberValue(component, member);
-            var updated = WithColorChannel(current, channel, value);
-            if (updated is null)
-            {
-                MarkInvalid(box, "Enter a number");
-                return;
-            }
-            SetMemberValue(component, member, updated);
-            RefreshColorPreview(preview, updated);
-            MarkInvalid(box, null, hint);
-        };
-        box.KeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape) return;
-            box.Text = FormatColorChannel(GetMemberValue(component, member), channel);
-            e.Handled = true;
-        };
-        return box;
     }
 
     private Grid BuildVectorEditor(object component, MemberInfo member, string automationName, int dimensions)
@@ -319,55 +272,12 @@ public partial class MainWindow
         return root;
     }
 
+    /// <summary>Nullable member-level Color editor: same preview-plus-picker rule as <see cref="BuildColorEditor"/>.</summary>
     private StackPanel BuildColorEditorForNullable(object component, MemberInfo member, string automationName)
     {
         var preview = BuildColorPreview(GetMemberValue(component, member), $"{automationName}.Preview");
-        string[] channels = ["R", "G", "B", "A"];
-        var boxes = new List<TextBox>();
-        foreach (var channel in channels)
-        {
-            var box = new TextBox { FontSize = 12, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            box.Classes.Add("inspectorField");
-            box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
-            const string hint = "Enter a number — Press Esc to revert";
-            ToolTip.SetTip(box, hint);
-            var captured = channel;
-            box.TextChanged += (_, _) =>
-            {
-                if (IsPlaying) return;
-                if (!float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value) || !float.IsFinite(value))
-                {
-                    MarkInvalid(box, "Enter a number");
-                    return;
-                }
-                var current = GetMemberValue(component, member);
-                if (current is null)
-                {
-                    MarkInvalid(box, "Enter a number");
-                    return;
-                }
-                var updated = WithColorChannel(current, captured, value);
-                if (updated is null)
-                    MarkInvalid(box, "Enter a number");
-                else
-                {
-                    SetMemberValue(component, member, updated);
-                    RefreshColorPreview(preview, updated);
-                    MarkInvalid(box, null, hint);
-                }
-            };
-            box.KeyDown += (_, e) =>
-            {
-                if (e.Key != Key.Escape) return;
-                box.Text = FormatColorChannel(GetMemberValue(component, member), captured);
-                e.Handled = true;
-            };
-            boxes.Add(box);
-        }
-        var panel = BuildAxisGrid(channels, boxes);
         var root = new StackPanel { Spacing = 6 };
         root.Children.Add(preview);
-        root.Children.Add(panel);
         AttachColorPicker(preview, root, () => GetMemberValue(component, member), picked => SetMemberValue(component, member, picked), automationName);
         return root;
     }
@@ -612,6 +522,8 @@ public partial class MainWindow
         var add = BuildHeaderButton("Add", $"{automationName}.Add");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the list itself to null. Removing rows keeps an empty list.");
+        var clear = BuildHeaderButton("\U0001F5D1", $"{automationName}.Clear");
+        ToolTip.SetTip(clear, "Remove all rows. The empty list stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var elements = new StackPanel { Spacing = 4 };
@@ -620,7 +532,7 @@ public partial class MainWindow
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
         left.Children.Add(count);
-        var header = BuildSplitHeader(left, add, setNull);
+        var header = BuildSplitHeader(left, add, setNull, clear);
         var nullHeader = BuildSplitHeader(nullStatus, create);
         root.Children.Add(header);
         root.Children.Add(nullHeader);
@@ -662,6 +574,12 @@ public partial class MainWindow
             SetMemberValue(component, member, null);
             refresh();
         };
+        clear.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            ClearSequence(component, member);
+            refresh();
+        };
         create.Click += (_, _) =>
         {
             if (IsPlaying) return;
@@ -670,6 +588,21 @@ public partial class MainWindow
         };
         refresh();
         return root;
+    }
+
+    /// <summary>Removes every element while keeping the list itself. Row remove buttons cover single rows.</summary>
+    private void ClearSequence(object component, MemberInfo member)
+    {
+        var memberType = GetMemberType(member);
+        var value = GetMemberValue(component, member);
+        if (value is null) return;
+        if (memberType.IsArray)
+            SetMemberValue(component, member, Array.CreateInstance(memberType.GetElementType()!, 0));
+        else if (value is IList list)
+        {
+            list.Clear();
+            MarkEdited(component);
+        }
     }
 
     private Grid BuildSequenceElementRow(object component, MemberInfo member, Type elementType, int index, string automationName, Action refresh)
@@ -741,6 +674,8 @@ public partial class MainWindow
         var add = BuildHeaderButton("Add", $"{automationName}.Add");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the dictionary itself to null. Removing rows keeps an empty dictionary.");
+        var clear = BuildHeaderButton("\U0001F5D1", $"{automationName}.Clear");
+        ToolTip.SetTip(clear, "Remove all entries. The empty dictionary stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var rows = new StackPanel { Spacing = 4 };
@@ -749,7 +684,7 @@ public partial class MainWindow
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
         left.Children.Add(count);
-        var header = BuildSplitHeader(left, add, setNull);
+        var header = BuildSplitHeader(left, add, setNull, clear);
         var nullHeader = BuildSplitHeader(nullStatus, create);
         root.Children.Add(header);
         root.Children.Add(nullHeader);
@@ -792,6 +727,14 @@ public partial class MainWindow
         {
             if (IsPlaying) return;
             SetMemberValue(component, member, null);
+            refresh();
+        };
+        clear.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            if (GetMemberValue(component, member) is IDictionary dictionary)
+                dictionary.Clear();
+            MarkEdited(component);
             refresh();
         };
         create.Click += (_, _) =>
