@@ -73,6 +73,16 @@ public partial class MainWindow
         return path;
     }
 
+    /// <summary>Creates a prefab file from a Stuffs object dropped onto the Project pane. Testable core of Stuff-to-Project drag-drop.</summary>
+    internal string CreatePrefabFromDrop(Guid objectId, string targetRelative)
+    {
+        if (_project is null) throw new InvalidOperationException("Open a project first.");
+        if (RejectWhenPlaying("Save Prefab")) throw new InvalidOperationException("Cannot save prefabs while playing.");
+        var root = FindObject(objectId) ?? throw new ArgumentException("The dragged object was not found.");
+        var fileName = _project.NextPrefabName(targetRelative, root.Name);
+        return SavePrefabToPath(root, targetRelative, fileName);
+    }
+
     private async void OnExplorerPlacePrefab(object? sender, RoutedEventArgs e)
     {
         if (ProjectFiles.SelectedItem is not ProjectExplorerEntry { Kind: ProjectExplorerKind.Prefab, FullPath: not null } entry) return;
