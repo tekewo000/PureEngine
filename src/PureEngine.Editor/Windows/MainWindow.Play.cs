@@ -99,9 +99,10 @@ public partial class MainWindow
 
         _playClock = Stopwatch.StartNew();
         _playLast = TimeSpan.Zero;
+        // Switches tabs before starting the timer so the tab layout work cannot consume timer time and trigger a tick before tests stop it.
+        ActivateEditorViewport(GameViewportIndex);
         _playTimer?.Start();
         UpdatePlayUI();
-        ActivateEditorViewport(GameViewportIndex);
         Log.Engine.Info("Play started.");
         SetFileStatus("Play started.");
     }
