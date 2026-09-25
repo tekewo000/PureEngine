@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -126,6 +127,41 @@ static class InspectorValueEditorChecks
             $"Picker selection did not reach the scene, got {probe.Tint}.");
         Check((preview.Background as Avalonia.Media.SolidColorBrush)?.Color == Avalonia.Media.Color.FromArgb(255, 64, 128, 64),
             "Color preview must reflect the picked color.");
+        // Pane tab styling must not leak into the picker tabs: icon headers with the 48px strip.
+        var inspectorPane = Control<TabControl>(editor, "InspectorPane");
+        var styleProbe = new ColorView
+        {
+            IsAlphaEnabled = true,
+            IsAlphaVisible = true,
+            IsColorSpectrumVisible = true,
+            IsColorPaletteVisible = true,
+            IsColorComponentsVisible = true,
+            IsHexInputVisible = true,
+        };
+        var styleProbeTab = new TabItem { Header = "StyleProbe", Content = styleProbe };
+        var previousPaneIndex = inspectorPane.SelectedIndex;
+        inspectorPane.Items.Add(styleProbeTab);
+        inspectorPane.SelectedItem = styleProbeTab;
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var innerTabs = styleProbe.GetVisualDescendants().OfType<TabItem>().ToList();
+            Check(innerTabs.Count == 3, $"Color picker must keep its three tabs, got {innerTabs.Count}.");
+            Check(innerTabs.All(tab => !tab.GetVisualDescendants().OfType<Control>().Any(inner => inner.Name is "TabFill" or "TabOutline")),
+                "Pane tab styling must not replace the picker tab headers.");
+            Check(innerTabs.All(tab => tab.GetVisualDescendants().OfType<Border>().Any(border => border.Name == "PART_LayoutRoot")),
+                "Picker tabs must keep the ColorView tab theme.");
+            Check(!styleProbe.GetVisualDescendants().OfType<TextBlock>().Any(block => (block.Text ?? "").Contains("Avalonia", StringComparison.Ordinal)),
+                "Picker tab headers must show icons, not type names.");
+        }
+        finally
+        {
+            inspectorPane.Items.Remove(styleProbeTab);
+            inspectorPane.SelectedIndex = previousPaneIndex;
+            Dispatcher.UIThread.RunJobs();
+        }
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Null"));
         Dispatcher.UIThread.RunJobs();
         Check(probe.MaybeTint is null, "Nullable Color Set Null must clear the member.");

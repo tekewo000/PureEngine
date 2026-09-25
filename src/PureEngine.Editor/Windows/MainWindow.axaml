@@ -195,7 +195,7 @@
         </ControlTemplate>
       </Setter>
     </Style>
-    <Style Selector="TabControl.editorTabs TabItem">
+    <Style Selector="TabControl.editorTabs TabItem.paneTab">
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Width" Value="112" />
       <Setter Property="MinHeight" Value="0" />
@@ -216,19 +216,19 @@
         </ControlTemplate>
       </Setter>
     </Style>
-    <Style Selector="TabControl.editorTabs TabItem /template/ Path#TabFill">
+    <Style Selector="TabControl.editorTabs TabItem.paneTab /template/ Path#TabFill">
       <Setter Property="Data" Value="M0,29 L0,28 Q6,28 6,22 L6,6 Q6,0.75 12,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,28 112,28 L112,29 Z" />
     </Style>
-    <Style Selector="TabControl.editorTabs TabItem /template/ Path#TabOutline">
+    <Style Selector="TabControl.editorTabs TabItem.paneTab /template/ Path#TabOutline">
       <Setter Property="Data" Value="M0,27.75 Q6,27.75 6,22 L6,6 Q6,0.75 12,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,27.75 112,27.75" />
     </Style>
-    <Style Selector="TabControl.editorTabs TabItem.first /template/ Path#TabFill">
+    <Style Selector="TabControl.editorTabs TabItem.paneTab.first /template/ Path#TabFill">
       <Setter Property="Data" Value="M0.75,29 L0.75,6 Q0.75,0.75 6,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,28 112,28 L112,29 Z" />
     </Style>
-    <Style Selector="TabControl.editorTabs TabItem.first /template/ Path#TabOutline">
+    <Style Selector="TabControl.editorTabs TabItem.paneTab.first /template/ Path#TabOutline">
       <Setter Property="Data" Value="M0.75,29 L0.75,6 Q0.75,0.75 6,0.75 L100,0.75 Q106,0.75 106,6 L106,22 Q106,27.75 112,27.75" />
     </Style>
-    <Style Selector="TabControl.editorTabs TabItem:selected">
+    <Style Selector="TabControl.editorTabs TabItem.paneTab:selected">
       <Setter Property="Background" Value="{StaticResource EditorSurfaceBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
       <Setter Property="Foreground" Value="#FFFFFF" />
@@ -236,7 +236,7 @@
     <Style Selector="TabControl.editorTabs:focus-within">
       <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
     </Style>
-    <Style Selector="TabControl.editorTabs:focus-within TabItem:selected">
+    <Style Selector="TabControl.editorTabs:focus-within TabItem.paneTab:selected">
       <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
     </Style>
     <Style Selector="TextBlock">
@@ -509,7 +509,7 @@
                       Cursor="SizeNorthSouth" AutomationProperties.Name="Resize Assets and Console pane" />
         <Border Grid.Column="2" Classes="pane">
           <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem Classes="first" Header="Stuffs" AutomationProperties.Name="Stuffs">
+            <TabItem Classes="paneTab first" Header="Stuffs" AutomationProperties.Name="Stuffs">
               <Grid x:Name="SceneSurface" RowDefinitions="Auto,*" Background="Transparent" DragDrop.AllowDrop="True">
                 <Grid.ContextMenu>
                   <ContextMenu>
@@ -548,12 +548,12 @@
         </Border>
         <Border x:Name="SceneViewPane" Classes="pane">
           <TabControl x:Name="ViewportTabs" Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem x:Name="SceneViewTab" Classes="first" Header="Scene View" AutomationProperties.Name="Scene View">
+            <TabItem x:Name="SceneViewTab" Classes="paneTab first" Header="Scene View" AutomationProperties.Name="Scene View">
               <Border Classes="viewportFrame">
                 <Grid x:Name="SceneViewHost"><Grid x:Name="SceneViewport" /></Grid>
               </Border>
             </TabItem>
-            <TabItem Header="Game" AutomationProperties.Name="Game">
+            <TabItem Classes="paneTab" Header="Game" AutomationProperties.Name="Game">
               <Grid>
                 <Grid x:Name="GameViewport" />
                 <TextBlock x:Name="GamePlaceholder" Classes="hint" Text="Press Play to show the game."
@@ -561,7 +561,7 @@
                            AutomationProperties.Name="Game placeholder" />
               </Grid>
             </TabItem>
-            <TabItem x:Name="PrefabEditorTab" Header="Prefab Editor" AutomationProperties.Name="Prefab Editor" IsVisible="False">
+            <TabItem x:Name="PrefabEditorTab" Classes="paneTab" Header="Prefab Editor" AutomationProperties.Name="Prefab Editor" IsVisible="False">
               <Grid RowDefinitions="Auto,*">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,8">
                   <StackPanel VerticalAlignment="Center">
@@ -580,7 +580,7 @@
         </Border>
         <Border Grid.Row="2" Grid.ColumnSpan="3" Classes="pane">
           <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem x:Name="ProjectTab" Classes="first" Header="Project" AutomationProperties.Name="Project">
+            <TabItem x:Name="ProjectTab" Classes="paneTab first" Header="Project" AutomationProperties.Name="Project">
               <Grid ColumnDefinitions="180,8,*" Margin="8">
                 <Grid RowDefinitions="Auto,Auto,*">
                   <TextBlock Text="FOLDERS" Classes="columnHeader" Margin="8,2,0,0" />
@@ -676,7 +676,7 @@
                 </Grid>
               </Grid>
             </TabItem>
-            <TabItem Header="Console" AutomationProperties.Name="Console">
+            <TabItem Classes="paneTab" Header="Console" AutomationProperties.Name="Console">
               <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="8">
                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                   <CheckBox x:Name="ConsoleInfoFilter" Classes="consoleToggle info" IsChecked="True"
@@ -770,7 +770,7 @@
       <Border Grid.Column="2" Classes="pane">
         <TabControl x:Name="InspectorPane" Classes="editorTabs" SelectedIndex="0"
                     PointerPressed="OnPanePointerPressed" DragDrop.AllowDrop="True">
-          <TabItem Classes="first" Header="Inspector" AutomationProperties.Name="Inspector">
+          <TabItem Classes="paneTab first" Header="Inspector" AutomationProperties.Name="Inspector">
             <ScrollViewer Margin="8">
              <StackPanel Spacing="6">
               <StackPanel x:Name="ObjectInspector" IsVisible="False" Spacing="6">
