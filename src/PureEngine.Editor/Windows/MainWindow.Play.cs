@@ -37,6 +37,7 @@ public partial class MainWindow
     /// <summary>
     /// Starts Play. Shows the reason instead of starting while Inspector errors exist.
     /// Starts from a copy of the scene being edited without modifying the edit side. Restores an operable state after failures.
+    /// Opens the Game tab on success; Stop and automatic stops return to the Scene View tab.
     /// </summary>
     internal void StartPlay()
     {
@@ -52,7 +53,6 @@ public partial class MainWindow
             return;
         }
 
-        if (IsPrefabEditing) ActivateEditorViewport(1);
         // Runs Clear on Play before Start without clearing that Play run start log.
         if (ConsoleClearOnPlay.IsChecked == true)
             ClearConsole();
@@ -101,6 +101,7 @@ public partial class MainWindow
         _playLast = TimeSpan.Zero;
         _playTimer?.Start();
         UpdatePlayUI();
+        ActivateEditorViewport(GameViewportIndex);
         Log.Engine.Info("Play started.");
         SetFileStatus("Play started.");
     }
@@ -159,6 +160,7 @@ public partial class MainWindow
         // Defers changes made during Play and applies them after Stop.
         FlushPendingUserCodeReload();
         ResetGameInput();
+        ActivateEditorViewport(SceneViewportIndex);
         return stopError is null && errors.Count == 0;
     }
 
@@ -260,6 +262,7 @@ public partial class MainWindow
         SetFileStatus(detail, true);
         FlushPendingUserCodeReload();
         ResetGameInput();
+        ActivateEditorViewport(SceneViewportIndex);
     }
 
     private void FinishPlayAfterAutoStop(PlaySession session)
@@ -302,6 +305,7 @@ public partial class MainWindow
         }
         FlushPendingUserCodeReload();
         ResetGameInput();
+        ActivateEditorViewport(SceneViewportIndex);
     }
 
     /// <summary>Internal stop that reliably shuts down and releases on window shutdown and similar paths. Leaves display to the caller.</summary>
