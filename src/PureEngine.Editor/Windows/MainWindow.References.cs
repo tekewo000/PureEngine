@@ -619,12 +619,13 @@ public partial class MainWindow
         var elementType = type.IsArray ? type.GetElementType()! : type.GetGenericArguments()[mapping ? 1 : 0];
         var root = new StackPanel { Spacing = 6 };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
-        var add = BuildHeaderButton("Add", $"{automationName}.Add");
+        var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
+        ToolTip.SetTip(add, mapping ? "Add an entry." : "Add a row.");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
         ToolTip.SetTip(setNull, mapping
             ? "Set the dictionary itself to null. Removing rows keeps an empty dictionary."
             : "Set the list itself to null. Removing rows keeps an empty list.");
-        var clear = BuildHeaderButton("\U0001F5D1", $"{automationName}.Clear");
+        var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, mapping
             ? "Remove all entries. The empty dictionary stays."
             : "Remove all rows. The empty list stays.");

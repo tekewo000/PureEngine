@@ -365,10 +365,16 @@ public partial class MainWindow : Window
     private static Avalonia.Controls.Button BuildCollapseToggle(string automationName, string collapseKey, Dictionary<string, bool> store, Action<bool> apply)
     {
         var expandedState = !store.TryGetValue(collapseKey, out var collapsed) || !collapsed;
+        var glyph = new PathIcon
+        {
+            Data = (StreamGeometry?)Application.Current?.FindResource(expandedState ? "Icon.TriangleDown" : "Icon.TriangleRight"),
+            Width = 10,
+            Height = 10,
+        };
         var toggle = new Avalonia.Controls.Button
         {
-            Content = expandedState ? "▾" : "▸",
-            // Fixed square so the ▾/▸ swap never shifts the button, title, or header buttons.
+            Content = glyph,
+            // Fixed square so the icon swap never shifts the button, title, or header buttons.
             Width = 18,
             Height = 18,
             Padding = new Thickness(0),
@@ -385,7 +391,7 @@ public partial class MainWindow : Window
         toggle.Click += (_, _) =>
         {
             expandedState = !expandedState;
-            toggle.Content = expandedState ? "▾" : "▸";
+            glyph.Data = (StreamGeometry?)Application.Current?.FindResource(expandedState ? "Icon.TriangleDown" : "Icon.TriangleRight");
             toggle.Background = expandedState ? Brushes.Transparent : CollapseToggleWashBrush;
             ToolTip.SetTip(toggle, expandedState ? "Collapse" : "Expand");
             store[collapseKey] = !expandedState;

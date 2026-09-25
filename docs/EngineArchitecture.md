@@ -655,7 +655,7 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 - 枠線は1px。フォーカス中だけアクセント紫、それ以外は枠線色。
 - タブにはホバーによる色変化を付けない。
 - 操作部品の角丸は4、カード・タイル・ピルは6に統一する。ダークでは効かないドロップシャドウは付けない。
-- アイコンは `src/PureEngine.Editor/Resources/Icons.axaml` に集約し、各画面は `PathIcon` + `StaticResource` で参照する（インラインの `Path Data` や文字グリフ `▶■✕` を置かない）。図形は Fluent UI System Icons（MIT）の Regular・20px 系に統一し、由来とライセンスは同ファイルのコメントに残す。色は構造アクセント紫と文字色の範囲に収め、アイコンごとの多色化はしない。
+- アイコンは `src/PureEngine.Editor/Resources/Icons.axaml` に集約し、各画面は `PathIcon` + `StaticResource` で参照する（インラインの `Path Data` や文字グリフ `▶■✕🗑` を置かない）。図形は Fluent UI System Icons（MIT）の Filled・20px 系に統一し、由来とライセンスは同ファイルのコメントに残す（C# 文書のみ 16px）。色は構造アクセント紫と文字色の範囲に収め、アイコンごとの多色化はしない。一括 Clear には `Icon.Delete`、List・Dictionary の追加には `Icon.AddSquare` を使う。折りたたみトグルは `Icon.TriangleDown`（展開時）／`Icon.TriangleRight`（折りたたみ時）、ツリー（Stuff・Project）の展開矢印は `Icon.ChevronRight`（折りたたみ時）／`Icon.ChevronDown`（展開時）を使う。
 - トップバーはFileメニュー＋未実装のEdit／View（無効表示）の正規メニューとし、ダミーのテキスト表示は置かない。Playはアクセント塗りのプライマリボタン、Stopは通常ボタンで幅を揃える。
 - 下端はペイン面のステータス帯とし、シーン状態の文言を表示する。エラー時はエラー文字色にする。
 - InspectorのComponentカードはヘッダー（折りたたみ・名前・Priority）＋内容の構成とし、折りたたみ状態は選択切替をまたいで保持する。カードの枠線はホバー・フォーカスで変えず、入力欄自体のフォーカス表示だけ残す。

@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using ChevronPath = Avalonia.Controls.Shapes.Path;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -111,11 +113,43 @@ internal static class HierarchySelectionChecks
             Check(ReferenceEquals(holder.Target, button), "A real Stuffs drag must assign the Inspector reference.");
             Check(ReferenceEquals(((HierarchyNode)tree.SelectedItem!).Ref, target),
                 "Reference drop must not select the dragged source.");
+
+            var chevronChild = scene.AddEmpty();
+            chevronChild.Rename("ChevronChild");
+            chevronChild.SetParent(target);
+            typeof(MainWindow).GetMethod("SyncHierarchyForTest", flags)!.Invoke(editor, []);
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            var parentRow = editor.GetVisualDescendants().OfType<TreeViewItem>()
+                .Single(item => ReferenceEquals(((HierarchyNode)item.DataContext!).Ref, target));
+            var expander = parentRow.GetVisualDescendants().OfType<ToggleButton>()
+                .Single(button => button.Name == "PART_ExpandCollapseChevron");
+            static ChevronPath? ExpanderGlyph(ToggleButton toggle) =>
+                toggle.GetVisualDescendants().OfType<ChevronPath>().SingleOrDefault();
+            ChevronPath? WaitForExpanderGlyph()
+            {
+                ChevronPath? glyph = null;
+                for (var attempt = 0; glyph is null && attempt < 5; attempt++)
+                {
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+                    Dispatcher.UIThread.RunJobs();
+                    glyph = ExpanderGlyph(expander);
+                }
+                return glyph;
+            }
+            var collapsedGlyph = WaitForExpanderGlyph();
+            Check(collapsedGlyph is not null && ReferenceEquals(collapsedGlyph.Data, Application.Current?.FindResource("Icon.ChevronRight")),
+                "Collapsed Stuffs rows must show the shared ChevronRight icon.");
+            ((HierarchyNode)parentRow.DataContext!).IsExpanded = true;
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            Check(ReferenceEquals(ExpanderGlyph(expander)?.Data, Application.Current?.FindResource("Icon.ChevronDown")),
+                "Expanded Stuffs rows must show the shared ChevronDown icon.");
         }
         finally
         {
             CloseEditor(editor);
         }
-        Console.WriteLine("PASS: Stuffs press preserves selection, release selects, and a real drag assigns the Inspector reference.");
+        Console.WriteLine("PASS: Stuffs press preserves selection, release selects, a real drag assigns the Inspector reference, and expanders use the shared chevrons.");
     }
 }
