@@ -230,12 +230,6 @@
       <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
       <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
-    <Style Selector="TabControl.editorTabs:focus-within">
-      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
-    </Style>
-    <Style Selector="TabControl.editorTabs:focus-within TabItem.paneTab:selected">
-      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
-    </Style>
     <Style Selector="TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
