@@ -63,7 +63,15 @@ static class ReferenceEditorChecks
         Check(editor.Title!.StartsWith("* "), "Reference edit must mark dirty.");
         var info = editor.GetVisualDescendants().OfType<TextBlock>()
             .Single(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, $"{nameof(TestRefHolder)}.Target.Info"));
-        Check(info.Text!.Contains("RefTarget", StringComparison.Ordinal), "Reference info must show the target name.");
+        var targetButtonId = targetObject.GetComponentId(targetButton);
+        Check(!info.IsVisible, "Assigned references must stay single-line; details live in the tooltip.");
+        Check(!combo.SelectedItem!.ToString()!.Contains(targetButtonId.ToString("D"), StringComparison.Ordinal),
+            "Reference options must hide IDs; the tooltip carries them.");
+        var tip = ToolTip.GetTip(combo) as string;
+        Check(tip is not null && tip.Contains("RefTarget", StringComparison.Ordinal) && tip.Contains(targetButtonId.ToString("D"), StringComparison.Ordinal),
+            $"Reference tooltip must show the target name and ID, got '{tip}'.");
+        Check(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear").Content as string == "\u2715",
+            "Reference clear must be an inline remove button.");
 
         Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
         Check(holder.Target is null, "Reference Clear must null the member.");
@@ -86,7 +94,6 @@ static class ReferenceEditorChecks
         Combo(editor, $"{nameof(TestRefHolder)}.Target").SelectedItem = freshTarget;
         Dispatcher.UIThread.RunJobs();
         Check(ReferenceEquals(holder.Target, targetButton), "Reassign must reconnect.");
-        var targetButtonId = targetObject.GetComponentId(targetButton);
         var holderComponentId = holderObject.GetComponentId(holder);
 
         var resolve = typeof(MainWindow).GetMethod("TryResolveDraggedReference", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -146,6 +153,12 @@ static class ReferenceEditorChecks
             .Invoke(editor, []);
         Select(editor, holderObject);
         Dispatcher.UIThread.RunJobs();
+        static bool HasButton(MainWindow window, string automationName) => window.GetVisualDescendants().OfType<Button>()
+            .Any(button => Equals(button.GetValue(AutomationProperties.NameProperty) as string, automationName));
+        Check(HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Add"), "Reference lists must keep Add.");
+        Check(HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Null"), "Reference lists must keep a separate Set Null.");
+        Check(!HasButton(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Clear"), "Reference lists must not carry a header Clear; rows remove individually.");
+        Check(!HasButton(editor, $"{nameof(TestRefHolder)}.Buttons.Clear"), "Reference arrays must not carry a header Clear; rows remove individually.");
         Check(holder.Target is null, "Target deletion must null the reference.");
         Check(scene.References.TryGetMissing(holderComponentId, "Target", out var missing) && missing == targetButtonId,
             "Deletion must keep the Missing ID.");

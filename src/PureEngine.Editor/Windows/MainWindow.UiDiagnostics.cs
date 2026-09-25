@@ -24,8 +24,9 @@ public partial class MainWindow
         void refreshOptions()
         {
             var current = (Sprite?)GetMemberValue(component, member);
-            var (options, selected, infoText, tip) = SpriteDisplayState(current, member.Name);
+            var (options, selected, infoText, showInfo, tip) = SpriteDisplayState(current, member.Name);
             info.Text = infoText;
+            info.IsVisible = showInfo;
             ToolTip.SetTip(combo, tip);
             combo.ItemsSource = options;
             combo.SelectedItem = selected;
@@ -134,7 +135,7 @@ public partial class MainWindow
     private void RefreshSpriteCombo(ComboBox combo, object component, MemberInfo member)
     {
         var current = (Sprite?)GetMemberValue(component, member);
-        var (options, selected, infoText, tip) = SpriteDisplayState(current, member.Name);
+        var (options, selected, infoText, showInfo, tip) = SpriteDisplayState(current, member.Name);
         combo.ItemsSource = options;
         combo.SelectedItem = selected;
         ToolTip.SetTip(combo, tip);
@@ -143,33 +144,40 @@ public partial class MainWindow
         {
             var info = panel.Children.OfType<TextBlock>()
                 .FirstOrDefault(block => Equals(block.GetValue(AutomationProperties.NameProperty) as string, name + ".Info"));
-            info?.Text = infoText;
+            if (info is not null)
+            {
+                info.Text = infoText;
+                info.IsVisible = showInfo;
+            }
         }
     }
 
-    /// <summary>Single rule for Sprite display: options, selection, info line, and tooltip from the asset index.</summary>
-    private (List<SpriteOption> Options, SpriteOption Selected, string Info, string Tip) SpriteDisplayState(Sprite? current, string memberName)
+    /// <summary>
+    /// Single rule for Sprite display: options, selection, info line, and tooltip from the asset index.
+    /// The info line shows only Missing or crop states; names and IDs live in the tooltip otherwise.
+    /// </summary>
+    private (List<SpriteOption> Options, SpriteOption Selected, string Info, bool ShowInfo, string Tip) SpriteDisplayState(Sprite? current, string memberName)
     {
         List<SpriteOption> options = [new SpriteOption(null, "None")];
         foreach (var entry in AssetImageEntries())
             options.Add(new SpriteOption(entry.Id, entry.RelativePath));
         if (current is null)
-            return (options, options[0], "No sprite.", $"{memberName} : Sprite — Select, drop an image, or None");
+            return (options, options[0], "No sprite.", false, $"{memberName} : Sprite — None. Select, drop an image, or None");
         var match = options.FirstOrDefault(option => option.Id == current.ImageId);
         if (match is null)
         {
-            match = new SpriteOption(current.ImageId, $"Missing: {current.ImageId:D}");
+            match = new SpriteOption(current.ImageId, $"Missing: {ShortId(current.ImageId)}");
             options.Add(match);
             var missing = current.SourceRect is { } rect
                 ? $"Missing image {current.ImageId:D} (crop {rect.X},{rect.Y},{rect.Width}x{rect.Height} kept)."
                 : $"Missing image {current.ImageId:D}. ID is kept.";
-            return (options, match, missing, $"{memberName} : Sprite — {missing}");
+            return (options, match, missing, true, $"{memberName} : Sprite — {missing}");
         }
         if (current.SourceRect is { } crop)
         {
             var cropped = $"Crop {crop.X},{crop.Y},{crop.Width}x{crop.Height} from {match.Display}. Picking another image uses the whole image.";
-            return (options, match, cropped, $"{memberName} : Sprite — {cropped}");
+            return (options, match, cropped, true, $"{memberName} : Sprite — {cropped}");
         }
-        return (options, match, match.Display, $"{memberName} : Sprite — {match.Display}");
+        return (options, match, match.Display, false, $"{memberName} : Sprite — {match.Display}");
     }
 }

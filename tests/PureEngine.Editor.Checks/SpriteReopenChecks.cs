@@ -71,16 +71,32 @@ internal static class SpriteReopenChecks
 
             void CheckState(bool missing)
             {
-                var expected = missing ? $"Missing: {imported.Id:D}" : imported.RelativePath;
+                var expected = missing ? $"Missing: {imported.Id.ToString("D")[..8]}" : imported.RelativePath;
                 Check(combo.SelectedItem?.ToString() == expected,
                     $"Sprite selection must be '{expected}', got '{combo.SelectedItem}'.");
                 Check(warning.IsVisible == missing && (!missing || warning.Text!.Contains("Missing image")),
                     $"Sprite warning must reflect asset availability, got '{warning.Text}'.");
-                Check(info.Text!.Contains(missing ? "Missing image" : imported.RelativePath)
-                    && info.Text.Contains("Missing image") == missing
-                    && (crop is null || info.Text.Contains("2,3,8x6"))
-                    && Equals(ToolTip.GetTip(combo), $"Sprite : Sprite — {info.Text}"),
-                    $"Sprite info and tooltip must reflect availability and crop, got '{info.Text}'.");
+                var tip = ToolTip.GetTip(combo) as string;
+                if (missing)
+                {
+                    Check(info.IsVisible && info.Text!.Contains("Missing image") && info.Text.Contains(imported.Id.ToString("D")),
+                        $"Missing sprites must keep a visible info line with the full ID, got '{info.Text}'.");
+                    Check(tip is not null && tip.Contains("Missing image") && tip.Contains(imported.Id.ToString("D")),
+                        $"Missing sprite tooltip must carry the full ID, got '{tip}'.");
+                }
+                else if (crop is not null)
+                {
+                    Check(info.IsVisible && info.Text!.Contains("2,3,8x6") && info.Text.Contains(imported.RelativePath),
+                        $"Cropped sprites must keep a visible info line, got '{info.Text}'.");
+                    Check(tip is not null && tip.Contains("2,3,8x6") && tip.Contains(imported.RelativePath),
+                        $"Cropped sprite tooltip must carry the path and crop, got '{tip}'.");
+                }
+                else
+                {
+                    Check(!info.IsVisible, "Assigned sprites must stay single-line; the path lives in the tooltip.");
+                    Check(tip is not null && tip.Contains(imported.RelativePath),
+                        $"Sprite tooltip must show the path, got '{tip}'.");
+                }
                 Check(ReferenceEquals(image.Sprite, sprite) && image.Sprite?.ImageId == imported.Id
                     && image.Sprite.SourceRect == crop && !store.IsDirty,
                     "Opening and rescanning assets must preserve the Sprite, crop, and clean scene state.");

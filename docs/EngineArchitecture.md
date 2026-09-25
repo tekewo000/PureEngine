@@ -75,6 +75,7 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - 実行中に変化した値を、制作データへ自動で書き戻さない。
 - 非publicメンバー、readonly、読み取り専用プロパティは対象外。対応する値の型は下記の範囲とする。
 - Inspectorの表示順は基底→派生の順とする。同じクラス内では従来の `MetadataToken` 順を維持する（フィールドがプロパティより先で、両者を混ぜたソース宣言順ではない）。`Image`・`Text` はどちらも共通基底の `Order` が先頭になる。
+- 参照欄は名前だけの1行選択＋右端の×（Clear）とし、ID・フルパスはツールチップへ移す。2行目の補足はMissing・旧インライン値の注意だけに使う。コレクション見出しはAddとSet Nullだけにし、要素の削除は行の×で行う。
 
 対応する値の型（Coreの `InspectorValueTypes` で検証・変換し、Editorは同じ範囲を表示する）：
 
@@ -82,11 +83,11 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - enum：通常のenumと `[Flags]` enum、対応する `Nullable<T>`。通常はドロップダウン、`[Flags]` はチェックボックス群とNoneクリアで編集する
 - `[Flags]` は複合値・符号付きの負値・`ulong` の最上位ビットにも対応する。チェック状態の同期は表示のみを更新し、ユーザー操作として値へ書き戻さない。
 - ベクトル：`Vector2`・`Vector3`・`Vector4`・`Quaternion`（各成分は有限のfloat、対応する `Nullable<T>` を含む）
-- 色：`Color`（RGBAの有限float、単体の `Nullable<T>` を含む。単体とNullableは数値と色見本、コレクション要素は数値で編集する）。保存値は範囲外でもクランプせず、色見本のみ0〜1へ制限する。新規要素とCreateは白。カラーピッカー・HSV／hex入力は未対応。
+- 色：`Color`（RGBAの有限float、単体の `Nullable<T>` を含む。単体とNullableは数値と色見本、コレクション要素は数値で編集する）。保存値は範囲外でもクランプせず、色見本のみ0〜1へ制限する。新規要素とCreateは白。色見本を選ぶとSpectrum／Palette／Sliders（hex・alpha付き）のピッカーが開く。
 - `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
-- `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する
+- `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する。2行目の補足はMissing・切り出し時のみ表示する
 - 配列・リスト：`T[]`・`List<T>`（`T` はstring・int・float・double・bool・enum・ベクトル4種・`Color`・`Sprite`・自作クラスと `Nullable<int/float/double/bool/enum>`、null可）
-- 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）
+- 辞書：`Dictionary<string, TValue>`（`TValue` は配列・リストの要素と同じ範囲、キーはstringのみ、null可）。見出しはAddとSet Nullだけ（一括Clearはなし）
 - 自作クラス：publicな引数なしコンストラクタを持つclassで、すべての `[Inspector]` メンバーが対応型であるもの。単体・配列・リスト要素・辞書値・入れ子で同じ変換を使う。参照型のためnull可。抽象クラス・ジェネリック・struct・`object` 自体・再帰（自分を直接・間接に含む）は対象外。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する
 
 `Transform` 自体も `[Inspector]` 付きの組み込みコンポーネント（typeId `core.transform`）として保存・編集する。`UiElement`（`core.ui-element`）・`Image`（`core.image`）・`Button`（`core.button`）・`Text`（`core.text`）も同じ組み込み登録で検索・追加・保存する。配列・リスト要素や辞書値に `Transform`・コレクションの入れ子・`Dictionary` のキーにstring以外は含めない。`Sprite`・`Color` は単体に加え、既存の一次元配列・`List`・stringキー辞書の葉でも同じ変換を使う。詳細なYAML形式は下記のYAML節を参照。
