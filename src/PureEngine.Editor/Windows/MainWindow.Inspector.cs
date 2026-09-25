@@ -682,6 +682,7 @@ public partial class MainWindow
         var label = new TextBlock { Text = $"[{index}]", Classes = { "memberType" }, Width = 36, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(label, 0);
         var editor = BuildSequenceElementEditor(component, member, elementType, index, automationName);
+        AttachEditorDropHandlers(row, editor);
         editor.HorizontalAlignment = HorizontalAlignment.Stretch;
         editor.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(editor, 1);
@@ -852,6 +853,7 @@ public partial class MainWindow
         };
         row.Children.Add(keyBox);
         var valueEditor = BuildDictionaryValueEditor(component, member, valueType, key, automationName, rowIndex);
+        AttachEditorDropHandlers(row, valueEditor);
         valueEditor.HorizontalAlignment = HorizontalAlignment.Stretch;
         valueEditor.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(keyBox, 0);

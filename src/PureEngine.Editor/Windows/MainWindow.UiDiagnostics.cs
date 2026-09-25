@@ -49,6 +49,16 @@ public partial class MainWindow
             refreshOptions();
             if (FindOwner(component) is { } owner) RefreshUiWarnings(owner);
         };
+        void assignImage(Sprite sprite)
+        {
+            var current = (Sprite?)GetMemberValue(component, member);
+            if (current?.ImageId == sprite.ImageId && current.SourceRect is null) return;
+            SetMemberValue(component, member, sprite);
+            refreshOptions();
+            if (FindOwner(component) is { } owner) RefreshUiWarnings(owner);
+        }
+        root.Tag = new ImageDropRegistration(assignImage);
+        AttachImageDropHandlers(root, assignImage);
         refreshOptions();
         return root;
     }
@@ -144,7 +154,7 @@ public partial class MainWindow
         foreach (var entry in AssetImageEntries())
             options.Add(new SpriteOption(entry.Id, entry.RelativePath));
         if (current is null)
-            return (options, options[0], "No sprite.", $"{memberName} : Sprite — Select an image or None");
+            return (options, options[0], "No sprite.", $"{memberName} : Sprite — Select, drop an image, or None");
         var match = options.FirstOrDefault(option => option.Id == current.ImageId);
         if (match is null)
         {

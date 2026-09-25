@@ -29,8 +29,10 @@ public partial class MainWindow
     {
         var entry = _pressedDataAsset;
         var prefab = _pressedPrefab;
+        var image = _pressedImage;
         _pressedDataAsset = null;
         _pressedPrefab = null;
+        _pressedImage = null;
         _assetPress = null;
         if (e.InitialPressMouseButton != MouseButton.Left) return;
         if (entry is not null)
@@ -44,5 +46,7 @@ public partial class MainWindow
         // Prefab clicks only select; placement stays on the menu, double-click, or drag-drop.
         if (prefab is not null)
             ProjectFiles.SelectedItem = prefab;
+        if (image is not null)
+            ProjectFiles.SelectedItem = image;
     }
 }

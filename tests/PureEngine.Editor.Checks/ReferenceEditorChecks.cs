@@ -105,10 +105,11 @@ static class ReferenceEditorChecks
         var dragFormat = (DataFormat<string>)typeof(MainWindow).GetField("SceneObjectIdFormat", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
         dragData.Add(DataTransferItem.Create(dragFormat, targetObject.Id.ToString("D")));
         var dropTarget = Combo(editor, $"{nameof(TestRefHolder)}.Target");
-        var dragOver = new DragEventArgs(DragDrop.DragOverEvent, dragData, dropTarget, default, KeyModifiers.None);
-        dropTarget.RaiseEvent(dragOver);
-        Check(dragOver.Handled && dragOver.DragEffects == DragDropEffects.Copy, "Reference DragOver must accept the Stuffs payload.");
-        dropTarget.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, dropTarget, default, KeyModifiers.None));
+        var dropRow = dropTarget.GetVisualAncestors().OfType<Grid>().First();
+        var dragOver = new DragEventArgs(DragDrop.DragOverEvent, dragData, dropRow, default, KeyModifiers.None);
+        dropRow.RaiseEvent(dragOver);
+        Check(dragOver.Handled && dragOver.DragEffects == DragDropEffects.Copy, "Reference DragOver must accept the Stuffs payload on the field row.");
+        dropRow.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, dropRow, default, KeyModifiers.None));
         Dispatcher.UIThread.RunJobs();
         Check(ReferenceEquals(holder.Target, targetButton), "Routed reference Drop must assign the live Button.");
 
@@ -169,7 +170,7 @@ static class ReferenceEditorChecks
         Check((bool)typeof(MainWindow).GetMethod("StopPlay", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.Invoke(editor, [])!, "Stop must succeed.");
         Dispatcher.UIThread.RunJobs();
 
-        Console.WriteLine("PASS: reference select/clear, Stuffs drag resolution, Missing display, dirty, and Play guard.");
+        Console.WriteLine("PASS: reference select/clear, Stuffs row drag resolution, field-row drops, Missing display, dirty, and Play guard.");
     }
 
     public sealed class TestRefHolder
