@@ -78,25 +78,31 @@ Apply this skill only to `tekewo000/PureEngine`; verify repository identity.
   main with `gh`. Summarize changes, tests, limitations, and applicable issue links
   using current templates. Do not invent issues, CI evidence, or approvals.
 - Inspect current protection, rulesets, merge permissions, and required reviews.
-  Setup found no protection/rulesets and allowed merge commits, with recent PR
-  merge-commit practice; this is a recommendation, not a permanent policy.
+  Current policy (2026-09-25): repository ruleset `main-checks` requires a pull
+  request and the `check` status from the Code quality workflow; allowed merge
+  methods include merge commits, and the repository allows auto-merge. The native
+  GitHub merge queue is unavailable because the repository is user-owned (the
+  API rejects `merge_queue` rules with 422); do not attempt to create one.
   Do not bypass newly applicable rules or use administrative overrides.
 - Wait for the latest candidate's Code quality workflow and every other applicable
   required check/review to succeed before merging. Source:
-  `.github/workflows/code-quality.yml` runs job `check` on push and pull_request,
-  on Windows with SDK selection from global.json and the same quality script.
-  Pending, failing, missing, or unverifiable required checks block landing.
-  Use bounded waits and inspect actual run/head SHAs and conclusions.
+  `.github/workflows/code-quality.yml` runs job `check` on push, pull_request,
+  and merge_group (merge_group stays dormant unless the repository moves to an
+  organization), on Windows with SDK selection from global.json and the same
+  quality script. Pending, failing, missing, or unverifiable required checks
+  block landing. Use bounded waits and inspect actual run/head SHAs and conclusions.
 - If the base or candidate changes, integrate safely and obtain verification for
   the updated candidate under current rules before proceeding.
-- Merge through GitHub using a merge commit, matching the verified PR head
-  (for example `gh pr merge <number> --merge --match-head-commit <sha>`).
-  Check current CLI support before using options. If destination settings require
-  a different strategy or queue, follow that policy without bypassing checks;
-  stop if it introduces an unresolved decision.
+- Enqueue the merge through GitHub auto-merge using a merge commit, matching the
+  verified PR head (for example `gh pr merge <number> --auto --merge
+  --match-head-commit <sha>`). GitHub merges the PR once required checks pass,
+  so concurrent landings serialize without local waiting. If the PR becomes
+  conflicted or out of date, update the topic branch safely, re-verify, and
+  re-enable auto-merge. Never use `--admin` or other bypasses; stop if the
+  destination settings introduce an unresolved decision.
 - Fetch origin and verify the PR is merged and its actual merge commit is on
   origin/main. Inspect the destination Code quality run for the resulting commit.
-  A branch push or PR creation is not landing success.
+  Enabling auto-merge or pushing the branch is not landing success.
 
 ## Update the primary local checkout
 
