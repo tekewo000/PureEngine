@@ -44,16 +44,47 @@ public partial class MainWindow
     }
 
     /// <summary>For tests: reflects objects added directly to the scene in the tree. Preserves the selection.</summary>
-    internal void SyncHierarchyForTest() => RefreshHierarchy(GetSelectedSceneObject()?.Id);
+    internal void SyncHierarchyForTest() => RefreshHierarchy();
 
-    /// <summary>The selected SceneObject. Reads the TreeView selection as a HierarchyNode Ref.</summary>
+    /// <summary>The primary selected SceneObject. Reads the TreeView primary selection as a HierarchyNode Ref.</summary>
     internal SceneObject? GetSelectedSceneObject() => (SceneObjects.SelectedItem as HierarchyNode)?.Ref;
 
-    /// <summary>For tests: the selected node. Lets post-TreeView tests compare by instance instead of ID.</summary>
+    /// <summary>All selected SceneObjects in display order. Empty when nothing is selected.</summary>
+    internal IReadOnlyList<SceneObject> GetSelectedSceneObjects()
+    {
+        List<SceneObject> selected = [];
+        foreach (var node in SceneObjects.SelectedItems.OfType<HierarchyNode>())
+            selected.Add(node.Ref);
+        if (selected.Count <= 1) return selected;
+        var order = new Dictionary<SceneObject, int>(ReferenceEqualityComparer.Instance);
+        var index = 0;
+        foreach (var item in EnumerateInDisplayOrder())
+            order[item] = index++;
+        selected.Sort((left, right) =>
+            (order.TryGetValue(left, out var leftIndex) ? leftIndex : int.MaxValue).CompareTo(
+                order.TryGetValue(right, out var rightIndex) ? rightIndex : int.MaxValue));
+        return selected;
+    }
+
+    private List<Guid>? GetSelectedSceneObjectIds()
+    {
+        List<Guid> ids = [];
+        foreach (var node in SceneObjects.SelectedItems.OfType<HierarchyNode>())
+            ids.Add(node.Ref.Id);
+        return ids.Count == 0 ? null : ids;
+    }
+
+    /// <summary>For tests: the primary selected node. Lets post-TreeView tests compare by instance instead of ID.</summary>
     internal HierarchyNode? SelectedHierarchyNodeForTest() => SceneObjects.SelectedItem as HierarchyNode;
 
     /// <summary>For tests: selects the node for a SceneObject. Goes through the tree display selection path.</summary>
     internal void SelectSceneObjectForTest(SceneObject? item) => SelectSceneObject(item, focus: false);
+
+    /// <summary>For tests: selects several nodes. Goes through the tree display selection path.</summary>
+    internal void SelectSceneObjectsForTest(IEnumerable<SceneObject?> items) => SelectSceneObjects(items, focus: false);
+
+    /// <summary>For tests: all selected nodes in display order.</summary>
+    internal IReadOnlyList<HierarchyNode> SelectedHierarchyNodesForTest() => [.. SceneObjects.SelectedItems.OfType<HierarchyNode>()];
 
     /// <summary>Enumerates HierarchyNodes. Used to stash state before a rebuild and restore the selection.</summary>
     private IEnumerable<HierarchyNode> EnumerateHierarchyNodes(IEnumerable<HierarchyNode>? roots = null)
@@ -81,8 +112,18 @@ public partial class MainWindow
     /// <summary>Rebuilds the Stuffs tree from scene parent-child links. Preserves expansion and selection by ID.</summary>
     internal void RefreshHierarchy(Guid? keepSelectedId = null, Guid? expandId = null)
     {
+        if (keepSelectedId is { } singleId) RefreshHierarchyCore([singleId], expandId);
+        else RefreshHierarchyCore(GetSelectedSceneObjectIds(), expandId);
+    }
+
+    /// <summary>Rebuilds the Stuffs tree and restores several selections by ID. Null preserves the current selection.</summary>
+    internal void RefreshHierarchyForSelection(IReadOnlyCollection<Guid>? keepSelectedIds, Guid? expandId = null) =>
+        RefreshHierarchyCore(keepSelectedIds ?? GetSelectedSceneObjectIds(), expandId);
+
+    private void RefreshHierarchyCore(IReadOnlyCollection<Guid>? keepSelectedIds, Guid? expandId)
+    {
         ClearHierarchyDropIndicator();
-        var selectedNode = SceneObjects.SelectedItem as HierarchyNode;
+        var selectedIds = keepSelectedIds ?? GetSelectedSceneObjectIds();
         _hierarchyRefreshing = true;
         try
         {
@@ -98,7 +139,6 @@ public partial class MainWindow
         {
             _hierarchyRefreshing = false;
         }
-        var selectedId = keepSelectedId ?? selectedNode?.Ref.Id;
         if (expandId is { } parentId)
             foreach (var node in EnumerateHierarchyNodes())
                 if (node.Ref.Id == parentId)
@@ -106,10 +146,18 @@ public partial class MainWindow
                     node.IsExpanded = true;
                     break;
                 }
-        if (selectedId is { } id)
-            SelectSceneObject(FindObject(id), focus: false);
+        if (selectedIds is { Count: > 0 })
+        {
+            List<SceneObject> selected = [];
+            foreach (var id in selectedIds)
+                if (FindObject(id) is { } item) selected.Add(item);
+            if (selected.Count > 0) SelectSceneObjects(selected, focus: false);
+            else RefreshObjectInspector();
+        }
         else
+        {
             RefreshObjectInspector();
+        }
     }
 
     private SceneObject? FindObject(Guid id)
@@ -122,21 +170,57 @@ public partial class MainWindow
     /// <summary>Selects the Stuffs tree for the given SceneObject. Expands parent nodes to make it visible.</summary>
     internal void SelectSceneObject(SceneObject? item, bool focus)
     {
-        if (item is null)
-        {
-            SceneObjects.SelectedItem = null;
-            if (focus) SceneObjects.Focus();
-            return;
-        }
-        ExpandAncestors(item);
+        if (item is null) SelectSceneObjects([], focus);
+        else SelectSceneObjects([item], focus);
+    }
+
+    /// <summary>Selects several Stuffs rows. Expands parent nodes to make them visible. Empty clears the selection.</summary>
+    internal void SelectSceneObjects(IEnumerable<SceneObject?> items, bool focus)
+    {
+        List<SceneObject> selected = [];
+        foreach (var item in items)
+            if (item is not null && _editScene.Current.Objects.Contains(item) && !selected.Contains(item))
+                selected.Add(item);
+        foreach (var item in selected)
+            ExpandAncestors(item);
+        var nodes = new Dictionary<SceneObject, HierarchyNode>(ReferenceEqualityComparer.Instance);
         foreach (var node in EnumerateHierarchyNodes())
-            if (ReferenceEquals(node.Ref, item))
-            {
-                SceneObjects.SelectedItem = node;
-                SceneObjects.ScrollIntoView(node);
-                break;
-            }
+            nodes.TryAdd(node.Ref, node);
+        _hierarchyRefreshing = true;
+        try
+        {
+            SceneObjects.SelectedItems.Clear();
+            SceneObject? firstVisible = null;
+            foreach (var item in selected)
+                if (nodes.TryGetValue(item, out var node))
+                {
+                    SceneObjects.SelectedItems.Add(node);
+                    firstVisible ??= item;
+                }
+            if (firstVisible is not null && nodes.TryGetValue(firstVisible, out var firstNode))
+                SceneObjects.ScrollIntoView(firstNode);
+        }
+        finally
+        {
+            _hierarchyRefreshing = false;
+        }
+        RefreshObjectInspector();
         if (focus) SceneObjects.Focus();
+    }
+
+    private IEnumerable<SceneObject> EnumerateInDisplayOrder()
+    {
+        foreach (var root in _editScene.Current.RootObjects)
+            foreach (var item in EnumerateSubtreeInOrder(root))
+                yield return item;
+    }
+
+    private static IEnumerable<SceneObject> EnumerateSubtreeInOrder(SceneObject root)
+    {
+        yield return root;
+        foreach (var child in root.Children)
+            foreach (var item in EnumerateSubtreeInOrder(child))
+                yield return item;
     }
 
     private void ExpandAncestors(SceneObject item)
@@ -167,8 +251,10 @@ public partial class MainWindow
         if (source?.GetSelfAndVisualAncestors().OfType<ToggleButton>().Any() == true) return;
         var node = FindHierarchyNode(source);
         if (node is null) return;
-        // Suppress the TreeView press selection so a drag keeps the Inspector on its current target.
-        // A press without a drag completes the click on release.
+        // Let the TreeView handle Ctrl/Shift natively for multi-selection. Plain presses stay
+        // suppressed so a drag keeps the Inspector on its current target until the click completes.
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            return;
         e.Handled = true;
         _hierarchyPress = e;
         _hierarchyPressPosition = e.GetPosition(SceneObjects);
@@ -204,7 +290,9 @@ public partial class MainWindow
         _hierarchyPress = null;
         _hierarchyDragId = null;
         // A drag clears the press state when it starts, so a remaining ID means a click.
+        // Ctrl/Shift clicks are already handled natively by the TreeView.
         if (dragId is not { } id) return;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
         if (FindObject(id) is not { } item) return;
         SelectSceneObject(item, focus: true);
     }

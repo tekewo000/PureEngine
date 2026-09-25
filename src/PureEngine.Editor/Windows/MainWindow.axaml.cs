@@ -974,7 +974,9 @@ public partial class MainWindow : Window
     private void OnScenePointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(SceneSurface).Properties.IsRightButtonPressed) return;
-        SelectSceneObject(FindHierarchyNode(e.Source as Avalonia.Visual)?.Ref, focus: true);
+        var node = FindHierarchyNode(e.Source as Avalonia.Visual)?.Ref;
+        if (node is not null && GetSelectedSceneObjects().Contains(node)) { SceneObjects.Focus(); return; }
+        SelectSceneObject(node, focus: true);
     }
 
     private void OnAddUiImage(object? sender, RoutedEventArgs e) =>
@@ -1054,11 +1056,15 @@ public partial class MainWindow : Window
         if (_assetEdit is not null && item is null)
         {
             DeleteObjectMenuItem.IsEnabled = false;
+            DuplicateObjectMenuItem.IsEnabled = false;
             RefreshDataAssetInspector();
             return;
         }
         DataAssetInspector.IsVisible = false;
-        DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying && !IsPrefabRoot(item);
+        var selected = GetSelectedSceneObjects();
+        var canEdit = selected.Count > 0 && selected.Any(candidate => !IsPrefabRoot(candidate));
+        DeleteObjectMenuItem.IsEnabled = canEdit && !IsPlaying;
+        DuplicateObjectMenuItem.IsEnabled = canEdit && !IsPlaying;
         SavePrefabMenuItem.IsEnabled = item is not null && !IsPlaying;
         ObjectInspector.IsVisible = item is not null;
         ObjectName.Text = item?.Name ?? "";
@@ -1084,44 +1090,186 @@ public partial class MainWindow : Window
 
     private void OnDeleteObject(object? sender, RoutedEventArgs e) => DeleteSelectedObject();
 
+    private void OnDuplicateObject(object? sender, RoutedEventArgs e) => DuplicateSelectedObjects();
+
     private void OnSceneKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Delete) return;
-        DeleteSelectedObject();
-        e.Handled = true;
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelectedObject();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.D && e.KeyModifiers == KeyModifiers.Control)
+        {
+            DuplicateSelectedObjects();
+            e.Handled = true;
+        }
     }
 
     private void DeleteSelectedObject()
     {
         if (RejectWhenPlaying("Delete")) return;
-        if (GetSelectedSceneObject() is not SceneObject item) return;
-        if (IsPrefabRoot(item))
+        var selected = GetSelectedSceneObjects();
+        if (selected.Count == 0) return;
+        var targets = TopLevelSelection(selected);
+        List<SceneObject> deletable = [];
+        var skippedPrefabRoot = false;
+        foreach (var item in targets)
+        {
+            if (!_editScene.Current.Objects.Contains(item)) continue;
+            if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
+            deletable.Add(item);
+        }
+        if (deletable.Count == 0)
         {
             SetFileStatus("The prefab root cannot be deleted. Edit its name or components instead.", true);
             return;
         }
         CancelSceneViewDrag();
-        var siblings = item.Parent is null ? _editScene.Current.RootObjects : item.Parent.Children;
-        var siblingIndex = IndexOfSceneObject(siblings, item);
-        var next = siblingIndex >= 0 && siblingIndex + 1 < siblings.Count ? siblings[siblingIndex + 1]
-            : siblingIndex > 0 ? siblings[siblingIndex - 1]
-            : item.Parent;
-        List<object> doomed = [.. item.Components];
-        var stack = new Stack<SceneObject>(item.Children);
-        while (stack.Count > 0)
+        var next = FindNextAfterDelete(deletable[0], deletable);
+        List<object> doomed = [];
+        foreach (var item in deletable)
         {
-            var descendant = stack.Pop();
-            doomed.AddRange(descendant.Components);
-            foreach (var child in descendant.Children)
-                stack.Push(child);
+            doomed.AddRange(item.Components);
+            var stack = new Stack<SceneObject>(item.Children);
+            while (stack.Count > 0)
+            {
+                var descendant = stack.Pop();
+                doomed.AddRange(descendant.Components);
+                foreach (var child in descendant.Children)
+                    stack.Push(child);
+            }
         }
-        _editScene.Current.Remove(item);
+        foreach (var item in deletable)
+            _editScene.Current.Remove(item);
         MarkSceneChanged();
         RefreshHierarchy(next?.Id);
         RefreshObjectInspector();
         SceneObjects.Focus();
         try { ComponentAssets.DisposeComponents(doomed); }
         catch (Exception error) { SetFileStatus(error.ToString(), true); }
+        if (skippedPrefabRoot)
+            SetFileStatus($"Deleted {deletable.Count} object(s). The prefab root cannot be deleted.", true);
+    }
+
+    /// <summary>Duplicates the selected subtrees next to their sources. Testable core of the Ctrl+D shortcut.</summary>
+    internal List<SceneObject> DuplicateSelectedForTest() => DuplicateSelectedObjects();
+
+    private List<SceneObject> DuplicateSelectedObjects()
+    {
+        if (RejectWhenPlaying("Duplicate")) return [];
+        var selected = GetSelectedSceneObjects();
+        if (selected.Count == 0) return [];
+        var targets = TopLevelSelection(selected);
+        List<SceneObject> sources = [];
+        var skippedPrefabRoot = false;
+        foreach (var item in targets)
+        {
+            if (!_editScene.Current.Objects.Contains(item)) continue;
+            if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
+            sources.Add(item);
+        }
+        if (sources.Count == 0)
+        {
+            SetFileStatus("The prefab root cannot be duplicated. Select a non-root object instead.", true);
+            return [];
+        }
+        CancelSceneViewDrag();
+        var serializer = new PrefabSerializer(_components.Registry);
+        List<SceneObject> copies = [];
+        foreach (var source in sources)
+        {
+            PrefabDocument document;
+            try { document = serializer.Capture(_editScene.Current, source); }
+            catch (Exception error)
+            {
+                SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
+                continue;
+            }
+            document.Id = source.PrefabId ?? Guid.NewGuid();
+            SceneObject copy;
+            try { copy = serializer.Instantiate(_editScene.Current, document, source.Parent, EditSession.Factory); }
+            catch (Exception error)
+            {
+                SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
+                continue;
+            }
+            copy.PrefabId = source.PrefabId;
+            MoveCopyAfterSource(source, copy);
+            copies.Add(copy);
+        }
+        if (copies.Count == 0) return [];
+        MarkSceneChanged();
+        RefreshHierarchyForSelection([.. copies.Select(copy => copy.Id)]);
+        SceneObjects.Focus();
+        if (skippedPrefabRoot)
+            SetFileStatus($"Duplicated {copies.Count} object(s). The prefab root cannot be duplicated.", true);
+        else
+            SetFileStatus($"Duplicated {copies.Count} object(s).");
+        return copies;
+    }
+
+    private List<SceneObject> TopLevelSelection(IReadOnlyList<SceneObject> selected)
+    {
+        var selectedSet = new HashSet<SceneObject>(selected, ReferenceEqualityComparer.Instance);
+        var order = new Dictionary<SceneObject, int>(ReferenceEqualityComparer.Instance);
+        var index = 0;
+        foreach (var item in EnumerateInDisplayOrder())
+            order[item] = index++;
+        List<SceneObject> tops = [];
+        foreach (var item in selected)
+        {
+            var inside = false;
+            for (var ancestor = item.Parent; ancestor is not null; ancestor = ancestor.Parent)
+                if (selectedSet.Contains(ancestor)) { inside = true; break; }
+            if (!inside) tops.Add(item);
+        }
+        tops.Sort((left, right) =>
+            (order.TryGetValue(left, out var leftIndex) ? leftIndex : int.MaxValue).CompareTo(
+                order.TryGetValue(right, out var rightIndex) ? rightIndex : int.MaxValue));
+        return tops;
+    }
+
+    private SceneObject? FindNextAfterDelete(SceneObject first, List<SceneObject> deletable)
+    {
+        var condemned = new HashSet<SceneObject>(ReferenceEqualityComparer.Instance);
+        foreach (var item in deletable)
+        {
+            condemned.Add(item);
+            var stack = new Stack<SceneObject>(item.Children);
+            while (stack.Count > 0)
+            {
+                var descendant = stack.Pop();
+                if (!condemned.Add(descendant)) continue;
+                foreach (var child in descendant.Children)
+                    stack.Push(child);
+            }
+        }
+        var siblings = first.Parent is null ? _editScene.Current.RootObjects : first.Parent.Children;
+        var siblingIndex = IndexOfSceneObject(siblings, first);
+        if (siblingIndex >= 0)
+        {
+            for (var i = siblingIndex + 1; i < siblings.Count; i++)
+                if (!condemned.Contains(siblings[i])) return siblings[i];
+            for (var i = siblingIndex - 1; i >= 0; i--)
+                if (!condemned.Contains(siblings[i])) return siblings[i];
+        }
+        return first.Parent;
+    }
+
+    private void MoveCopyAfterSource(SceneObject source, SceneObject copy)
+    {
+        if (source.Parent is null)
+        {
+            var roots = _editScene.Current.RootObjects;
+            var sourceIndex = IndexOfSceneObject(roots, source);
+            if (sourceIndex >= 0) _editScene.Current.SetRootSiblingIndex(copy, sourceIndex + 1);
+            return;
+        }
+        var siblings = source.Parent.Children;
+        var desired = IndexOfSceneObject(siblings, source) + 1;
+        if (desired >= 0 && desired < siblings.Count) copy.SetSiblingIndex(desired);
     }
 
     private static int IndexOfSceneObject(IReadOnlyList<SceneObject> items, SceneObject item)

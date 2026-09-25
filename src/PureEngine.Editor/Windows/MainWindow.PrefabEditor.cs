@@ -157,14 +157,17 @@ public partial class MainWindow
             _sceneZoom = next.Zoom;
             _sceneDrawFailures.Clear();
             _hierarchyRefreshing = true;
+            HierarchyNode? restoredSelection = null;
             try
             {
                 _hierarchyRoots = BuildHierarchyRoots();
                 foreach (var node in EnumerateHierarchyNodes())
                     node.IsExpanded = next.Expanded.Contains(node.Ref.Id);
                 SceneObjects.ItemsSource = _hierarchyRoots;
-                SceneObjects.SelectedItem = _assetEdit is null
+                restoredSelection = _assetEdit is null
                     ? EnumerateHierarchyNodes().FirstOrDefault(node => node.Ref.Id == next.SelectionId) : null;
+                SceneObjects.SelectedItems.Clear();
+                if (restoredSelection is not null) SceneObjects.SelectedItems.Add(restoredSelection);
             }
             finally { _hierarchyRefreshing = false; }
             // Reuse the exact Scene View rendering and input implementation, not a second editor.

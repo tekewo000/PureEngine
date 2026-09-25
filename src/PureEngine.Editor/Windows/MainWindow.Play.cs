@@ -358,7 +358,8 @@ public partial class MainWindow
         StartupSceneMenu.IsEnabled = enabled && _project is not null;
         AddObjectMenuItem.IsEnabled = enabled;
         AddUiMenuItem.IsEnabled = enabled;
-        DeleteObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is { } item && !IsPrefabRoot(item);
+        DeleteObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObjects().Any(candidate => !IsPrefabRoot(candidate));
+        DuplicateObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObjects().Any(candidate => !IsPrefabRoot(candidate));
         SavePrefabMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is not null;
         UpdateDataAssetTableChrome();
     }
