@@ -325,10 +325,18 @@ internal static class SceneViewChecks
             "X shaft must hit within screen width.");
         Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(0, 100)) == SceneViewMath.GizmoKind.None,
             "Far points must miss the constant-size gizmo.");
-        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(SceneViewMath.GizmoLength + 5, 5)) == SceneViewMath.GizmoKind.X,
-            "The visible outer half of the X head must be clickable.");
-        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(5, SceneViewMath.GizmoLength + 5)) == SceneViewMath.GizmoKind.Y,
-            "The visible outer half of the Y head must be clickable.");
+        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(38, 5)) == SceneViewMath.GizmoKind.X,
+            "The triangular X head must hit off-axis inside its taper.");
+        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(5, 38)) == SceneViewMath.GizmoKind.Y,
+            "The triangular Y head must hit off-axis inside its taper.");
+        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(42, 6)) == SceneViewMath.GizmoKind.None,
+            "The old square head corner must miss the triangular X head.");
+        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(6, 42)) == SceneViewMath.GizmoKind.None,
+            "The old square head corner must miss the triangular Y head.");
+        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(SceneViewMath.GizmoLength + 5, 0)) == SceneViewMath.GizmoKind.None,
+            "Points beyond the arrow tip must miss.");
+        Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(SceneViewMath.GizmoLength + 5, 5)) == SceneViewMath.GizmoKind.None,
+            "Points beyond the arrow tip must miss even near the old square head.");
     }
 
     private static void DegenerateSelection()

@@ -31,20 +31,47 @@ public static class ExternalEditor
         return ["zed"];
     }
 
-    /// <summary>Builds the process invocation for a Zed executable and file.</summary>
-    public static ProcessStartInfo BuildZedStartInfo(string fullPath, string executable)
+    /// <summary>Builds the process invocation for a Zed executable, project root, and file. The root comes first so Zed opens the project workspace and shows the file.</summary>
+    public static ProcessStartInfo BuildZedStartInfo(string fullPath, string? projectRoot, string executable)
     {
         var start = new ProcessStartInfo
         {
             FileName = executable,
             UseShellExecute = false,
         };
+        if (projectRoot is not null && IsWithinProject(fullPath, projectRoot))
+            start.ArgumentList.Add(projectRoot);
         start.ArgumentList.Add(fullPath);
         return start;
     }
 
-    /// <summary>Tries to open a C# file in Zed. Returns false with a user-facing message on failure.</summary>
-    public static bool TryOpenCSharpInZed(string fullPath, out string? error)
+    /// <summary>Checks whether the file lives under the project root. Files outside fall back to opening the file alone.</summary>
+    private static bool IsWithinProject(string fullPath, string projectRoot)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath) || string.IsNullOrWhiteSpace(projectRoot))
+            return false;
+        string root;
+        string file;
+        try
+        {
+            root = Path.GetFullPath(projectRoot);
+            file = Path.GetFullPath(fullPath);
+        }
+        catch (Exception pathError) when (pathError is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(root, file, comparison))
+            return false;
+        var relative = Path.GetRelativePath(root, file);
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    /// <summary>Tries to open a C# file in Zed from the project root. Returns false with a user-facing message on failure.</summary>
+    public static bool TryOpenCSharpInZed(string fullPath, string? projectRoot, out string? error)
     {
         if (!IsCSharpFile(fullPath))
         {
@@ -61,7 +88,7 @@ public static class ExternalEditor
         {
             try
             {
-                using var process = Process.Start(BuildZedStartInfo(fullPath, candidate));
+                using var process = Process.Start(BuildZedStartInfo(fullPath, projectRoot, candidate));
                 if (process is null)
                 {
                     lastError = new InvalidOperationException($"Could not start {candidate}.");

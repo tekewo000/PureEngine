@@ -97,6 +97,7 @@ public static class SceneViewOverlay
     }
 
     /// <summary>Draws the move gizmo (X/Y arrows and center handle) at the Pivot. Appearance follows screen logical pixels.</summary>
+    /// <remarks>Each axis is a shaft with a triangular head whose tip lands on GizmoLength.</remarks>
     public static void DrawGizmo(
         DrawList draw, Vector2 pivotView, Vector2 xAxis, Vector2 yAxis, Vector4 clip)
     {
@@ -111,21 +112,30 @@ public static class SceneViewOverlay
             return;
         const float shaftThickness = 3f;
         var startOffset = SceneViewMath.GizmoShaftStart;
-        DrawEdge(draw, pivotView + (x * startOffset), pivotView + (x * SceneViewMath.GizmoLength),
-            shaftThickness, XAxisColor, clip);
-        DrawEdge(draw, pivotView + (y * startOffset), pivotView + (y * SceneViewMath.GizmoLength),
-            shaftThickness, YAxisColor, clip);
-        var head = SceneViewMath.GizmoHeadSize;
-        var xHead = pivotView + (x * SceneViewMath.GizmoLength);
-        var yHead = pivotView + (y * SceneViewMath.GizmoLength);
-        draw.Rectangle(new Vector2(head, head),
-            Matrix3x2.CreateTranslation(xHead.X - (head / 2), xHead.Y - (head / 2)), XAxisColor, clip);
-        draw.Rectangle(new Vector2(head, head),
-            Matrix3x2.CreateTranslation(yHead.X - (head / 2), yHead.Y - (head / 2)), YAxisColor, clip);
+        var shaftEnd = SceneViewMath.GizmoLength - SceneViewMath.GizmoHeadSize;
+        if (shaftEnd > startOffset)
+        {
+            DrawEdge(draw, pivotView + (x * startOffset), pivotView + (x * shaftEnd),
+                shaftThickness, XAxisColor, clip);
+            DrawEdge(draw, pivotView + (y * startOffset), pivotView + (y * shaftEnd),
+                shaftThickness, YAxisColor, clip);
+        }
+        DrawArrowHead(draw, pivotView, x, XAxisColor, clip);
+        DrawArrowHead(draw, pivotView, y, YAxisColor, clip);
         var center = SceneViewMath.GizmoCenterSize;
         draw.Rectangle(new Vector2(center, center),
             Matrix3x2.CreateTranslation(pivotView.X - (center / 2), pivotView.Y - (center / 2)),
             PivotColor, clip);
+    }
+
+    private static void DrawArrowHead(DrawList draw, Vector2 pivot, Vector2 dir, Vector4 color, Vector4 clip)
+    {
+        var headLength = SceneViewMath.GizmoHeadSize;
+        var tip = pivot + (dir * SceneViewMath.GizmoLength);
+        var baseCenter = pivot + (dir * (SceneViewMath.GizmoLength - headLength));
+        var perpendicular = new Vector2(-dir.Y, dir.X);
+        var halfWidth = headLength / 2;
+        draw.Triangle(tip, baseCenter + (perpendicular * halfWidth), baseCenter - (perpendicular * halfWidth), color, clip);
     }
 
     private static void DrawEdge(DrawList draw, Vector2 from, Vector2 to, float thickness, Vector4 color, Vector4 clip)
