@@ -76,24 +76,24 @@ public partial class MainWindow
     private async void OnExplorerPlacePrefab(object? sender, RoutedEventArgs e)
     {
         if (ProjectFiles.SelectedItem is not ProjectExplorerEntry { Kind: ProjectExplorerKind.Prefab, FullPath: not null } entry) return;
-        await PlacePrefabAsync(entry.FullPath);
+        await RunFileOperation(async () =>
+        {
+            if (HasInputErrors || !await ConfirmCloseDataAsset()) return;
+            ActivateEditorViewport(0);
+            PlacePrefabForTest(entry.FullPath);
+        });
     }
-
-    private async Task PlacePrefabAsync(string path) => await RunFileOperation(async () =>
-    {
-        PlacePrefabForTest(path);
-        await Task.CompletedTask;
-    });
 
     /// <summary>Places a prefab file into the editing scene under the selected parent. Testable core of prefab placement.</summary>
     internal SceneObject PlacePrefabForTest(string path) => PlacePrefabAt(path, GetSelectedSceneObject());
 
-    /// <summary>Places a prefab file under the given parent. Shared by menus, double-click, and drag-drop.</summary>
+    /// <summary>Places a prefab file under the given parent. Shared by the placement menu and drag-drop.</summary>
     internal SceneObject PlacePrefabAt(string path, SceneObject? parent)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (_project is null) throw new InvalidOperationException("Open a project first.");
         if (RejectWhenPlaying("Place Prefab")) throw new InvalidOperationException("Cannot place prefabs while playing.");
+        if (IsPrefabEditing) parent ??= _prefabScene!.Current.RootObjects.Single();
         _project.ValidatePrefabPath(path);
         var document = PrefabFile.Load(path);
         SceneObject placed;

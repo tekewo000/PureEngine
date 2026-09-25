@@ -54,6 +54,8 @@ internal static class Program
         Directory.CreateDirectory(root);
         try
         {
+            PrefabFileEditingChecks.Run(root);
+            if (args.Contains("--prefab-files")) return;
             AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions())
                 .SetupWithClassicDesktopLifetime([]);
             using var desktop = (ClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;

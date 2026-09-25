@@ -24,6 +24,7 @@ public partial class MainWindow
     {
         _editScene.MarkChanged();
         UpdateSceneTitle();
+        UpdatePrefabEditorChrome();
     }
 
     private void UpdateSceneTitle() => Title = $"{(_editScene.IsDirty ? "* " : "")}{Path.GetFileName(_editScene.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
@@ -56,16 +57,24 @@ public partial class MainWindow
 
     private async Task<bool> SaveSceneAsync(bool saveAs)
     {
+        if (!IsPrefabEditing) return await SaveMainSceneAsync(saveAs);
+        if (!saveAs) return SavePrefabEditor();
+        SetFileStatus("Prefab Save As is not supported. Use Save as Prefab on a Stuffs object to create a new asset.", true);
+        return false;
+    }
+
+    private async Task<bool> SaveMainSceneAsync(bool saveAs)
+    {
         CancelSceneViewDrag();
-        var saveBlock = EditorOperationGate.SaveBlockReason(HasInputErrors);
+        var saveBlock = EditorOperationGate.SaveBlockReason(!IsPrefabEditing && _assetEdit is null && HasInputErrors);
         if (saveBlock is not null)
         {
             SetFileStatus($"Cannot save. {saveBlock}", true);
             return false;
         }
         // Validation happens before picking or touching a destination file.
-        var yaml = _sceneSerializer.Serialize(_editScene.Current);
-        var path = _editScene.Path;
+        var yaml = _sceneSerializer.Serialize(_sceneDocument.Current);
+        var path = _sceneDocument.Path;
         if (saveAs || path is null)
         {
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -82,7 +91,7 @@ public partial class MainWindow
         }
         _project?.ValidateScenePath(path);
         SceneFile.Write(path, yaml);
-        _editScene.MarkSaved(path);
+        _sceneDocument.MarkSaved(path);
         _explorerSelectedFile = path;
         UpdateSceneTitle();
         RefreshProjectExplorer();
@@ -111,6 +120,12 @@ public partial class MainWindow
             return;
         }
         if (!await ConfirmCloseDataAsset()) return;
+        if (HasInputErrors)
+        {
+            SetFileStatus("Fix the Inspector input errors before opening a scene.", true);
+            return;
+        }
+        ActivateEditorViewport(0);
         _project?.ValidateScenePath(path);
         // Completely restore into a separate scene before replacing any editor data.
         // Use the editing factory for constructor injection with a service set separate from Play.
@@ -160,6 +175,8 @@ public partial class MainWindow
         var errors = new List<Exception>();
         try { ForceStopPlayForShutdown(); }
         catch (Exception error) { errors.Add(error); }
+        try { ClosePrefabEditor(); }
+        catch (Exception error) { errors.Add(error); }
         var previous = _editScene.Reset();
         try { ComponentAssets.DisposeComponents(previous.OwnedComponents); }
         catch (Exception error) { errors.Add(error); }
@@ -196,7 +213,8 @@ public partial class MainWindow
 
     private async Task<bool> ConfirmUnsavedChanges()
     {
-        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty, HasInputErrors)) return true;
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(
+            _sceneDocument.IsDirty, !IsPrefabEditing && _assetEdit is null && HasInputErrors)) return true;
         var dialog = new Window
         {
             Title = "Unsaved Scene", Width = 420, SizeToContent = SizeToContent.Height,
@@ -215,7 +233,7 @@ public partial class MainWindow
             Children = { new TextBlock { Text = "The scene has unsaved changes. Save?", TextWrapping = TextWrapping.Wrap }, buttons },
         };
         var answer = await dialog.ShowDialog<string?>(this);
-        return answer == "discard" || (answer == "save" && await SaveSceneAsync(false));
+        return answer == "discard" || (answer == "save" && await SaveMainSceneAsync(false));
     }
 
     private async void OnEditorClosing(object? sender, WindowClosingEventArgs e)
@@ -233,11 +251,14 @@ public partial class MainWindow
                 return;
             }
         }
-        if (!EditorOperationGate.NeedsUnsavedConfirmation(_editScene.IsDirty || _assetEdit is { Dirty: true }, HasInputErrors)) return;
+        if (!EditorOperationGate.NeedsUnsavedConfirmation(
+            _sceneDocument.IsDirty || _prefabScene is { IsDirty: true } || _assetEdit is { Dirty: true }, HasInputErrors)) return;
         e.Cancel = true;
         await RunFileOperation(async () =>
         {
-            if (!await ConfirmCloseDataAsset()) return;
+            // Do not discard any document until every confirmation accepts closing the window.
+            if (!await ConfirmDataAssetClose(closeOnConfirm: false)) return;
+            if (!await ConfirmPrefabEditorClose(closeOnConfirm: false)) return;
             if (!await ConfirmUnsavedChanges()) return;
             _allowClose = true;
             Close();

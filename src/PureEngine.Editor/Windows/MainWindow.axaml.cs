@@ -16,8 +16,9 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow : Window
 {
-    /// <summary>Owner of the edit scene, path, and dirty state. Centralizes edit-state changes across partials.</summary>
-    private readonly EditSceneStore _editScene = new(new Scene());
+    /// <summary>The scene document stays alive while the isolated prefab document is active.</summary>
+    private readonly EditSceneStore _sceneDocument = new(new Scene());
+    private EditSceneStore _editScene;
     /// <summary>Owner of code-reload preparation, adoption, cleanup, and pending state. Verifiable without a UI.</summary>
     private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
     /// <summary>Type owner for this window (project). Serializer, attach, Play, and reload all use it explicitly.</summary>
@@ -77,6 +78,7 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _editScene = _sceneDocument;
         InitializeComponent();
         // Only once at startup, adjusts the bottom pane height from the live Scene View/Game width so it is 16:9.
         CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
@@ -115,6 +117,7 @@ public partial class MainWindow : Window
         GameViewport.Children.Add(gameViewport);
         InitSceneView();
         InitGameInput();
+        ViewportTabs.SelectionChanged += OnEditorViewportChanged;
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
@@ -942,7 +945,7 @@ public partial class MainWindow : Window
     private void AddUiObject(string baseName, Type[] componentTypes)
     {
         if (RejectWhenPlaying("Add")) return;
-        var parent = GetSelectedSceneObject();
+        var parent = EditingParent();
         var item = _editScene.Current.AddNamed(baseName);
         try
         {
@@ -968,7 +971,7 @@ public partial class MainWindow : Window
     private void OnAddObject(object? sender, RoutedEventArgs e)
     {
         if (RejectWhenPlaying("Add")) return;
-        var parent = GetSelectedSceneObject();
+        var parent = EditingParent();
         var item = _editScene.Current.AddEmpty();
         if (parent is not null) item.SetParent(parent);
         MarkSceneChanged();
@@ -1010,7 +1013,7 @@ public partial class MainWindow : Window
             return;
         }
         DataAssetInspector.IsVisible = false;
-        DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying;
+        DeleteObjectMenuItem.IsEnabled = item is not null && !IsPlaying && !IsPrefabRoot(item);
         SavePrefabMenuItem.IsEnabled = item is not null && !IsPlaying;
         ObjectInspector.IsVisible = item is not null;
         ObjectName.Text = item?.Name ?? "";
@@ -1047,6 +1050,11 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("Delete")) return;
         if (GetSelectedSceneObject() is not SceneObject item) return;
+        if (IsPrefabRoot(item))
+        {
+            SetFileStatus("The prefab root cannot be deleted. Edit its name or components instead.", true);
+            return;
+        }
         CancelSceneViewDrag();
         var siblings = item.Parent is null ? _editScene.Current.RootObjects : item.Parent.Children;
         var siblingIndex = IndexOfSceneObject(siblings, item);

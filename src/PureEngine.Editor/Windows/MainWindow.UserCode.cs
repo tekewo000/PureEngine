@@ -82,6 +82,11 @@ public partial class MainWindow
         if (_pendingCompilation is not { Result: { } compiled } attempt || _compileTracker is null
             || _reloadCoordinator.IsReloading
             || EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null) return;
+        if (_prefabScene is not null && compiled.Success)
+        {
+            SetFileStatus("C# changes are ready. Close Prefab Editor to apply them.");
+            return;
+        }
         CancelSceneViewDrag();
         _pendingCompilation = null;
         if (!_compileTracker.IsCurrent(attempt.Ticket))

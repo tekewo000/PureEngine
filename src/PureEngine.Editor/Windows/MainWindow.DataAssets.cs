@@ -217,13 +217,15 @@ public partial class MainWindow
     }
 
     /// <summary>Closes the open asset after confirmation. Returns false when the user cancels and the asset must stay open.</summary>
-    private async Task<bool> ConfirmCloseDataAsset()
+    private Task<bool> ConfirmCloseDataAsset() => ConfirmDataAssetClose(closeOnConfirm: true);
+
+    private async Task<bool> ConfirmDataAssetClose(bool closeOnConfirm)
     {
         var state = _assetEdit;
         if (state is null) return true;
         if (!EditorOperationGate.NeedsUnsavedConfirmation(state.Dirty, _invalidFields.Count > 0))
         {
-            CloseDataAssetForEdit();
+            if (closeOnConfirm) CloseDataAssetForEdit();
             return true;
         }
         var dialog = new Window
@@ -246,12 +248,12 @@ public partial class MainWindow
         var answer = await dialog.ShowDialog<string?>(this);
         if (answer == "discard")
         {
-            CloseDataAssetForEdit();
+            if (closeOnConfirm) CloseDataAssetForEdit();
             return true;
         }
         if (answer == "save" && await SaveDataAssetAsync())
         {
-            CloseDataAssetForEdit();
+            if (closeOnConfirm) CloseDataAssetForEdit();
             return true;
         }
         return false;
