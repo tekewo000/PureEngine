@@ -99,6 +99,30 @@ static class ReferenceEditorChecks
         Check((bool)resolve.Invoke(editor, holderIdArgs)! && ReferenceEquals(holderIdArgs[2], holderObject), "SceneObject drag must resolve.");
         object?[] wrongTypeArgs = [holderObject.Id, typeof(PureEngine.Core.Button), null, null];
         Check(!(bool)resolve.Invoke(editor, wrongTypeArgs)!, "Drag without the expected component must be rejected.");
+        var refParent = scene.AddEmpty();
+        refParent.Rename("RefParent");
+        var refParentTransform = new Transform();
+        refParent.Attach(refParentTransform);
+        var refChild = scene.AddEmpty();
+        refChild.Rename("RefChild");
+        var refChildTransform = new Transform();
+        refChild.Attach(refChildTransform);
+        refChild.SetParent(refParent);
+        object?[] ownArgs = [refParent.Id, typeof(Transform), null, null];
+        Check((bool)resolve.Invoke(editor, ownArgs)! && ReferenceEquals(ownArgs[2], refParentTransform),
+            "Drag of a parent must resolve its own component instead of failing on descendants.");
+        var bareParent = scene.AddEmpty();
+        bareParent.Rename("RefBareParent");
+        var nestedChild = scene.AddEmpty();
+        nestedChild.Rename("RefNestedChild");
+        var nestedButton = new PureEngine.Core.Button();
+        nestedChild.Attach(nestedButton);
+        nestedChild.SetParent(bareParent);
+        object?[] nestedArgs = [bareParent.Id, typeof(PureEngine.Core.Button), null, null];
+        Check((bool)resolve.Invoke(editor, nestedArgs)! && ReferenceEquals(nestedArgs[2], nestedButton),
+            "Drag of an object without the component must resolve a unique descendant.");
+        scene.Remove(refParent);
+        scene.Remove(bareParent);
 
         Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
         using var dragData = new DataTransfer();
