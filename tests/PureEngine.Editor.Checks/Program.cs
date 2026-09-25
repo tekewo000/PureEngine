@@ -94,6 +94,7 @@ internal static class Program
             ProjectIsolationChecks.Run(root);
             ProjectServiceRegistrationChecks.Run(root);
             UserCodeBackgroundChecks.Run(root);
+            UserCodeIncrementalChecks.Run(root);
             IntegratedArchitectureChecks.Run(root);
             ProjectAssetChecks.Run(root);
             DataAssetEditorChecks.Run(root);

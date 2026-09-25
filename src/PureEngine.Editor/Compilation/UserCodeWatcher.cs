@@ -9,7 +9,7 @@ public sealed class UserCodeWatcher : IDisposable
     private readonly DispatcherTimer _debounce;
     private bool _disposed;
     public event Action? ReloadRequested;
-    public static TimeSpan DebounceDelay { get; } = TimeSpan.FromMilliseconds(600);
+    public static TimeSpan DebounceDelay { get; } = TimeSpan.FromMilliseconds(250);
 
     public UserCodeWatcher(string rootDirectory)
     {

@@ -14,13 +14,15 @@ public sealed class ProjectSession : IDisposable
     public GameSession EditServices { get; }
     private bool _disposed;
     private bool _ownershipTransferred;
+    private UserCodeIncrementalCompiler? _userCodeCache;
 
-    private ProjectSession(ProjectFile project, ProjectComponents components, Scene scene, GameSession services)
+    private ProjectSession(ProjectFile project, ProjectComponents components, Scene scene, GameSession services, UserCodeIncrementalCompiler? userCodeCache)
     {
         Project = project;
         Components = components;
         Scene = scene;
         EditServices = services;
+        _userCodeCache = userCodeCache;
     }
 
     internal void TransferOwnership()
@@ -29,12 +31,32 @@ public sealed class ProjectSession : IDisposable
         _ownershipTransferred = true;
     }
 
+    /// <summary>Takes ownership of the incremental compilation cache, usually to reuse it for save watching. Returns null for custom compilation.</summary>
+    internal UserCodeIncrementalCompiler? TakeUserCodeCache()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var cache = _userCodeCache;
+        _userCodeCache = null;
+        return cache;
+    }
+
     // Synchronous entry for tools/checks; the Launcher always uses OpenAsync.
     public static ProjectSession Open(string manifestPath)
     {
         var project = ProjectFile.Open(manifestPath);
         ProjectCodeWorkspace.Ensure(project);
-        return Prepare(project, UserCodeCompiler.CompileProject(project.RootDirectory));
+        var cache = new UserCodeIncrementalCompiler(project.RootDirectory);
+        UserCodeCompileResult compiled;
+        try
+        {
+            compiled = cache.CompileProject();
+        }
+        catch
+        {
+            try { cache.Dispose(); } catch { }
+            throw;
+        }
+        return Prepare(project, compiled, cache);
     }
 
     public static async Task<ProjectSession> OpenAsync(string manifestPath,
@@ -49,11 +71,23 @@ public sealed class ProjectSession : IDisposable
             UserCodeCompileTracker.Release(attempt.Result);
             throw new OperationCanceledException(cancellationToken);
         }
-        // Keep the caller's context: constructors and scene restoration run on the UI thread.
-        return Prepare(project, attempt.Result ?? throw new InvalidOperationException("Compilation returned no result."));
+        var cache = tracker.TakeCache();
+        try
+        {
+            // Keep the caller's context: constructors and scene restoration run on the UI thread.
+            return Prepare(project, attempt.Result ?? throw new InvalidOperationException("Compilation returned no result."), cache);
+        }
+        catch
+        {
+            if (cache is not null)
+            {
+                try { cache.Dispose(); } catch { }
+            }
+            throw;
+        }
     }
 
-    private static ProjectSession Prepare(ProjectFile project, UserCodeCompileResult compiled)
+    private static ProjectSession Prepare(ProjectFile project, UserCodeCompileResult compiled, UserCodeIncrementalCompiler? userCodeCache)
     {
         var components = new ProjectComponents();
         Scene? scene = null;
@@ -87,7 +121,9 @@ public sealed class ProjectSession : IDisposable
                         .Select(UserCodeCompiler.FormatDiagnostic)), error);
             }
             components.Adopt(compiled.Success ? compiled : null);
-            return new(project, components, scene, services) { SceneNeedsSave = membersChanged };
+            var session = new ProjectSession(project, components, scene, services, userCodeCache) { SceneNeedsSave = membersChanged };
+            userCodeCache = null;
+            return session;
         }
         catch (Exception error)
         {
@@ -103,6 +139,10 @@ public sealed class ProjectSession : IDisposable
             {
                 components.Dispose();
                 ProjectComponents.Release(compiled);
+                if (userCodeCache is not null)
+                {
+                    try { userCodeCache.Dispose(); } catch { }
+                }
             }
             if (errors.Count > 1) throw new AggregateException("Project open and cleanup failed.", errors);
             throw;
@@ -124,7 +164,7 @@ public sealed class ProjectSession : IDisposable
                 GameServices.ForProject(components)(services);
                 if (assets is not null) services.AddSingleton(assets);
             });
-            return new(project, components, scene, services);
+            return new ProjectSession(project, components, scene, services, null);
         }
         catch
         {
@@ -158,7 +198,17 @@ public sealed class ProjectSession : IDisposable
         catch (Exception error) { errors.Add(error); }
         try { EditServices.Dispose(); }
         catch (Exception error) { errors.Add(error); }
-        finally { Components.Dispose(); }
+        try { Components.Dispose(); }
+        catch (Exception error) { errors.Add(error); }
+        finally
+        {
+            if (_userCodeCache is not null)
+            {
+                try { _userCodeCache.Dispose(); }
+                catch (Exception error) { errors.Add(error); }
+                finally { _userCodeCache = null; }
+            }
+        }
         if (errors.Count != 0) throw new AggregateException("Project cleanup failed.", errors);
     }
 }

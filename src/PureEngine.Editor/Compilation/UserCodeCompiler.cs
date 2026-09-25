@@ -23,6 +23,8 @@ public sealed class UserCodeCompileResult
     internal string? IdentityContent { get; set; }
     internal string GetTypeId(Type type) => TypeIds.GetValueOrDefault(type) ?? UserCodeCompiler.TypeIdFor(type);
     public bool Success { get; init; }
+    /// <summary>True when inputs were unchanged and compilation was skipped. Holds no new assembly; the caller keeps the previous state.</summary>
+    public bool Unchanged { get; init; }
     public IReadOnlyList<UserCodeDiagnostic> Diagnostics { get; init; } = [];
     public IReadOnlyList<string> SourceFiles { get; init; } = [];
     internal byte[]? AssemblyBytes { get; init; }
@@ -120,10 +122,16 @@ public static class UserCodeCompiler
         return files;
     }
 
-    public static UserCodeCompileResult CompileProject(string rootDirectory)
+    internal static CSharpCompilationOptions CompilationOptions { get; } = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+        .WithOverflowChecks(true)
+        .WithOptimizationLevel(OptimizationLevel.Debug);
+
+    internal static CSharpParseOptions ParseOptions { get; } = new(LanguageVersion.Preview);
+
+    public static UserCodeCompileResult CompileProject(string rootDirectory, CancellationToken cancellationToken = default)
     {
         var files = ListSourceFiles(rootDirectory);
-        var result = CompileFiles(files);
+        var result = CompileFiles(files, cancellationToken);
         if (!result.Success) return result;
         try { UserCodeIdentity.Resolve(rootDirectory, result); }
         catch (Exception error)
@@ -138,7 +146,7 @@ public static class UserCodeCompiler
         return result;
     }
 
-    public static UserCodeCompileResult CompileFiles(IReadOnlyList<string> files)
+    public static UserCodeCompileResult CompileFiles(IReadOnlyList<string> files, CancellationToken cancellationToken = default)
     {
         files ??= [];
         if (files.Count == 0)
@@ -158,6 +166,7 @@ public static class UserCodeCompiler
         var readDiagnostics = new List<UserCodeDiagnostic>();
         foreach (var file in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string text;
             try
             {
@@ -170,17 +179,18 @@ public static class UserCodeCompiler
                 catch (IOException)
                 {
                     Thread.Sleep(50);
+                    cancellationToken.ThrowIfCancellationRequested();
                     text = File.ReadAllText(file);
                 }
             }
-            catch (Exception error)
+            catch (Exception error) when (error is not OperationCanceledException)
             {
                 readDiagnostics.Add(new UserCodeDiagnostic(file, 0, 0, "PE-READ", $"Cannot read file: {error.GetBaseException().Message}", true));
                 continue;
             }
             // Roslyn 5.x Preview corresponds to the C# 15 preview. The stable NuGet package (5.9.0) has
             // no LanguageVersion.CSharp15 yet, so follow the latest via Preview instead of an explicit value.
-            trees.Add(CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview), file));
+            trees.Add(CSharpSyntaxTree.ParseText(text, ParseOptions, file, encoding: null, cancellationToken));
         }
         if (readDiagnostics.Any(d => d.IsError))
         {
@@ -197,28 +207,9 @@ public static class UserCodeCompiler
             "PureEngine.UserCode." + Guid.NewGuid().ToString("N"),
             trees,
             references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithOverflowChecks(true)
-                .WithOptimizationLevel(OptimizationLevel.Debug));
+            CompilationOptions);
 
-        var diagnostics = new List<UserCodeDiagnostic>();
-        foreach (var diagnostic in compilation.GetDiagnostics())
-        {
-            // Hide hidden diagnostics. Allow warnings and fail only on errors.
-            if (diagnostic.Severity == DiagnosticSeverity.Hidden) continue;
-            var line = 0;
-            var column = 0;
-            var path = files is [var first, ..] ? first : "";
-            if (diagnostic.Location.IsInSource && diagnostic.Location.SourceTree is not null)
-            {
-                path = diagnostic.Location.SourceTree.FilePath;
-                var span = diagnostic.Location.GetLineSpan();
-                line = span.StartLinePosition.Line + 1;
-                column = span.StartLinePosition.Character + 1;
-            }
-            diagnostics.Add(new UserCodeDiagnostic(path, line, column, diagnostic.Id,
-                diagnostic.ToString(), diagnostic.Severity == DiagnosticSeverity.Error));
-        }
+        var diagnostics = CollectDiagnostics(compilation.GetDiagnostics(cancellationToken), files);
         if (diagnostics.Any(d => d.IsError))
         {
             return new UserCodeCompileResult
@@ -230,25 +221,9 @@ public static class UserCodeCompiler
         }
 
         using var stream = new MemoryStream();
-        var emit = compilation.Emit(stream);
-        foreach (var diagnostic in emit.Diagnostics)
-        {
-            if (diagnostic.Severity == DiagnosticSeverity.Hidden) continue;
-            if (diagnostic.Severity != DiagnosticSeverity.Error) continue; // Warnings were already collected via GetDiagnostics
-            var line = 0;
-            var column = 0;
-            var path = files is [var first, ..] ? first : "";
-            if (diagnostic.Location.IsInSource && diagnostic.Location.SourceTree is not null)
-            {
-                path = diagnostic.Location.SourceTree.FilePath;
-                var span = diagnostic.Location.GetLineSpan();
-                line = span.StartLinePosition.Line + 1;
-                column = span.StartLinePosition.Character + 1;
-            }
-            // Treat emit errors as failures.
-            diagnostics.Add(new UserCodeDiagnostic(path, line, column, diagnostic.Id,
-                diagnostic.ToString(), true));
-        }
+        var emit = compilation.Emit(stream, cancellationToken: cancellationToken);
+        // Treat emit errors as failures. Warnings were already collected via GetDiagnostics.
+        diagnostics.AddRange(CollectDiagnostics(emit.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error), files));
         if (!emit.Success)
         {
             return new UserCodeCompileResult
@@ -309,11 +284,76 @@ public static class UserCodeCompiler
         };
     }
 
+    internal static List<UserCodeDiagnostic> CollectDiagnostics(IEnumerable<Diagnostic> diagnostics, IReadOnlyList<string> files)
+    {
+        var fallback = files is [var first, ..] ? first : "";
+        var list = new List<UserCodeDiagnostic>();
+        foreach (var diagnostic in diagnostics)
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Hidden) continue;
+            var line = 0;
+            var column = 0;
+            var path = fallback;
+            if (diagnostic.Location.IsInSource && diagnostic.Location.SourceTree is not null)
+            {
+                path = diagnostic.Location.SourceTree.FilePath;
+                var span = diagnostic.Location.GetLineSpan();
+                line = span.StartLinePosition.Line + 1;
+                column = span.StartLinePosition.Character + 1;
+            }
+            list.Add(new UserCodeDiagnostic(path, line, column, diagnostic.Id,
+                diagnostic.ToString(), diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+        return list;
+    }
+
+    internal static IReadOnlyList<string> GetCandidateReferencePaths()
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa)
+        {
+            foreach (var path in tpa.Split(Path.PathSeparator))
+            {
+                if (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    paths.Add(path);
+            }
+        }
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic) continue;
+            try
+            {
+                var location = assembly.Location;
+                if (!string.IsNullOrEmpty(location) && File.Exists(location))
+                    paths.Add(location);
+            }
+            catch { }
+        }
+        var sorted = new List<string>(paths);
+        sorted.Sort(StringComparer.OrdinalIgnoreCase);
+        return sorted;
+    }
+
+    internal static Assembly LoadUserCode(byte[] bytes, out UserCodeLoadContext context)
+    {
+        context = new UserCodeLoadContext();
+        try
+        {
+            using var loadStream = new MemoryStream(bytes);
+            return context.LoadFromStream(loadStream);
+        }
+        catch
+        {
+            try { context.Unload(); } catch { }
+            throw;
+        }
+    }
+
     /// <summary>
     /// Handling for multiple classes per file: maps every attachable type in the file to that file.
     /// Drag-and-drop attaches all not-yet-attached types from that file. One class per file is recommended, but multiples work.
     /// </summary>
-    private static Dictionary<string, IReadOnlyList<Type>> BuildFileMap(
+    internal static Dictionary<string, IReadOnlyList<Type>> BuildFileMap(
         CSharpCompilation compilation, Type[] attachable)
     {
         var byFullName = attachable.ToDictionary(t => t.FullName ?? t.Name, StringComparer.Ordinal);
@@ -356,26 +396,7 @@ public static class UserCodeCompiler
 
     private static List<MetadataReference> BuildReferences()
     {
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa)
-        {
-            foreach (var path in tpa.Split(Path.PathSeparator))
-            {
-                if (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                    paths.Add(path);
-            }
-        }
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (assembly.IsDynamic) continue;
-            try
-            {
-                var location = assembly.Location;
-                if (!string.IsNullOrEmpty(location) && File.Exists(location))
-                    paths.Add(location);
-            }
-            catch { }
-        }
+        var paths = GetCandidateReferencePaths();
         var references = new List<MetadataReference>(paths.Count);
         foreach (var path in paths)
         {
