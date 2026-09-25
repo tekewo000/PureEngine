@@ -119,6 +119,8 @@ static class InspectorValueEditorChecks
             Equals(border.GetValue(AutomationProperties.NameProperty), $"{nameof(InspectorValueProbe)}.Tint.Preview"));
         Check((preview.Background as Avalonia.Media.SolidColorBrush)?.Color == Avalonia.Media.Color.FromArgb(255, 64, 128, 64),
             "Color preview must reflect edited RGBA without rewriting channels.");
+        Check((ToolTip.GetTip(preview) as string)?.Contains("Spectrum") == true,
+            "Color preview must advertise the Spectrum/Palette/Sliders picker.");
         Box(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.A").Text = "NaN";
         Dispatcher.UIThread.RunJobs();
         Check(errorBadge.IsVisible, "Invalid nullable Color must block saving.");
@@ -135,6 +137,9 @@ static class InspectorValueEditorChecks
         Check(probe.Swatches[0].R == 0f, "Color list element edit did not reach the scene.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Add"));
         Check(probe.Swatches[1] == Color.White, "New color elements must start white.");
+        Check(!editor.GetVisualDescendants().OfType<Button>().Any(button =>
+            Equals(button.GetValue(AutomationProperties.NameProperty) as string, $"{nameof(InspectorValueProbe)}.Swatches.Clear")),
+            "List headers must not carry a Clear button; rows remove individually.");
         Box(editor, $"{nameof(InspectorValueProbe)}.Palette.Value[0].A").Text = "0.25";
         Box(editor, $"{nameof(InspectorValueProbe)}.Colors[0].B").Text = "0.5";
         Dispatcher.UIThread.RunJobs();

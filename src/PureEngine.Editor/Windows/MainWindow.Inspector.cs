@@ -64,6 +64,7 @@ public partial class MainWindow
         var root = new StackPanel { Spacing = 6 };
         root.Children.Add(preview);
         root.Children.Add(panel);
+        AttachColorPicker(preview, root, () => GetMemberValue(component, member), picked => SetMemberValue(component, member, picked), automationName);
         return root;
     }
 
@@ -367,6 +368,7 @@ public partial class MainWindow
         var root = new StackPanel { Spacing = 6 };
         root.Children.Add(preview);
         root.Children.Add(panel);
+        AttachColorPicker(preview, root, () => GetMemberValue(component, member), picked => SetMemberValue(component, member, picked), automationName);
         return root;
     }
 
@@ -608,8 +610,8 @@ public partial class MainWindow
         var root = new StackPanel { Spacing = 6 };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderButton("Add", $"{automationName}.Add");
-        var clear = BuildHeaderButton("Clear", $"{automationName}.Clear");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        ToolTip.SetTip(setNull, "Set the list itself to null. Removing rows keeps an empty list.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var elements = new StackPanel { Spacing = 4 };
@@ -618,7 +620,7 @@ public partial class MainWindow
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
         left.Children.Add(count);
-        var header = BuildSplitHeader(left, add, clear, setNull);
+        var header = BuildSplitHeader(left, add, setNull);
         var nullHeader = BuildSplitHeader(nullStatus, create);
         root.Children.Add(header);
         root.Children.Add(nullHeader);
@@ -652,12 +654,6 @@ public partial class MainWindow
         {
             if (IsPlaying) return;
             AddSequenceElement(component, member, elementType);
-            refresh();
-        };
-        clear.Click += (_, _) =>
-        {
-            if (IsPlaying) return;
-            ClearSequence(component, member);
             refresh();
         };
         setNull.Click += (_, _) =>
@@ -743,8 +739,8 @@ public partial class MainWindow
         var root = new StackPanel { Spacing = 6 };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderButton("Add", $"{automationName}.Add");
-        var clear = BuildHeaderButton("Clear", $"{automationName}.Clear");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        ToolTip.SetTip(setNull, "Set the dictionary itself to null. Removing rows keeps an empty dictionary.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var rows = new StackPanel { Spacing = 4 };
@@ -753,7 +749,7 @@ public partial class MainWindow
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
         left.Children.Add(count);
-        var header = BuildSplitHeader(left, add, clear, setNull);
+        var header = BuildSplitHeader(left, add, setNull);
         var nullHeader = BuildSplitHeader(nullStatus, create);
         root.Children.Add(header);
         root.Children.Add(nullHeader);
@@ -789,14 +785,6 @@ public partial class MainWindow
             if (GetMemberValue(component, member) is not IDictionary dictionary) return;
             var key = UniqueDictionaryKey(dictionary);
             dictionary.Add(key, DefaultElementValue(valueType));
-            MarkEdited(component);
-            refresh();
-        };
-        clear.Click += (_, _) =>
-        {
-            if (IsPlaying) return;
-            if (GetMemberValue(component, member) is IDictionary dictionary)
-                dictionary.Clear();
             MarkEdited(component);
             refresh();
         };
@@ -1277,20 +1265,6 @@ public partial class MainWindow
         else if (value is IList list)
         {
             list.Add(defaultValue);
-            MarkEdited(component);
-        }
-    }
-
-    private void ClearSequence(object component, MemberInfo member)
-    {
-        var memberType = GetMemberType(member);
-        var value = GetMemberValue(component, member);
-        if (value is null) return;
-        if (memberType.IsArray)
-            SetMemberValue(component, member, Array.CreateInstance(memberType.GetElementType()!, 0));
-        else if (value is IList list)
-        {
-            list.Clear();
             MarkEdited(component);
         }
     }

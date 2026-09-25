@@ -25,7 +25,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - 同じメニューの「UI → Image」はTransform・UiElement・Image、「UI → Button」はさらにButton、「UI → Text」はTransform・UiElement・Textを付けて作成する。親への追加と選択はAdd Emptyと同じで、名前は連番で重複を避ける。Spriteは作成後にInspectorで指定する。Play中は作成できない。
 - Inspectorの「Name」で名前を編集する。ツリー表示へ即時反映し、未保存になる。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。余白を右クリックすると選択が解除され、削除は無効になる。削除後は兄弟内の次の対象へ選択を移す。
-- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Color`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。`Color` はR・G・B・Aの数値とプレビューで編集する。
+- Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Color`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。`Color` はR・G・B・Aの数値とプレビューで編集し、プレビューを選ぶとSpectrum／Palette／Sliders（hex・alpha付き）のピッカーが開く。
 - `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える（`Button`・`Text` も同じ）。`Sprite`がNoneのときは描かない。`Text`は内容が空のときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。Project Explorerの画像ファイルを`Sprite`欄へドラッグ＆ドロップしても同じ割り当てになる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
 - Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・文字・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
@@ -79,11 +79,11 @@ private void Start()
 ```
 
 - 参照できるのは同じSceneのSceneObjectと、Projectに登録されたComponent型（`Transform`・`UiElement`・`Image`・`Button`・自作型）。未登録の対応する自作クラスは埋め込み値になる。登録Component型の欄に `new Button()`／`new Transform()` を直接入れても埋め込み値にはならず、別Scene・未アタッチの参照先の保存は拒否する。自作のpublic具象クラスは自動登録されるため、従来埋め込みに使った型も登録対象なら参照欄になる。
-- Inspectorの参照欄は対象名・ID・None／Missing・選択／解除を表示する。SceneObject／登録Componentの欄にはStuffsの行または型が一致するPrefabファイル、DataAsset型の欄には型が一致するDataAssetファイルをドラッグ＆ドロップできる（Componentアタッチとは別形式）。Prefabを落とした場合は生成元のRootまたは一致するComponentへの参照だけを割り当て、Hierarchyには生成しない。Clearで解除できる。対象がない、または候補が複数の場合は選ばない。Play中は編集できない。変更したときだけ未保存になる。
+- Inspectorの参照欄は1行で、名前だけの選択肢と右端の×（Clear）を表示する。ID・フルパスはツールチップに移し、2行目はMissing・旧インライン値の注意だけに使う。SceneObject／登録Componentの欄にはStuffsの行または型が一致するPrefabファイル、DataAsset型の欄には型が一致するDataAssetファイルをドラッグ＆ドロップできる（Componentアタッチとは別形式）。Prefabを落とした場合は生成元のRootまたは一致するComponentへの参照だけを割り当て、Hierarchyには生成しない。×で解除できる。対象がない、または候補が複数の場合は選ばない。Play中は編集できない。変更したときだけ未保存になる。
 - 参照を設定したいオブジェクトを選択し、参照先のStuffs行をInspectorの参照欄へドラッグする。行を押した時点では選択を切り替えず、ドラッグ中もInspectorを維持する。ドラッグせずに離すと、その行を選択する。
-- 対象を削除・取り外すとC#はnullになり、IDはMissingとして保持される。Missingのまま保存・開き直しができ、同じIDが戻れば再接続する。別の対象を選び直すと実物の値を優先する。Missingを消すときは欄のClearを使う。単なるnull代入ではMissingは消えない。
+- 対象を削除・取り外すとC#はnullになり、IDはMissingとして保持される。Missingのまま保存・開き直しができ、同じIDが戻れば再接続する。別の対象を選び直すと実物の値を優先する。Missingを消すときは欄の×（Clear）を使う。単なるnull代入ではMissingは消えない。
 - 旧シーン（v1／v2）はSceneObject IDを保持し、Component IDを新規発行して未保存化する。登録Component型の旧インライン値は保持して診断し、欄の再割り当て／Clearまで上書き保存・Play用Cloneを拒否する。例えば旧Button値は実際にアタッチしたButtonを選び直す。復元に失敗したときは元Scene・元ファイルを置き換えない。
-- 参照を含む配列・List・stringキーDictionaryは、埋め込みクラスの中でも選択・解除・行の追加／削除ができる。Inspectorで行削除や辞書キー変更を行うとMissingのIDも移動する。Missingを含むコレクションを通常のC#から構造変更する場合は `Scene.References` の明示操作で保持パスも更新する（null同士の移動は通常のC#参照から判別できない）。
+- 参照を含む配列・List・stringキーDictionaryは、埋め込みクラスの中でも選択・解除・行の追加／削除ができる。見出しはAddとSet Nullだけ（一括Clearはなし、行の×で消す）。Inspectorで行削除や辞書キー変更を行うとMissingのIDも移動する。Missingを含むコレクションを通常のC#から構造変更する場合は `Scene.References` の明示操作で保持パスも更新する（null同士の移動は通常のC#参照から判別できない）。
 
 ## Project
 

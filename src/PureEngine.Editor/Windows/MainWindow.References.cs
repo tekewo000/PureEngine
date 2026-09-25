@@ -12,7 +12,7 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    internal sealed record ReferenceOption(object? Value, string Display)
+    internal sealed record ReferenceOption(object? Value, string Display, string Detail)
     {
         public override string ToString() => Display;
     }
@@ -32,22 +32,25 @@ public partial class MainWindow
     private bool ShouldShowReferenceEditor(Type declaredType) =>
         SceneReferenceTypes.IsSingleReference(declaredType, _components.Registry);
 
-    private List<(SceneObject? Owner, object? Component, Guid Id, string Display)> ReferenceCandidates(Type declaredType)
+    private List<(SceneObject? Owner, object? Component, Guid Id, string Display, string Detail)> ReferenceCandidates(Type declaredType)
     {
-        List<(SceneObject? Owner, object? Component, Guid Id, string Display)> found = [];
+        List<(SceneObject? Owner, object? Component, Guid Id, string Display, string Detail)> found = [];
         if (DataAssetStore.IsAssetType(declaredType))
         {
             RefreshReferenceAssets();
             var assets = _editScene.Current.DataAssets;
             foreach (var id in assets.Ids)
                 if (assets.TryGet<object>(id, out var asset) && declaredType.IsInstanceOfType(asset))
-                    found.Add((null, asset, id, assets.DisplayName(id)));
+                {
+                    var display = assets.DisplayName(id);
+                    found.Add((null, asset, id, display, $"{display} ({id:D})"));
+                }
             return found;
         }
         if (declaredType == typeof(SceneObject))
         {
             foreach (var item in _editScene.Current.Objects)
-                found.Add((item, null, item.Id, $"{item.Name} ({item.Id:D})"));
+                found.Add((item, null, item.Id, item.Name, $"{item.Name} ({item.Id:D})"));
             return found;
         }
         foreach (var item in _editScene.Current.Objects)
@@ -58,11 +61,15 @@ public partial class MainWindow
                     continue;
                 if (!item.TryGetComponentId(component, out var id))
                     continue;
-                found.Add((item, component, id, $"{item.Name}/{component.GetType().Name} ({id:D})"));
+                var display = $"{item.Name}/{component.GetType().Name}";
+                found.Add((item, component, id, display, $"{display} ({id:D})"));
             }
         }
         return found;
     }
+
+    /// <summary>Shortens an ID for single-line option display. The full ID stays in the tooltip.</summary>
+    private static string ShortId(Guid id) => id.ToString("D")[..8];
 
     private bool TryResolveDraggedReference(Guid draggedId, Type declaredType, out object? target, out string? error)
     {
@@ -388,27 +395,38 @@ public partial class MainWindow
         QueuePendingUserCodeReload();
     }
 
+    /// <summary>
+    /// Single-line reference field: name-only ComboBox with an inline clear button.
+    /// Full names and IDs live in the tooltip; the second line shows only Missing or legacy states.
+    /// Collection rows pass <paramref name="showClear"/> as false since the row remove button owns removal.
+    /// </summary>
     private StackPanel BuildSingleReferenceEditor(
         Func<object?> getter,
         Action<object?> setter,
         Type declaredType,
         Guid ownerId,
         string storePath,
-        string automationName)
+        string automationName,
+        bool showClear = true)
     {
         var root = new StackPanel { Spacing = 4 };
+        var row = new Grid { ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
         var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         combo.Classes.Add("inspectorCombo");
         combo.SetValue(AutomationProperties.NameProperty, automationName);
+        Grid.SetColumn(combo, 0);
+        row.Children.Add(combo);
+        var clear = BuildRemoveButton($"{automationName}.Clear");
+        ToolTip.SetTip(clear, "Clear");
+        Grid.SetColumn(clear, 1);
+        if (showClear)
+            row.Children.Add(clear);
         var info = new TextBlock { Classes = { "memberType" }, TextWrapping = TextWrapping.Wrap };
         info.SetValue(AutomationProperties.NameProperty, $"{automationName}.Info");
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        var clear = new Avalonia.Controls.Button { Content = "Clear", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Clear");
-        buttons.Children.Add(clear);
-        root.Children.Add(combo);
+        root.Children.Add(row);
         root.Children.Add(info);
-        root.Children.Add(buttons);
         var refreshing = false;
         void assign(object? value)
         {
@@ -423,46 +441,51 @@ public partial class MainWindow
         {
             var current = getter();
             var candidates = ReferenceCandidates(declaredType);
-            List<ReferenceOption> options = [new ReferenceOption(null, "None")];
+            List<ReferenceOption> options = [new ReferenceOption(null, "None", "None")];
             foreach (var candidate in candidates)
             {
                 var value = declaredType == typeof(SceneObject) ? candidate.Owner : candidate.Component;
-                options.Add(new ReferenceOption(value, candidate.Display));
+                options.Add(new ReferenceOption(value, candidate.Display, candidate.Detail));
             }
             var selected = options[0];
+            string? note = null;
             if (current is not null)
             {
                 var match = options.FirstOrDefault(option => ReferenceEquals(option.Value, current));
                 if (match is not null)
                 {
                     selected = match;
-                    info.Text = selected.Display;
+                }
+                else if (PrefabReferenceStore.TryGetIdentity(current, out var prefab))
+                {
+                    var display = $"Prefab: {BuildPrefabCatalog().DisplayName(prefab!.PrefabId)}";
+                    selected = new ReferenceOption(current, display, $"{display} ({prefab.TargetId:D})");
+                    options.Add(selected);
+                }
+                else if (DataAssetStore.IsAssetType(declaredType) && _editScene.Current.DataAssets.TryGetId(current, out var assetId))
+                {
+                    selected = new ReferenceOption(current, $"Missing: {ShortId(assetId)}", $"Missing: {assetId:D}");
+                    options.Add(selected);
+                    note = $"Missing {assetId:D}. ID is kept.";
                 }
                 else
                 {
-                    selected = PrefabReferenceStore.TryGetIdentity(current, out var prefab)
-                        ? new ReferenceOption(current, $"Prefab: {BuildPrefabCatalog().DisplayName(prefab!.PrefabId)} ({prefab.TargetId:D})")
-                        : DataAssetStore.IsAssetType(declaredType) && _editScene.Current.DataAssets.TryGetId(current, out var assetId)
-                        ? new ReferenceOption(current, $"Missing: {assetId:D}")
-                        : new ReferenceOption(current, $"Detached: {current.GetType().Name}");
+                    selected = new ReferenceOption(current, $"Detached: {current.GetType().Name}", $"Detached: {current.GetType().FullName}");
                     options.Add(selected);
-                    info.Text = selected.Display;
                 }
             }
             else if (_editScene.Current.References.TryGetMissing(ownerId, storePath, out var missing))
             {
-                selected = new ReferenceOption(null, $"Missing: {missing:D}");
+                selected = new ReferenceOption(null, $"Missing: {ShortId(missing)}", $"Missing: {missing:D}");
                 options.Add(selected);
-                info.Text = $"Missing {missing:D}. ID is kept.";
+                note = $"Missing {missing:D}. ID is kept.";
             }
             else if (_editScene.Current.References.TryGetLegacy(ownerId, storePath, out _))
             {
-                info.Text = "Old inline value is kept. Reassign or Clear to save.";
+                note = "Old inline value is kept. Reassign or clear to save.";
             }
-            else
-            {
-                info.Text = "None.";
-            }
+            info.Text = note ?? "";
+            info.IsVisible = note is not null;
             refreshing = true;
             try
             {
@@ -472,7 +495,7 @@ public partial class MainWindow
             finally { refreshing = false; }
             var source = DataAssetStore.IsAssetType(declaredType)
                 ? "a project asset file" : "a Stuffs row or matching prefab";
-            ToolTip.SetTip(combo, $"{storePath} : {FriendlyTypeName(declaredType)} — Select, Clear, or drop {source}");
+            ToolTip.SetTip(combo, $"{storePath} : {FriendlyTypeName(declaredType)} — {selected.Detail}. Select, clear, or drop {source}");
         }
         combo.SelectionChanged += (_, _) =>
         {
@@ -543,7 +566,7 @@ public partial class MainWindow
         return BuildSingleReferenceEditor(
             () => SequenceElement(component, member, index),
             value => SetElementReference(ownerId.Value, storePath, v => SetSequenceElement(component, member, index, v), value, RefreshComponents),
-            elementType, ownerId.Value, storePath, automationName);
+            elementType, ownerId.Value, storePath, automationName, showClear: false);
     }
 
     private Control BuildDictionaryReferenceEditor(object component, MemberInfo member, string key, Type valueType, string automationName)
@@ -572,7 +595,7 @@ public partial class MainWindow
                 RefreshComponents();
                 QueuePendingUserCodeReload();
             },
-            valueType, ownerId.Value, storePath, automationName);
+            valueType, ownerId.Value, storePath, automationName, showClear: false);
     }
 
     private StackPanel BuildNestedCollectionEditor(object owner, MemberInfo member, Guid ownerId, string path, string automationName)
@@ -622,11 +645,6 @@ public partial class MainWindow
                 }
                 else ((System.Collections.IList)value).Add(DefaultElementValue(elementType));
             });
-            action("Clear", "Clear", () =>
-            {
-                assign(type.IsArray ? Array.CreateInstance(elementType, 0) : Activator.CreateInstance(type));
-                _editScene.Current.References.RemovePathsForMember(ownerId, path);
-            });
             action("Set Null", "Null", () =>
             {
                 assign(null);
@@ -673,7 +691,7 @@ public partial class MainWindow
                     root.Children.Add(keyBox);
                 }
                 root.Children.Add(SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
-                    ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name)
+                    ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name, showClear: false)
                     : BuildObjectBox(get, set, elementType, name, ownerId, slot));
                 var remove = BuildRemoveButton($"{automationName}.Remove[{index}]");
                 remove.Click += (_, _) =>
