@@ -555,12 +555,14 @@
               </Border>
             </TabItem>
             <TabItem Classes="paneTab" Header="Game" AutomationProperties.Name="Game">
-              <Grid>
-                <Grid x:Name="GameViewport" />
-                <TextBlock x:Name="GamePlaceholder" Classes="hint" Text="Press Play to show the game."
-                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
-                           AutomationProperties.Name="Game placeholder" />
-              </Grid>
+              <Border Classes="viewportFrame">
+                <Grid>
+                  <Grid x:Name="GameViewport" />
+                  <TextBlock x:Name="GamePlaceholder" Classes="hint" Text="Press Play to show the game."
+                             HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                             AutomationProperties.Name="Game placeholder" />
+                </Grid>
+              </Border>
             </TabItem>
             <TabItem x:Name="DataAssetTableTab" Classes="paneTab" Header="Data Assets" AutomationProperties.Name="Data Assets">
               <Grid RowDefinitions="Auto,Auto,*">
@@ -597,7 +599,9 @@
                   <Button Grid.Column="2" Content="Close" Click="OnClosePrefabEditor" VerticalAlignment="Center"
                           AutomationProperties.Name="Close Prefab Editor" />
                 </Grid>
-                <Grid x:Name="PrefabViewHost" Grid.Row="1" />
+                <Border Classes="viewportFrame" Grid.Row="1">
+                  <Grid x:Name="PrefabViewHost" />
+                </Border>
               </Grid>
             </TabItem>
           </TabControl>
