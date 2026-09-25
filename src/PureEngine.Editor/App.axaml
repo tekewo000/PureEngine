@@ -103,6 +103,14 @@
     <Style Selector="TreeViewItem:disabled /template/ ContentPresenter#PART_HeaderPresenter">
       <Setter Property="Foreground" Value="{StaticResource EditorTextTertiaryBrush}" />
     </Style>
+    <!-- Tree expanders (Stuff, Project) use the shared Fluent chevrons instead of the theme glyphs.
+         Property conditions keep StyleTrigger priority so they win over the template glyphs. -->
+    <Style Selector="ToggleButton#PART_ExpandCollapseChevron[IsChecked=False] /template/ Path#ChevronPath">
+      <Setter Property="Data" Value="{StaticResource Icon.ChevronRight}" />
+    </Style>
+    <Style Selector="ToggleButton#PART_ExpandCollapseChevron[IsChecked=True] /template/ Path#ChevronPath">
+      <Setter Property="Data" Value="{StaticResource Icon.ChevronDown}" />
+    </Style>
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
       <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
     </Style>

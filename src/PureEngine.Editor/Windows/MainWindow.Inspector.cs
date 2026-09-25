@@ -440,6 +440,26 @@ public partial class MainWindow
         return button;
     }
 
+    /// <summary>Header action button that shows a shared icon instead of a text glyph.</summary>
+    private static Avalonia.Controls.Button BuildHeaderIconButton(string resourceKey, string automationName)
+    {
+        var button = new Avalonia.Controls.Button
+        {
+            Padding = new Avalonia.Thickness(8, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Content = new PathIcon
+            {
+                Data = (StreamGeometry?)Application.Current?.FindResource(resourceKey),
+                Width = 12,
+                Height = 12,
+            },
+        };
+        button.SetValue(AutomationProperties.NameProperty, automationName);
+        return button;
+    }
+
     /// <summary>Fixed-width remove button so collection rows align vertically. Content stays centered.</summary>
     private static Avalonia.Controls.Button BuildRemoveButton(string automationName)
     {
@@ -533,10 +553,11 @@ public partial class MainWindow
         var elementType = memberType.IsArray ? memberType.GetElementType()! : memberType.GetGenericArguments()[0];
         var root = new StackPanel { Spacing = 6 };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
-        var add = BuildHeaderButton("Add", $"{automationName}.Add");
+        var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
+        ToolTip.SetTip(add, "Add a row.");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the list itself to null. Removing rows keeps an empty list.");
-        var clear = BuildHeaderButton("\U0001F5D1", $"{automationName}.Clear");
+        var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all rows. The empty list stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
@@ -685,10 +706,11 @@ public partial class MainWindow
         var valueType = memberType.GetGenericArguments()[1];
         var root = new StackPanel { Spacing = 6 };
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
-        var add = BuildHeaderButton("Add", $"{automationName}.Add");
+        var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
+        ToolTip.SetTip(add, "Add an entry.");
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the dictionary itself to null. Removing rows keeps an empty dictionary.");
-        var clear = BuildHeaderButton("\U0001F5D1", $"{automationName}.Clear");
+        var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all entries. The empty dictionary stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");

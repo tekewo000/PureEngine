@@ -177,9 +177,18 @@ static class InspectorValueEditorChecks
         swatchR.Text = "0";
         Dispatcher.UIThread.RunJobs();
         Check(probe.Swatches[0].R == 0f, "Color list element edit did not reach the scene.");
-        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Add"));
+        var swatchesAdd = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Add");
+        Check(swatchesAdd.Content is PathIcon swatchesAddIcon && ReferenceEquals(swatchesAddIcon.Data, Application.Current?.FindResource("Icon.AddSquare")),
+            "Collection Add must use the shared AddSquare icon.");
+        var swatchesToggle = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Collapse");
+        Check(swatchesToggle.Content is PathIcon swatchesToggleIcon && ReferenceEquals(swatchesToggleIcon.Data, Application.Current?.FindResource("Icon.TriangleDown")),
+            "Expanded collections must show the TriangleDown toggle.");
+        Click(swatchesAdd);
         Check(probe.Swatches[1] == Color.White, "New color elements must start white.");
-        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Clear"));
+        var swatchesClear = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Clear");
+        Check(swatchesClear.Content is PathIcon swatchesClearIcon && ReferenceEquals(swatchesClearIcon.Data, Application.Current?.FindResource("Icon.Delete")),
+            "Bulk Clear must use the shared Delete icon.");
+        Click(swatchesClear);
         Check(probe.Swatches.Count == 0, "List Clear must remove all rows and keep the list.");
         Box(editor, $"{nameof(InspectorValueProbe)}.Palette.Value[0].A").Text = "0.25";
         Box(editor, $"{nameof(InspectorValueProbe)}.Colors[0].B").Text = "0.5";
@@ -240,7 +249,10 @@ static class InspectorValueEditorChecks
         Click(countsToggle);
         Dispatcher.UIThread.RunJobs();
         Check(valueBox.IsEffectivelyVisible, "Expanded dictionary must show entries again.");
-        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Counts.Clear"));
+        var countsClear = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Counts.Clear");
+        Check(countsClear.Content is PathIcon countsClearIcon && ReferenceEquals(countsClearIcon.Data, Application.Current?.FindResource("Icon.Delete")),
+            "Bulk Clear must use the shared Delete icon.");
+        Click(countsClear);
         Check(probe.Counts.Count == 0, "Dictionary Clear must remove all entries and keep the dictionary.");
 
         // Transform member is a reference slot: None -> select scene Transform -> Clear.
