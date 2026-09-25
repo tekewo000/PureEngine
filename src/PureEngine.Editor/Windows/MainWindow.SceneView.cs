@@ -322,7 +322,6 @@ public partial class MainWindow
             return;
         _scenePan = pan;
         _sceneZoom = zoom;
-        UpdateStatusBarSegments();
         e.Handled = true;
     }
 
@@ -344,7 +343,6 @@ public partial class MainWindow
             return;
         _scenePan = pan;
         _sceneZoom = zoom;
-        UpdateStatusBarSegments();
         e.Handled = true;
     }
 
@@ -448,7 +446,6 @@ public partial class MainWindow
             return false;
         _scenePan = pan;
         _sceneZoom = zoom;
-        UpdateStatusBarSegments();
         return true;
     }
 
@@ -472,7 +469,6 @@ public partial class MainWindow
             return false;
         _scenePan = pan;
         _sceneZoom = zoom;
-        UpdateStatusBarSegments();
         return true;
     }
 }

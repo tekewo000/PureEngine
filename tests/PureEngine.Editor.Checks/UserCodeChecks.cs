@@ -110,6 +110,9 @@ static class UserCodeChecks
         var editor = new MainWindow(session);
         var owner = Field<ProjectComponents>(editor, "_components");
         Check(ReferenceEquals(owner, session.Components), "Editor must adopt the session owner.");
+        Check(editor.FindControl<TextBlock>("CompileStatus")!.Text!.StartsWith("Compile: ", StringComparison.Ordinal)
+            && editor.FindControl<TextBlock>("CompileStatus")!.Text != "Compile: —",
+            "Opening a project must show the project-open compilation time.");
         editor.Show();
         Call(editor, "MarkSceneChanged");
         Dispatcher.UIThread.RunJobs();
@@ -121,6 +124,9 @@ static class UserCodeChecks
             Check(editor.FindControl<ListBox>("ProjectFiles")!.Items.Count == 1, "C# must appear in its own folder.");
             File.WriteAllText(file, Source(2) + "\npublic record Extra { }\npublic class Second { }");
             PumpUntil(() => Version(editor) == 2, "Saving C# must reload automatically.");
+            Check(editor.FindControl<TextBlock>("CompileStatus")!.Text!.StartsWith("Compile: ", StringComparison.Ordinal)
+                && editor.FindControl<TextBlock>("CompileStatus")!.Text != "Compile: —",
+                "Reloading C# must update the compilation time.");
             Check(owner.GetTypesForFile(file).Count == 3, "Multiple classes and records must map to the source file.");
             var current = EditScene(editor).Objects.Single();
             Check(current.Id == id && current.Name == "Unsaved player"

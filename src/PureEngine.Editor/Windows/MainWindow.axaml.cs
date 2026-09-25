@@ -70,6 +70,8 @@ public partial class MainWindow : Window
             ProjectTab.IsSelected = true;
             StartUserCodeWatching(userCodeCache);
             userCodeCache = null;
+            _lastCompileElapsed = session.InitialCompileElapsed;
+            UpdateCompileStatus();
         }
         catch (Exception error)
         {
@@ -126,7 +128,7 @@ public partial class MainWindow : Window
         InitSceneView();
         InitGameInput();
         ViewportTabs.SelectionChanged += OnEditorViewportChanged;
-        UpdateStatusBarSegments();
+        UpdateCompileStatus();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
@@ -1049,7 +1051,6 @@ public partial class MainWindow : Window
     private void RefreshObjectInspector()
     {
         var item = GetSelectedSceneObject();
-        UpdateStatusBarSegments();
         if (_assetEdit is not null && item is null)
         {
             DeleteObjectMenuItem.IsEnabled = false;
