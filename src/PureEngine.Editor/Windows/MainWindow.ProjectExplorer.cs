@@ -60,7 +60,7 @@ public sealed record ProjectExplorerEntry(
     public bool IsPrefab => Kind == ProjectExplorerKind.Prefab;
 
     public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
-        && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
+        && ExternalEditor.IsCSharpFile(FullPath);
 
     public bool IsPlainFile => !IsFolder && !IsScene && !IsPrefab && !IsCSharpFile;
 
@@ -295,7 +295,8 @@ public partial class MainWindow
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var hasProject = _project is not null;
         FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset }
-            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
+            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying
+            || entry is { IsCSharpFile: true };
         FilesPlaceMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
@@ -332,6 +333,11 @@ public partial class MainWindow
             await OpenPrefabEditorAsync(entry.FullPath);
             return;
         }
+        if (entry.IsCSharpFile && entry.FullPath is not null)
+        {
+            OpenCSharpInZed(entry.FullPath);
+            return;
+        }
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
@@ -356,6 +362,19 @@ public partial class MainWindow
             try { await OpenScenePathAsync(entry.FullPath); }
             finally { RefreshProjectExplorer(); }
         });
+    }
+
+    /// <summary>Opens a C# file in Zed without blocking scene switching or Play.</summary>
+    private void OpenCSharpInZed(string fullPath)
+    {
+        if (ExternalEditor.TryOpenCSharpInZed(fullPath, out var error))
+        {
+            SetFileStatus($"Opened in Zed: {Path.GetFileName(fullPath)}");
+            return;
+        }
+        var message = error ?? "Could not open in Zed.";
+        SetFileStatus(message, true);
+        Log.Engine.Warning(message);
     }
 
     /// <summary>Destination folder for creation. Uses the right-pane folder row when selected, otherwise the Tree selection.</summary>
