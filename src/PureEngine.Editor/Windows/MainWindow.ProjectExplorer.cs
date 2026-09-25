@@ -367,10 +367,10 @@ public partial class MainWindow
         });
     }
 
-    /// <summary>Opens a C# file in Zed without blocking scene switching or Play.</summary>
+    /// <summary>Opens a C# file in Zed from the project root without blocking scene switching or Play.</summary>
     private void OpenCSharpInZed(string fullPath)
     {
-        if (ExternalEditor.TryOpenCSharpInZed(fullPath, out var error))
+        if (ExternalEditor.TryOpenCSharpInZed(fullPath, _project?.RootDirectory, out var error))
         {
             SetFileStatus($"Opened in Zed: {Path.GetFileName(fullPath)}");
             return;
