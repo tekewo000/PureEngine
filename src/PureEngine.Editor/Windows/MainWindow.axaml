@@ -561,6 +561,29 @@
                            AutomationProperties.Name="Game placeholder" />
               </Grid>
             </TabItem>
+            <TabItem x:Name="DataAssetTableTab" Classes="paneTab" Header="Data Assets" AutomationProperties.Name="Data Assets">
+              <Grid RowDefinitions="Auto,Auto,*">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8">
+                  <TextBlock Text="Type" Classes="caption" VerticalAlignment="Center" />
+                  <ComboBox x:Name="DataAssetTableTypes" MinWidth="200" VerticalAlignment="Center"
+                            AutomationProperties.Name="Data asset table type" SelectionChanged="OnDataAssetTableTypeChanged" />
+                  <Button x:Name="SaveDataAssetTableButton" Content="Save All" FontSize="11" Padding="8,2"
+                          VerticalAlignment="Center" AutomationProperties.Name="Save data asset table"
+                          ToolTip.Tip="Save all rows (Ctrl+S)" Click="OnSaveDataAssetTable" IsEnabled="False" />
+                  <Button x:Name="AddDataAssetTableRowButton" Content="Add Row" FontSize="11" Padding="8,2"
+                          VerticalAlignment="Center" AutomationProperties.Name="Add data asset table row"
+                          Click="OnAddDataAssetTableRow" IsEnabled="False" />
+                  <TextBlock x:Name="DataAssetTableError" Classes="errorBadge" IsVisible="False"
+                             VerticalAlignment="Center" />
+                  <TextBlock x:Name="DataAssetTableStatus" Classes="hint" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" Text="Select a type." />
+                </StackPanel>
+                <Separator Grid.Row="1" Classes="divider" Margin="12,0" />
+                <ScrollViewer Grid.Row="2" Margin="8" HorizontalScrollBarVisibility="Auto">
+                  <StackPanel x:Name="DataAssetTableRows" Spacing="8" Grid.IsSharedSizeScope="True" />
+                </ScrollViewer>
+              </Grid>
+            </TabItem>
             <TabItem x:Name="PrefabEditorTab" Classes="paneTab" Header="Prefab Editor" AutomationProperties.Name="Prefab Editor" IsVisible="False">
               <Grid RowDefinitions="Auto,*">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,8">

@@ -360,6 +360,7 @@ public partial class MainWindow
         AddUiMenuItem.IsEnabled = enabled;
         DeleteObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is { } item && !IsPrefabRoot(item);
         SavePrefabMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is not null;
+        UpdateDataAssetTableChrome();
     }
 
     private bool RejectWhenPlaying(string action)

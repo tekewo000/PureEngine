@@ -12,6 +12,12 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
+    /// <summary>Viewport tab order: Scene View, Game, Data Assets table, Prefab Editor. Prefab indices follow the table.</summary>
+    internal const int SceneViewportIndex = 0;
+    internal const int GameViewportIndex = 1;
+    internal const int DataAssetTableViewportIndex = 2;
+    internal const int PrefabViewportIndex = 3;
+
     private EditSceneStore? _prefabScene;
     private Guid _prefabId;
     private bool _switchingViewport;
@@ -50,7 +56,7 @@ public partial class MainWindow
         if (_prefabScene?.Path is { } opened && SamePath(opened, path))
         {
             if (!await ConfirmCloseDataAsset()) return;
-            ActivateEditorViewport(2);
+            ActivateEditorViewport(PrefabViewportIndex);
             return;
         }
 
@@ -81,7 +87,7 @@ public partial class MainWindow
                 Expanded = [restored.RootObjects.Single().Id],
             };
             PrefabEditorTab.IsVisible = true;
-            ActivateEditorViewport(2);
+            ActivateEditorViewport(PrefabViewportIndex);
             UpdatePrefabEditorChrome();
             SetFileStatus($"Editing prefab: {Path.GetFileName(path)}");
         }
@@ -103,13 +109,15 @@ public partial class MainWindow
         var requested = ViewportTabs.SelectedIndex;
         if (requested == _activeViewportIndex) return;
         SetViewportSelection(_activeViewportIndex);
-        if (_fileBusy || (requested == 2 && (_prefabScene is null || IsPlaying))) return;
-        if (HasInputErrors && _assetEdit is null)
+        if (_fileBusy || (requested == PrefabViewportIndex && (_prefabScene is null || IsPlaying))
+            || (requested == DataAssetTableViewportIndex && IsPlaying)) return;
+        // The table is an additional view, not a document replacement: it never forces the single asset closed.
+        if (requested != DataAssetTableViewportIndex && HasInputErrors && _assetEdit is null)
         {
             SetFileStatus("Fix the Inspector input errors before switching editing documents.", true);
             return;
         }
-        if (_assetEdit is not null)
+        if (_assetEdit is not null && requested != DataAssetTableViewportIndex)
         {
             await RunFileOperation(async () =>
             {
@@ -130,7 +138,7 @@ public partial class MainWindow
     /// <summary>Switches the shared editing surface, hierarchy, and Inspector together without replacing either document.</summary>
     private void ActivateEditorViewport(int index)
     {
-        var prefab = index == 2 && _prefabScene is not null;
+        var prefab = index == PrefabViewportIndex && _prefabScene is not null;
         CancelSceneViewDrag();
         var contextChanged = prefab != IsPrefabEditing;
         if (contextChanged)

@@ -96,6 +96,7 @@ public partial class MainWindow
         }
         var selectedId = GetSelectedSceneObject()?.Id;
         DataAssetEditState? candidateAsset = null;
+        List<DataAssetTableRow>? candidateTable = null;
         Action<IServiceCollection>? assetConfigure = null;
         try
         {
@@ -103,6 +104,7 @@ public partial class MainWindow
             {
                 var registry = _components.CreateCandidateRegistry(compiled);
                 candidateAsset = PrepareDataAssetReload(registry);
+                candidateTable = PrepareDataAssetTableReload(registry);
                 var reloadedAssets = BuildProjectAssetStore(registry);
                 if (reloadedAssets is not null) assetConfigure = services => services.AddSingleton(reloadedAssets);
             }
@@ -128,6 +130,8 @@ public partial class MainWindow
             _assetPress = null;
             _pressedPrefab = null;
             _assetEdit = candidateAsset;
+            AdoptDataAssetTableReload(candidateTable);
+            RefreshDataAssetTableTypes(rescanRows: false);
             RefreshAssetOwned();
             RefreshHierarchy(selectedId);
             RefreshObjectInspector();

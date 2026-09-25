@@ -29,8 +29,17 @@ public partial class MainWindow
         return owner.TryGetComponentId(component, out var id) ? id : null;
     }
 
-    private bool ShouldShowReferenceEditor(Type declaredType) =>
-        SceneReferenceTypes.IsSingleReference(declaredType, _components.Registry);
+    /// <summary>Asset files own their data: a plain registered type inside asset-owned data edits as a nested
+    /// value, never as a scene reference. SceneObject and data asset references keep the reference editor.</summary>
+    private bool ShouldShowReferenceEditorFor(Type declaredType, object? owner)
+    {
+        if (!SceneReferenceTypes.IsSingleReference(declaredType, _components.Registry)) return false;
+        if (owner is not null && (_assetOwned.Contains(owner) || _tableOwned.Contains(owner))
+            && declaredType != typeof(SceneObject)
+            && !DataAssetStore.IsAssetType(declaredType)
+            && SceneReferenceTypes.IsComponentReference(declaredType, _components.Registry)) return false;
+        return true;
+    }
 
     private List<(SceneObject? Owner, object? Component, Guid Id, string Display, string Detail)> ReferenceCandidates(Type declaredType)
     {

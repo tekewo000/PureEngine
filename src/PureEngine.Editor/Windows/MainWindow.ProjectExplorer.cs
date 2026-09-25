@@ -499,6 +499,7 @@ public partial class MainWindow
             _explorerFolder = folder;
             _explorerSelectedFile = path;
             RefreshProjectExplorer();
+            RescanTableRows();
             SetFileStatus($"Created data asset: {folder}/{name}");
             await Task.CompletedTask;
         });
@@ -511,6 +512,7 @@ public partial class MainWindow
         RefreshProjectAssets();
         RefreshProjectExplorer();
         RefreshComponents();
+        if (await ConfirmTableRowsClose(closeOnConfirm: false)) RescanTableRows();
         SetFileStatus(_project is null ? "No project is open." : $"Refreshed: {_project.Document.Name}");
         await Task.CompletedTask;
     });
@@ -569,6 +571,7 @@ public partial class MainWindow
             else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
             if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
+            if (ContainsOpenTable(oldFull!) && !await ConfirmCloseTableRows()) return;
             if (ContainsOpenPrefab(oldFull!, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
@@ -583,6 +586,7 @@ public partial class MainWindow
                 _explorerSelectedFile = newFull;
             }
             RefreshProjectExplorer();
+            RescanTableRows();
             SetFileStatus($"Renamed to: {name}");
         });
 
@@ -606,6 +610,7 @@ public partial class MainWindow
             else return;
 
             if (ContainsOpenDataAsset(target) && !await ConfirmCloseDataAsset()) return;
+            if (ContainsOpenTable(target) && !await ConfirmCloseTableRows()) return;
             var startup = _project.StartupScenePath;
             var targetRelative = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))
@@ -643,6 +648,7 @@ public partial class MainWindow
                 _explorerSelectedFile = null;
             }
             RefreshProjectExplorer();
+            RescanTableRows();
             SetFileStatus($"Deleted: {display}");
         });
 

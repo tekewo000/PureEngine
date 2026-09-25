@@ -61,6 +61,14 @@ static class DataAssetChecks
             && copy.Tags is ["melee"] && copy.Stats is { Min: 8, Max: 12 },
             "Data asset values, nesting, and identity did not survive.");
         Check(serializer.Serialize(restored, restoredId) == yaml, "Save/load changed data asset output.");
+        registry.Register<WeaponStatsFixture>("user.weapon-stats");
+        Check(DataAssetDescriptor.TryCreate(typeof(WeaponFixture), registry, out _, out _),
+            "A registered nested data type must store as a nested value, not a scene reference.");
+        var nestedYaml = serializer.Serialize(sword, assetId);
+        Check(((WeaponFixture)serializer.Deserialize(nestedYaml).Instance).Stats is { Min: 8, Max: 12 },
+            "Nested values of registered types did not survive.");
+        registry.Register<SceneRefFixture>("user.scene-ref");
+        Reject(() => DropNullDescriptor(typeof(SceneRefFixture), registry), "SceneObject reference in a data asset accepted.");
 
         var (renamedInstance, renamedId) = serializer.Deserialize(yaml.Replace("Attack:", "Missing:"), out membersChanged);
         Check(membersChanged && ((WeaponFixture)renamedInstance).Attack == 0
@@ -281,6 +289,12 @@ public sealed class BadMenuFixture
 public sealed class RefFixture
 {
     [Inspector] public WeaponFixture? Target { get; set; }
+}
+
+[DataAsset]
+public sealed class SceneRefFixture
+{
+    [Inspector] public SceneObject? Target { get; set; }
 }
 
 [DataAsset]
