@@ -1,9 +1,11 @@
 using System.Reflection;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -14,6 +16,10 @@ public partial class MainWindow
     {
         public override string ToString() => Display;
     }
+
+    private sealed record ReferenceDropRegistration(Type DeclaredType, Action<object?> Assign);
+
+    private sealed record ImageDropRegistration(Action<Sprite> Assign);
 
     private Guid? GetOwnerComponentId(object component)
     {
@@ -77,37 +83,8 @@ public partial class MainWindow
                 break;
             }
         }
-        if (declaredType == typeof(SceneObject))
-        {
-            if (draggedObject is null)
-            {
-                error = "Target is not in the current scene.";
-                return false;
-            }
-            target = draggedObject;
-            return true;
-        }
         if (draggedObject is not null)
-        {
-            List<object> matches = [];
-            foreach (var component in draggedObject.Components)
-            {
-                if (declaredType.IsAssignableFrom(component.GetType()))
-                    matches.Add(component);
-            }
-            if (matches.Count == 1)
-            {
-                target = matches[0];
-                return true;
-            }
-            if (matches.Count == 0)
-            {
-                error = $"No {declaredType.Name} on the dragged object.";
-                return false;
-            }
-            error = $"Multiple {declaredType.Name} candidates on the dragged object.";
-            return false;
-        }
+            return TryResolveObjectReference(draggedObject, declaredType, out target, out error);
         foreach (var item in scene.Objects)
         {
             foreach (var component in item.Components)
@@ -125,6 +102,264 @@ public partial class MainWindow
         }
         error = "Target is not in the current scene.";
         return false;
+    }
+
+    private static bool TryResolveObjectReference(SceneObject root, Type declaredType, out object? target, out string? error)
+    {
+        target = null;
+        error = null;
+        if (declaredType == typeof(SceneObject))
+        {
+            target = root;
+            return true;
+        }
+        List<object> matches = [];
+        var pending = new Stack<SceneObject>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            foreach (var component in current.Components)
+            {
+                if (declaredType.IsAssignableFrom(component.GetType()))
+                    matches.Add(component);
+            }
+            foreach (var child in current.Children)
+                pending.Push(child);
+        }
+        if (matches.Count == 1)
+        {
+            target = matches[0];
+            return true;
+        }
+        error = matches.Count == 0
+            ? $"No {declaredType.Name} in the dragged object subtree."
+            : $"Multiple {declaredType.Name} candidates in the dragged object subtree.";
+        return false;
+    }
+
+    private static bool IsReferenceDrag(DragEventArgs e) =>
+        e.DataTransfer.Contains(SceneObjectIdFormat)
+        || e.DataTransfer.Contains(DataAssetIdFormat)
+        || e.DataTransfer.Contains(PrefabPathFormat);
+
+    private bool CanDropReference(DragEventArgs e, Type declaredType)
+    {
+        if (e.DataTransfer.Contains(DataAssetIdFormat))
+            return DroppedDataAsset(e, declaredType) is not null;
+        if (e.DataTransfer.Contains(SceneObjectIdFormat))
+        {
+            if (GetDraggedId(e) is not { } draggedId)
+                return false;
+            return TryResolveDraggedReference(draggedId, declaredType, out var target, out var error)
+                && (target is not null || error is null);
+        }
+        if (e.DataTransfer.TryGetValue(PrefabPathFormat) is { } path)
+            return TryLoadPrefabReference(path, declaredType, out var document, out var loadError)
+                && document is not null && loadError is null;
+        return false;
+    }
+
+    private static bool IsSourceWithin(Visual? source, Control boundary) =>
+        source is not null && source.GetSelfAndVisualAncestors().Contains(boundary);
+
+    private void AttachEditorDropHandlers(Grid row, Control editor)
+    {
+        if (editor.Tag is ReferenceDropRegistration or ImageDropRegistration)
+            row.SetCurrentValue(Panel.BackgroundProperty, Brushes.Transparent);
+        switch (editor.Tag)
+        {
+            case ReferenceDropRegistration reference:
+                AttachReferenceDropHandlers(row, reference.DeclaredType, reference.Assign, editor);
+                break;
+            case ImageDropRegistration image:
+                AttachImageDropHandlers(row, image.Assign, editor);
+                break;
+        }
+    }
+
+    private void AttachReferenceDropHandlers(
+        Control target,
+        Type declaredType,
+        Action<object?> assign,
+        Control? handledBoundary = null)
+    {
+        target.AddHandler(DragDrop.DragOverEvent, (_, e) =>
+        {
+            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (!IsReferenceDrag(e)) return;
+            e.Handled = true;
+            e.DragEffects = !IsPlaying && CanDropReference(e, declaredType)
+                ? DragDropEffects.Copy : DragDropEffects.None;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        target.AddHandler(DragDrop.DropEvent, (_, e) =>
+        {
+            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (!IsReferenceDrag(e)) return;
+            e.Handled = true;
+            e.DragEffects = DragDropEffects.None;
+            if (RejectWhenPlaying("Assign")) return;
+            if (e.DataTransfer.Contains(DataAssetIdFormat))
+            {
+                if (DroppedDataAsset(e, declaredType) is not { } asset)
+                {
+                    SetFileStatus("Drop a matching project data asset file.", true);
+                    return;
+                }
+                assign(asset);
+            }
+            else if (e.DataTransfer.Contains(SceneObjectIdFormat))
+            {
+                if (GetDraggedId(e) is not { } draggedId)
+                {
+                    SetFileStatus("The dragged Stuffs row has no valid ID.", true);
+                    return;
+                }
+                if (!TryResolveDraggedReference(draggedId, declaredType, out var value, out var error))
+                {
+                    SetFileStatus(error ?? "Cannot assign reference.", true);
+                    return;
+                }
+                assign(value);
+            }
+            else if (e.DataTransfer.TryGetValue(PrefabPathFormat) is { } path)
+            {
+                if (!TryAssignPrefabReference(path, declaredType, assign, out var error))
+                {
+                    SetFileStatus(error ?? "Cannot assign prefab reference.", true);
+                    return;
+                }
+            }
+            else
+            {
+                return;
+            }
+            e.DragEffects = DragDropEffects.Copy;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void AttachImageDropHandlers(
+        Control target,
+        Action<Sprite> assign,
+        Control? handledBoundary = null)
+    {
+        target.AddHandler(DragDrop.DragOverEvent, (_, e) =>
+        {
+            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (!e.DataTransfer.Contains(ImageIdFormat)) return;
+            e.Handled = true;
+            e.DragEffects = !IsPlaying && DroppedImageId(e) is not null
+                ? DragDropEffects.Copy : DragDropEffects.None;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        target.AddHandler(DragDrop.DropEvent, (_, e) =>
+        {
+            if (handledBoundary is not null && IsSourceWithin(e.Source as Visual, handledBoundary)) return;
+            if (!e.DataTransfer.Contains(ImageIdFormat)) return;
+            e.Handled = true;
+            e.DragEffects = DragDropEffects.None;
+            if (RejectWhenPlaying("Assign")) return;
+            if (DroppedImageId(e) is not { } id)
+            {
+                SetFileStatus("Drop a registered project image.", true);
+                return;
+            }
+            assign(new Sprite(id));
+            e.DragEffects = DragDropEffects.Copy;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private bool TryLoadPrefabReference(string path, Type declaredType, out PrefabDocument? document, out string? error)
+    {
+        document = null;
+        error = null;
+        if (_project is null)
+        {
+            error = "Open a project first.";
+            return false;
+        }
+        if (DataAssetStore.IsAssetType(declaredType))
+        {
+            error = "Drop a scene object or prefab, not a data asset field.";
+            return false;
+        }
+        try
+        {
+            _project.ValidatePrefabPath(path);
+            document = PrefabFile.Load(path);
+            if (declaredType == typeof(SceneObject))
+                return true;
+            if (!SceneReferenceTypes.IsComponentReference(declaredType, _components.Registry))
+            {
+                error = $"Prefab cannot be assigned to {declaredType.Name}.";
+                return false;
+            }
+            var count = document.Objects!
+                .SelectMany(item => item.Components ?? [])
+                .Count(data => declaredType.IsAssignableFrom(_components.Registry.GetType(data.TypeId!)));
+            if (count == 1)
+                return true;
+            error = count == 0
+                ? $"Prefab has no {declaredType.Name} component."
+                : $"Prefab has multiple {declaredType.Name} components.";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            document = null;
+            error = exception.GetBaseException().Message;
+            return false;
+        }
+    }
+
+    private bool TryAssignPrefabReference(string path, Type declaredType, Action<object?> assign, out string? error)
+    {
+        error = null;
+        if (!TryLoadPrefabReference(path, declaredType, out var document, out error) || document is null)
+            return false;
+        var parent = GetSelectedSceneObject();
+        SceneObject? placed = null;
+        try
+        {
+            placed = new PrefabSerializer(_components.Registry).Instantiate(
+                _editScene.Current, document, out _, parent, EditSession.Factory);
+            if (!TryResolveObjectReference(placed, declaredType, out var value, out error))
+            {
+                var failed = placed;
+                placed = null;
+                RemovePlacedPrefab(failed);
+                return false;
+            }
+            assign(value);
+        }
+        catch (Exception exception)
+        {
+            error = exception.GetBaseException().Message;
+            if (placed is not null)
+                RemovePlacedPrefab(placed);
+            return false;
+        }
+        MarkSceneChanged();
+        RefreshHierarchy(parent?.Id, expandId: parent?.Id);
+        RefreshObjectInspector();
+        SetFileStatus($"Assigned prefab: {Path.GetFileName(path)}");
+        return true;
+    }
+
+    private void RemovePlacedPrefab(SceneObject root)
+    {
+        var pending = new Stack<SceneObject>();
+        pending.Push(root);
+        List<object> components = [];
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            components.AddRange(current.Components);
+            foreach (var child in current.Children)
+                pending.Push(child);
+        }
+        _editScene.Current.Remove(root);
+        try { ComponentAssets.DisposeComponents(components); }
+        catch (Exception error) { SetFileStatus(error.ToString(), true); }
     }
 
     private void SetSingleReference(
@@ -249,7 +484,8 @@ public partial class MainWindow
                 combo.SelectedItem = selected;
             }
             finally { refreshing = false; }
-            var source = DataAssetStore.IsAssetType(declaredType) ? "a project asset file" : "a Stuffs row";
+            var source = DataAssetStore.IsAssetType(declaredType)
+                ? "a project asset file" : "a Stuffs row or matching prefab";
             ToolTip.SetTip(combo, $"{storePath} : {FriendlyTypeName(declaredType)} — Select, Clear, or drop {source}");
         }
         combo.SelectionChanged += (_, _) =>
@@ -268,59 +504,11 @@ public partial class MainWindow
                 return;
             assign(null);
         };
-        combo.AddHandler(DragDrop.DragOverEvent, (_, e) =>
-        {
-            if (!e.DataTransfer.Contains(DataAssetIdFormat)) return;
-            e.Handled = true;
-            e.DragEffects = !IsPlaying && DroppedDataAsset(e, declaredType) is not null
-                ? DragDropEffects.Copy : DragDropEffects.None;
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
-        combo.AddHandler(DragDrop.DropEvent, (_, e) =>
-        {
-            if (!e.DataTransfer.Contains(DataAssetIdFormat)) return;
-            e.Handled = true;
-            e.DragEffects = DragDropEffects.None;
-            if (IsPlaying || DroppedDataAsset(e, declaredType) is not { } asset) return;
-            assign(asset);
-            e.DragEffects = DragDropEffects.Copy;
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
-        combo.AddHandler(DragDrop.DragOverEvent, (sender, e) =>
-        {
-            if (!e.DataTransfer.Contains(SceneObjectIdFormat))
-                return;
-            if (IsPlaying || GetDraggedId(e) is not { } draggedId)
-            {
-                e.DragEffects = DragDropEffects.None;
-                e.Handled = true;
-                return;
-            }
-            if (!TryResolveDraggedReference(draggedId, declaredType, out _, out _))
-            {
-                e.DragEffects = DragDropEffects.None;
-                e.Handled = true;
-                return;
-            }
-            e.DragEffects = DragDropEffects.Copy;
-            e.Handled = true;
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
-        combo.AddHandler(DragDrop.DropEvent, (sender, e) =>
-        {
-            if (!e.DataTransfer.Contains(SceneObjectIdFormat))
-                return;
-            e.Handled = true;
-            if (RejectWhenPlaying("Assign"))
-                return;
-            if (GetDraggedId(e) is not { } draggedId)
-                return;
-            if (!TryResolveDraggedReference(draggedId, declaredType, out var target, out var error))
-            {
-                SetFileStatus(error ?? "Cannot assign reference.", true);
-                return;
-            }
-            assign(target);
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        root.Tag = new ReferenceDropRegistration(declaredType, assign);
+        AttachReferenceDropHandlers(root, declaredType, assign);
         refreshOptions();
         return root;
+
     }
 
     private Control BuildMemberReferenceEditor(object component, MemberInfo member, string automationName)

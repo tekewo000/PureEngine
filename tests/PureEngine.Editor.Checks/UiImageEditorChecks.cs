@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -153,7 +154,26 @@ internal static class UiImageEditorChecks
             Dispatcher.UIThread.RunJobs();
             Check(image.Sprite is not null && image.Sprite.ImageId == imported.Id,
                 "Sprite selection must set the formal image ID.");
+            combo.SelectedItem = combo.Items.Cast<object>().First(option => option.ToString() == "None");
+            Dispatcher.UIThread.RunJobs();
+            Check(image.Sprite is null, "Clear the Sprite before testing image D&D assignment.");
+            combo = SpriteCombo(editor);
+            var imageFormat = (DataFormat<string>)typeof(MainWindow).GetField("ImageIdFormat",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+            using (var dragData = new DataTransfer())
+            {
+                dragData.Add(DataTransferItem.Create(imageFormat, imported.Id.ToString("D")));
+                var dragOver = new DragEventArgs(DragDrop.DragOverEvent, dragData, combo, default, KeyModifiers.None);
+                combo.RaiseEvent(dragOver);
+                Check(dragOver.Handled && dragOver.DragEffects == DragDropEffects.Copy,
+                    "Image DragOver must be accepted by a Sprite field.");
+                combo.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, combo, default, KeyModifiers.None));
+            }
+            Dispatcher.UIThread.RunJobs();
+            Check(image.Sprite is not null && image.Sprite.ImageId == imported.Id,
+                "Image D&D must assign the formal image ID.");
             Check(!Warning(editor, "Image").IsVisible, "Existing image must not warn about missing assets.");
+            combo = SpriteCombo(editor);
             combo.SelectedItem = combo.Items.Cast<object>().First(option => option.ToString() == "None");
             Dispatcher.UIThread.RunJobs();
             Check(image.Sprite is null, "Sprite None must clear the reference.");
@@ -201,6 +221,6 @@ internal static class UiImageEditorChecks
         Dispatcher.UIThread.RunJobs();
         Check(Control<StackPanel>(editor, "ObjectInspector").IsEnabled,
             "Inspector editing must return after Stop.");
-        Console.WriteLine("PASS: component add entry, Image requirements warn/clear, Sprite select/None/missing, Order Inspector edit, and Play guard.");
+        Console.WriteLine("PASS: component add entry, Image requirements warn/clear, Sprite select/None/missing/D&D, Order Inspector edit, and Play guard.");
     }
 }

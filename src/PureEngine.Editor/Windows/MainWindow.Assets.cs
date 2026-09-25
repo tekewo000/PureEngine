@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using PureEngine.Core;
 
@@ -6,6 +7,9 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
+    internal static readonly DataFormat<string> ImageIdFormat =
+        DataFormat.CreateInProcessFormat<string>("PureEngine.ImageId");
+    private ProjectExplorerEntry? _pressedImage;
     private ProjectAssets _projectAssets = ProjectAssets.Scan(Path.GetTempPath());
     private Dictionary<Guid, byte[]> _previewImages = [];
 
@@ -35,6 +39,19 @@ public partial class MainWindow
 
     internal IReadOnlyList<ProjectAssets.AssetEntry> AssetImageEntries() =>
         [.. _projectAssets.Images.Values.OrderBy(entry => entry.RelativePath, StringComparer.Ordinal)];
+
+    private static bool IsProjectImage(ProjectExplorerEntry entry) =>
+        entry.Kind == ProjectExplorerKind.File
+        && entry.FullPath is not null
+        && ProjectAssets.IsSupportedImage(entry.FullPath);
+
+    private Guid? DroppedImageId(DragEventArgs e) =>
+        Guid.TryParse(e.DataTransfer.TryGetValue(ImageIdFormat), out var id)
+        && _projectAssets.Images.ContainsKey(id) ? id : null;
+
+    private static bool SamePath(string left, string right) =>
+        string.Equals(Path.GetFullPath(left), Path.GetFullPath(right),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     internal bool IsAssetMissing(Guid imageId) => !_projectAssets.Images.ContainsKey(imageId);
 

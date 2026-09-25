@@ -123,6 +123,7 @@ public partial class MainWindow : Window
         _dragTypes = null;
         _pressedDataAsset = null;
         _pressedPrefab = null;
+        _pressedImage = null;
         if (!e.GetCurrentPoint(ProjectFiles).Properties.IsLeftButtonPressed) return;
         var entry = ((e.Source as Visual)?.GetSelfAndVisualAncestors()
             .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as ProjectExplorerEntry);
@@ -132,6 +133,12 @@ public partial class MainWindow : Window
             if (IsPlaying) return;
             _pressedDataAsset = entry;
             e.Handled = true; // Select only on release, preserving the Inspector during a drag.
+        }
+        else if (IsProjectImage(entry))
+        {
+            if (IsPlaying) return;
+            _pressedImage = entry;
+            e.Handled = true;
         }
         else if (entry.Kind == ProjectExplorerKind.Prefab && entry.FullPath is not null)
         {
@@ -164,6 +171,9 @@ public partial class MainWindow : Window
         {
             _assetPress = null;
             _dragTypes = null;
+            _pressedDataAsset = null;
+            _pressedPrefab = null;
+            _pressedImage = null;
             return;
         }
         var delta = e.GetPosition(ProjectFiles) - _assetPressPosition;
@@ -181,6 +191,22 @@ public partial class MainWindow : Window
             using var transfer = new DataTransfer();
             transfer.Add(DataTransferItem.Create(DataAssetIdFormat, id.ToString("D")));
             await DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Copy);
+            return;
+        }
+        if (_pressedImage is { FullPath: not null } imageEntry)
+        {
+            _pressedImage = null;
+            _assetPress = null;
+            RefreshProjectAssets();
+            var image = _projectAssets.Images.Values.FirstOrDefault(candidate => SamePath(candidate.FullPath, imageEntry.FullPath));
+            if (image is null)
+            {
+                SetFileStatus("The image has no valid project asset registration.", true);
+                return;
+            }
+            using var imageTransfer = new DataTransfer();
+            imageTransfer.Add(DataTransferItem.Create(ImageIdFormat, image.Id.ToString("D")));
+            await DragDrop.DoDragDropAsync(press, imageTransfer, DragDropEffects.Copy);
             return;
         }
         if (_pressedPrefab is { FullPath: not null } prefabEntry)
@@ -621,7 +647,7 @@ public partial class MainWindow : Window
         return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
     }
 
-    private static Grid BuildLabeledEditorRow(string label, string tooltip, string typeText, Control editor)
+    private Grid BuildLabeledEditorRow(string label, string tooltip, string typeText, Control editor)
     {
         var row = new Grid { ColumnDefinitions = [with("120,*")], ColumnSpacing = 8 };
         row.Classes.Add("inspectorRow");
@@ -653,6 +679,7 @@ public partial class MainWindow : Window
         Grid.SetColumn(editor, 1);
         row.Children.Add(labelStack);
         row.Children.Add(editor);
+        AttachEditorDropHandlers(row, editor);
         return row;
     }
 

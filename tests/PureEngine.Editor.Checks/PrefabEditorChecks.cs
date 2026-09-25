@@ -1,7 +1,9 @@
 using System.Reflection;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
 
@@ -15,6 +17,7 @@ static class PrefabEditorChecks
         using var session = ProjectSession.Create(root, "PrefabEditor");
         session.Components.Registry.Register<PrefabEditorPart>("checks.prefab-editor-part");
         session.Components.Registry.Register<PrefabEditorHolder>("checks.prefab-editor-holder");
+        session.Components.Registry.Register<PrefabDropTarget>("checks.prefab-drop-target");
         var editor = new MainWindow(session);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
@@ -28,6 +31,7 @@ static class PrefabEditorChecks
             cannon.SetParent(tower);
             var part = new PrefabEditorPart { Power = 9 };
             cannon.Attach(part);
+            tower.Attach(new PureEngine.Core.Text { Content = "Prefab text" });
             tower.Attach(new PrefabEditorHolder { Target = part, Title = "base", Extras = [part] });
             Call(editor, "SyncHierarchyForTest");
             Call(editor, "SelectSceneObjectForTest", tower);
@@ -113,7 +117,56 @@ static class PrefabEditorChecks
             Check(!editor.IsPlaying, "Stop must end Play.");
             Call(editor, "SelectSceneObjectForTest", [null]);
             Check(Call(editor, "PlacePrefabForTest", path) is not null, "Placement must work again after Stop.");
-            // Test placements stay unsaved by design; drop the dirty flag so closing skips the confirmation.
+            var dropTarget = store.Current.AddEmpty();
+            dropTarget.Rename("DropTarget");
+            var dropHolder = new PrefabDropTarget();
+            dropTarget.Attach(dropHolder);
+            Call(editor, "SyncHierarchyForTest");
+            Call(editor, "SelectSceneObjectForTest", dropTarget);
+            Dispatcher.UIThread.RunJobs();
+            var dropFormat = (DataFormat<string>)typeof(MainWindow).GetField("PrefabPathFormat", Static)!.GetValue(null)!;
+            var partCombo = editor.GetVisualDescendants().OfType<ComboBox>()
+                .Single(combo => Equals(AutomationProperties.GetName(combo), "PrefabDropTarget.Part"));
+            using (var dragData = new DataTransfer())
+            {
+                dragData.Add(DataTransferItem.Create(dropFormat, path));
+                var dragOver = new DragEventArgs(DragDrop.DragOverEvent, dragData, partCombo, default, KeyModifiers.None);
+                partCombo.RaiseEvent(dragOver);
+                Check(dragOver.Handled && dragOver.DragEffects == DragDropEffects.Copy, "Prefab must be accepted by a component reference field.");
+                partCombo.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, partCombo, default, KeyModifiers.None));
+            }
+            Dispatcher.UIThread.RunJobs();
+            var assignedPartObject = store.Current.Objects.FirstOrDefault(item =>
+                item.Components.Any(candidate => ReferenceEquals(candidate, dropHolder.Part)));
+            Check(assignedPartObject is not null,
+                "Prefab component drop must assign the matching placed component.");
+            var textCombo = editor.GetVisualDescendants().OfType<ComboBox>()
+                .Single(combo => Equals(AutomationProperties.GetName(combo), "PrefabDropTarget.Text"));
+            var textRow = textCombo.GetVisualAncestors().OfType<Grid>().First();
+            using (var dragData = new DataTransfer())
+            {
+                dragData.Add(DataTransferItem.Create(dropFormat, path));
+                var dragOver = new DragEventArgs(DragDrop.DragOverEvent, dragData, textRow, default, KeyModifiers.None);
+                textRow.RaiseEvent(dragOver);
+                Check(dragOver.Handled && dragOver.DragEffects == DragDropEffects.Copy,
+                    "Prefab Text row must accept a drop on the field row.");
+                textRow.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, textRow, default, KeyModifiers.None));
+            }
+            Dispatcher.UIThread.RunJobs();
+            var assignedTextObject = store.Current.Objects.FirstOrDefault(item =>
+                item.Components.Any(candidate => ReferenceEquals(candidate, dropHolder.Text)));
+            Check(assignedTextObject is not null, "Prefab Text drop must assign the matching placed component.");
+            var rootCombo = editor.GetVisualDescendants().OfType<ComboBox>()
+                .Single(combo => Equals(AutomationProperties.GetName(combo), "PrefabDropTarget.Root"));
+            using (var dragData = new DataTransfer())
+            {
+                dragData.Add(DataTransferItem.Create(dropFormat, path));
+                rootCombo.RaiseEvent(new DragEventArgs(DragDrop.DragOverEvent, dragData, rootCombo, default, KeyModifiers.None));
+                rootCombo.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, dragData, rootCombo, default, KeyModifiers.None));
+            }
+            Dispatcher.UIThread.RunJobs();
+            Check(dropHolder.Root is not null && dropTarget.Children.Contains(dropHolder.Root), "Prefab SceneObject drop must assign the placed root.");
+            store.Current.Remove(dropTarget);
             typeof(EditSceneStore).GetMethod("SetDirtyForTest", Instance)!.Invoke(store, [false]);
         }
         finally
@@ -122,7 +175,7 @@ static class PrefabEditorChecks
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
-        Console.WriteLine("PASS: prefab save, listing, placement, parents, invalid files, double-click, drag-drop, and Play guards.");
+        Console.WriteLine("PASS: prefab save, listing, placement, parents, invalid files, double-click, scene/Inspector drag-drop, and Play guards.");
     }
 
     private static object? Call(MainWindow editor, string method, params object?[] args) =>
@@ -153,4 +206,11 @@ public sealed class PrefabEditorHolder
     [Inspector] public PrefabEditorPart? Target { get; set; }
     [Inspector] public string Title { get; set; } = "";
     [Inspector] public List<PrefabEditorPart?> Extras { get; set; } = [];
+}
+
+public sealed class PrefabDropTarget
+{
+    [Inspector] public PrefabEditorPart? Part { get; set; }
+    [Inspector] public PureEngine.Core.Text? Text { get; set; }
+    [Inspector] public SceneObject? Root { get; set; }
 }

@@ -41,6 +41,14 @@
 
 ## 次に着手する作業
 
+### Inspector参照欄へのD&D拡張（2026-09-25実装）
+
+- SceneObject／登録Componentの参照欄を、ComboBoxだけでなく欄全体の行で受け付ける。Stuffsの行は従来どおり同じSceneのIDを解決し、Prefabファイルは選択中オブジェクトの子として複製してからRootまたは型一致Componentを一意に選んで割り当てる。DataAssetは型一致時だけ既存のID経路で割り当てる。
+- Projectの画像ファイルを`Sprite`欄へドラッグできる経路を追加し、登録済みImage IDをそのまま設定する。SceneObject、Component、DataAsset、PrefabのDragOver／Drop、型不一致・複数候補・Play中拒否、参照欄の行全体へのDropをEditor Checksで確認する。
+- 参照欄とSprite欄の行に透明な背景を設定し、ラベルと入力欄の間の余白もヒットテスト対象にする。Editor Checksの画像DropはSprite未設定からの割り当てを検証する。余白への実画面Dropは未確認。
+- Prefab参照は既存のコピーのみ仕様に従い、Prefabアセットへのライブリンクや永続化的Prefab参照は追加しない。SceneObjectdropは複製Root、Component dropは複製サブツリー内の唯一の型一致Componentを割り当てる。実画面の手動D&DとCIは未確認として区別する。
+
+
 ### Prefab相当のコピーのみ複製（2026-09-24実装）
 
 - 単一ルート＋子孫を `.pure.prefab.yaml`（version 1・PrefabのID・objects）へ保存し、配置時は普通のSceneObjectとして複製する。リンク・Override・Variant・入れ子は作らない。内部参照だけ新IDへ付け替え、範囲外・画像・データアセット参照は維持し、MissingはScene参照の既存規則に従う。移行規則はScene流用でPrefab独自の仕様は作らない。
