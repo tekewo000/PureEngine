@@ -1,4 +1,6 @@
+using System.Numerics;
 using System.Reflection;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -6,11 +8,13 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
 using PureEngine.Editor;
+using PureEngine.Runtime;
 
 static class PrefabEditorChecks
 {
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic;
     private const BindingFlags Static = BindingFlags.Static | BindingFlags.NonPublic;
+    private static readonly string[] PaneNames = ["SceneSurface", "SceneViewPane", "ProjectFiles", "InspectorPane"];
 
     public static void Run(string root)
     {
@@ -23,7 +27,7 @@ static class PrefabEditorChecks
         Dispatcher.UIThread.RunJobs();
         try
         {
-            var store = (EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(editor)!;
+            var store = (EditSceneStore)typeof(MainWindow).GetField("_sceneDocument", Instance)!.GetValue(editor)!;
             var tower = store.Current.AddEmpty();
             tower.Rename("Tower");
             var cannon = store.Current.AddEmpty();
@@ -74,8 +78,13 @@ static class PrefabEditorChecks
             Check(store.Current.Objects.Count == before, "Failed placement must leave the scene untouched.");
 
             files.SelectedItem = files.ItemsSource!.Cast<ProjectExplorerEntry>().Single(entry => entry.FullPath == path);
+            var dirtyBeforeOpen = store.IsDirty;
             Program.Wait((Task)Call(editor, "OpenSelectedExplorerEntry")!);
-            Check(store.Current.Objects.Count == before + 2, "Double-clicking a prefab must place it.");
+            Check(store.Current.Objects.Count == before && store.IsDirty == dirtyBeforeOpen
+                && !ReferenceEquals(ActiveStore(editor), store)
+                && editor.FindControl<TabControl>("ViewportTabs")!.SelectedIndex == 2,
+                "Double-clicking a prefab must open an isolated editor without placing or dirtying the main scene.");
+            Call(editor, "ClosePrefabEditor");
 
             var surface = editor.FindControl<Grid>("SceneSurface")!;
             var prefabFormat = (DataFormat<string>)typeof(MainWindow).GetField("PrefabPathFormat", Static)!.GetValue(null)!;
@@ -223,10 +232,317 @@ static class PrefabEditorChecks
         finally
         {
             if (editor.IsPlaying) Call(editor, "StopPlay");
+            Call(editor, "ClosePrefabEditor");
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
         Console.WriteLine("PASS: prefab save, listing, placement, parents, invalid files, double-click, scene/Inspector drag-drop, and Play guards.");
+        CheckEditingWorkflow(root);
+        CheckActivationFailure(root);
+    }
+
+    private static EditSceneStore ActiveStore(MainWindow editor) =>
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(editor)!;
+
+    private static void CheckEditingWorkflow(string root)
+    {
+        using var session = ProjectSession.Create(root, "PrefabEditingWorkflow");
+        session.Components.Registry.Register<PrefabEditorPart>("checks.prefab-editor-part");
+        session.Components.Registry.Register<MenuAssetFixture>("checks.menu-asset");
+        var editor = new MainWindow(session);
+        editor.Show();
+        Dispatcher.UIThread.RunJobs();
+        var main = ActiveStore(editor);
+        try
+        {
+            var source = main.Current.AddEmpty();
+            source.Rename("Main source");
+            source.Attach(new PrefabEditorPart { Power = 9 });
+            var mainOnly = main.Current.AddEmpty();
+            mainOnly.Rename("Main only");
+            Call(editor, "SyncHierarchyForTest");
+            Call(editor, "SelectSceneObjectForTest", mainOnly);
+            var prefabPath = (string)Call(editor, "SavePrefabToPath", source, "", "Editable.pure.prefab.yaml")!;
+            var original = PrefabFile.Load(prefabPath);
+            var scenePath = Path.Combine(session.Project.RootDirectory, "Scenes", "Workflow.pure.scene.yaml");
+            main.SetPath(scenePath);
+            Program.Wait((Task)Call(editor, "SaveSceneAsync", false)!);
+            var sceneBytes = File.ReadAllBytes(scenePath);
+            var prefabBytes = File.ReadAllBytes(prefabPath);
+            var tabs = editor.FindControl<TabControl>("ViewportTabs")!;
+            var pan = typeof(MainWindow).GetField("_scenePan", Instance)!;
+            var zoom = typeof(MainWindow).GetField("_sceneZoom", Instance)!;
+            pan.SetValue(editor, new Vector2(31, 47));
+            zoom.SetValue(editor, 1.5f);
+            Control[] panes = [.. PaneNames.Select(name => editor.FindControl<Control>(name)!)];
+            StyledElement?[] paneParents = [.. panes.Select(pane => pane.Parent)];
+            (int, int)[] panePositions = [.. panes.Select(pane => (Grid.GetRow(pane), Grid.GetColumn(pane)))];
+
+            Program.Wait((Task)Call(editor, "OpenPrefabEditorCore", prefabPath)!);
+            Dispatcher.UIThread.RunJobs();
+            var prefab = ActiveStore(editor);
+            var prefabRoot = prefab.Current.RootObjects.Single();
+            Check(!ReferenceEquals(prefab, main) && prefabRoot.Id == source.Id
+                && !ReferenceEquals(prefabRoot, source) && main.Current.Objects.Count == 2
+                && !main.IsDirty && !prefab.IsDirty, "Opening must isolate objects and preserve clean documents.");
+            Check(tabs.SelectedIndex == 2 && editor.Title!.Contains("Editable.pure.prefab.yaml")
+                && editor.FindControl<TextBlock>("StuffsContext")!.IsVisible
+                && editor.FindControl<TextBlock>("StuffsContext")!.Text!.Contains("Editable.pure.prefab.yaml")
+                && Equals(editor.FindControl<MenuItem>("SaveSceneMenu")!.Header, "Save Prefab"),
+                "The active prefab must be identified in the tab, title, hierarchy context, and Save command.");
+            Check(editor.FindControl<TreeView>("SceneObjects")!.Items.Count == 1
+                && ReferenceEquals(Call(editor, "GetSelectedSceneObject"), prefabRoot),
+                "Prefab hierarchy must show only its root and select it for the Inspector.");
+            Check(panes.Select(pane => pane.Parent).SequenceEqual(paneParents)
+                && panes.Select(pane => (Grid.GetRow(pane), Grid.GetColumn(pane))).SequenceEqual(panePositions),
+                "Opening a prefab must preserve the existing pane parents and grid positions.");
+
+            editor.FindControl<TextBox>("ObjectName")!.Text = "Edited prefab";
+            Dispatcher.UIThread.RunJobs();
+            var power = editor.GetVisualDescendants().OfType<TextBox>()
+                .Single(box => Equals(AutomationProperties.GetName(box), "PrefabEditorPart.Power"));
+            power.Text = "27";
+            Dispatcher.UIThread.RunJobs();
+            Check(prefabRoot.Name == "Edited prefab" && prefabRoot.GetComponent<PrefabEditorPart>()!.Power == 27
+                && source.Name == "Main source" && source.GetComponent<PrefabEditorPart>()!.Power == 9
+                && prefab.IsDirty && !main.IsDirty,
+                "Inspector name and component edits must dirty only the prefab.");
+            Check(Equals(editor.FindControl<TabItem>("PrefabEditorTab")!.Header, "Prefab Editor *"),
+                "Unsaved prefab edits must be visible on the tab.");
+            pan.SetValue(editor, new Vector2(-12, 88));
+            zoom.SetValue(editor, 2f);
+            tabs.SelectedIndex = 0;
+            Dispatcher.UIThread.RunJobs();
+            Check(ReferenceEquals(ActiveStore(editor), main)
+                && ReferenceEquals(Call(editor, "GetSelectedSceneObject"), mainOnly)
+                && Equals(pan.GetValue(editor), new Vector2(31, 47)) && Equals(zoom.GetValue(editor), 1.5f),
+                "Scene tab must restore its document, selection, pan, and zoom.");
+            editor.FindControl<TextBox>("ObjectName")!.Text = "Changed main only";
+            Dispatcher.UIThread.RunJobs();
+            Check(main.IsDirty && prefab.IsDirty, "Both documents must retain independent unsaved edits.");
+            tabs.SelectedIndex = 2;
+            Dispatcher.UIThread.RunJobs();
+            Check(ReferenceEquals(Call(editor, "GetSelectedSceneObject"), prefabRoot)
+                && Equals(pan.GetValue(editor), new Vector2(-12, 88)) && Equals(zoom.GetValue(editor), 2f),
+                "Prefab tab must restore its own selection, pan, and zoom.");
+            editor.Close();
+            AnswerDialog(editor, "Unsaved Prefab", "Discard");
+            AnswerDialog(editor, "Unsaved Scene", "Cancel");
+            Check(editor.IsVisible && ReferenceEquals(ActiveStore(editor), prefab) && prefab.IsDirty && main.IsDirty
+                && prefabRoot.Name == "Edited prefab" && prefabRoot.GetComponent<PrefabEditorPart>()!.Power == 27
+                && mainOnly.Name == "Changed main only" && File.ReadAllBytes(prefabPath).SequenceEqual(prefabBytes),
+                "Canceling scene close after discarding the prefab must preserve both open documents and their edits.");
+            editor.RaiseEvent(new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent, Key = Key.S,
+                KeyModifiers = KeyModifiers.Control | KeyModifiers.Shift
+            });
+            Dispatcher.UIThread.RunJobs();
+            Check(prefab.IsDirty && File.ReadAllBytes(prefabPath).SequenceEqual(prefabBytes)
+                && ReferenceEquals(ActiveStore(editor), prefab),
+                "Ctrl+Shift+S must not silently save a prefab in place or clear its dirty state.");
+            Check((bool)Call(editor, "SavePrefabEditor")!, "Prefab Save must succeed.");
+            Check(!prefab.IsDirty && main.IsDirty && File.ReadAllBytes(scenePath).SequenceEqual(sceneBytes)
+                && !File.ReadAllBytes(prefabPath).SequenceEqual(prefabBytes),
+                "Prefab Save must write only the prefab and clear only its dirty state.");
+            var saved = PrefabFile.Load(prefabPath);
+            Check(saved.Id == original.Id && prefabRoot.Id == source.Id
+                && saved.Objects!.SelectMany(item => item.Components!).Select(component => component.Id)
+                    .SequenceEqual(original.Objects!.SelectMany(item => item.Components!).Select(component => component.Id)),
+                "Prefab Save must preserve the asset, authored object, and component IDs.");
+            var reopened = PrefabFile.OpenForEditing(prefabPath, session.Components.Registry, out var savedId, out _);
+            Check(savedId == original.Id && reopened.RootObjects.Single().Id == source.Id
+                && reopened.RootObjects.Single().Name == "Edited prefab"
+                && reopened.RootObjects.Single().GetComponent<PrefabEditorPart>()!.Power == 27,
+                "Saved Inspector edits and IDs must survive reload.");
+            var savedPrefabBytes = File.ReadAllBytes(prefabPath);
+            tabs.SelectedIndex = 0;
+            Program.Wait((Task)Call(editor, "SaveSceneAsync", false)!);
+            Check(!main.IsDirty && File.ReadAllBytes(prefabPath).SequenceEqual(savedPrefabBytes)
+                && !File.ReadAllBytes(scenePath).SequenceEqual(sceneBytes),
+                "Scene Save must write only the main scene.");
+            tabs.SelectedIndex = 2;
+            Dispatcher.UIThread.RunJobs();
+
+            Check(!editor.FindControl<MenuItem>("DeleteObjectMenuItem")!.IsEnabled,
+                "Prefab root deletion must be disabled.");
+            Call(editor, "DeleteSelectedObject");
+            Check(prefab.Current.Objects.Count == 1, "Prefab root deletion must also be guarded by the command.");
+            Call(editor, "SelectSceneObjectForTest", [null]);
+            Call(editor, "OnAddObject", null, new Avalonia.Interactivity.RoutedEventArgs());
+            var child = (SceneObject)Call(editor, "GetSelectedSceneObject")!;
+            Check(ReferenceEquals(child.Parent, prefabRoot) && prefab.Current.RootObjects.Count == 1,
+                "Add Empty without a selection must create a child, never a second prefab root.");
+            Check(!(bool)Call(editor, "CanDropInEditingDocument", child.Id, null, HierarchyDropPosition.AsChild)!
+                && !(bool)Call(editor, "CanDropInEditingDocument", child.Id, prefabRoot.Id, HierarchyDropPosition.Before)!
+                && !(bool)Call(editor, "CanDropInEditingDocument", child.Id, prefabRoot.Id, HierarchyDropPosition.After)!
+                && !(bool)Call(editor, "CanDropInEditingDocument", prefabRoot.Id, child.Id, HierarchyDropPosition.AsChild)!,
+                "Hierarchy drops must not detach children, create root siblings, or reparent the prefab root.");
+
+            var bad = Path.Combine(session.Project.RootDirectory, "Invalid.pure.prefab.yaml");
+            File.WriteAllText(bad, "version: 1\nobjects: []\n");
+            try
+            {
+                Program.Wait((Task)Call(editor, "OpenPrefabEditorCore", bad)!);
+                throw new InvalidOperationException("Invalid prefab opening must fail.");
+            }
+            catch (InvalidDataException) { }
+            Check(ReferenceEquals(ActiveStore(editor), prefab) && prefab.IsDirty
+                && ReferenceEquals(Call(editor, "GetSelectedSceneObject"), child)
+                && !editor.OwnedWindows.Any(window => window.Title == "Unsaved Prefab"),
+                "Invalid replacement must preserve the current document and not prompt away its edits.");
+
+            var assetPath = Path.Combine(session.Project.RootDirectory, "Safety.pure.asset.yaml");
+            DataAssetFile.Create(assetPath, typeof(MenuAssetFixture), session.Components.Registry);
+            Program.Wait((Task)Call(editor, "OpenDataAssetCore", assetPath)!);
+            Dispatcher.UIThread.RunJobs();
+            var attack = editor.GetVisualDescendants().OfType<TextBox>()
+                .Single(box => Equals(AutomationProperties.GetName(box), "MenuAssetFixture.Attack"));
+            attack.Text = "41";
+            Dispatcher.UIThread.RunJobs();
+            var assetBytes = File.ReadAllBytes(assetPath);
+            var invalidOpen = (Task)Call(editor, "OpenPrefabEditorCore", bad)!;
+            Dispatcher.UIThread.RunJobs();
+            Check(invalidOpen.IsCompleted && editor.OwnedWindows.Count == 0,
+                "Invalid prefab opening must fail before prompting to discard a dirty data asset.");
+            try
+            {
+                Program.Wait(invalidOpen);
+                throw new InvalidOperationException("Invalid prefab opening with a data asset must fail.");
+            }
+            catch (InvalidDataException) { }
+            Check(editor.FindControl<StackPanel>("DataAssetInspector")!.IsVisible && attack.Text == "41"
+                && editor.FindControl<TextBlock>("DataAssetTitle")!.Text!.StartsWith("* ")
+                && File.ReadAllBytes(assetPath).SequenceEqual(assetBytes),
+                "Invalid prefab opening must preserve the dirty data asset and its Inspector.");
+
+            Call(editor, "StartPlay");
+            Check(editor.IsPlaying && ReferenceEquals(ActiveStore(editor), main)
+                && !editor.FindControl<TabItem>("PrefabEditorTab")!.IsEnabled,
+                "Normal Play must switch away from the prefab and disable its editing tab.");
+            Check(editor.FindControl<StackPanel>("DataAssetInspector")!.IsVisible
+                && Call(editor, "GetSelectedSceneObject") is null,
+                "Play from the prefab must preserve the data asset Inspector without restoring a hierarchy selection.");
+            var play = (PlaySession)typeof(MainWindow).GetProperty("ActivePlay", Instance)!.GetValue(editor)!;
+            var runScene = play.Runtime.Scene;
+            Check(runScene.Objects.Count == main.Current.Objects.Count
+                && runScene.Objects.Any(item => item.Id == mainOnly.Id)
+                && runScene.Objects.All(item => item.Id != child.Id),
+                "Play from the prefab tab must run the main scene, not the prefab authoring scene.");
+            Call(editor, "StopPlay");
+            var beforeAssetSave = File.ReadAllBytes(scenePath);
+            editor.RaiseEvent(new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent, Key = Key.S, KeyModifiers = KeyModifiers.Control
+            });
+            Dispatcher.UIThread.RunJobs();
+            Check(DataAssetFile.Load(assetPath, session.Components.Registry).Instance is MenuAssetFixture { Attack: 41 }
+                && !editor.FindControl<TextBlock>("DataAssetTitle")!.Text!.StartsWith("* ")
+                && File.ReadAllBytes(scenePath).SequenceEqual(beforeAssetSave) && prefab.IsDirty
+                && File.ReadAllBytes(prefabPath).SequenceEqual(savedPrefabBytes),
+                "After Play, Ctrl+S must still save the open data asset, not either scene document.");
+            Call(editor, "CloseDataAssetForEdit");
+            tabs.SelectedIndex = 2;
+            Check(ReferenceEquals(ActiveStore(editor), prefab) && prefab.IsDirty,
+                "Stop must leave prefab edits available and unsaved.");
+
+            Check(!AnswerClose(editor, "Cancel") && ReferenceEquals(ActiveStore(editor), prefab) && prefab.IsDirty,
+                "Cancel must keep the dirty prefab open.");
+            Check(AnswerClose(editor, "Discard") && ReferenceEquals(ActiveStore(editor), main)
+                && File.ReadAllBytes(prefabPath).SequenceEqual(savedPrefabBytes),
+                "Discard must close the prefab without writing its changes.");
+            Program.Wait((Task)Call(editor, "OpenPrefabEditorCore", prefabPath)!);
+            editor.FindControl<TextBox>("ObjectName")!.Text = "Saved by dialog";
+            Dispatcher.UIThread.RunJobs();
+            Check(AnswerClose(editor, "Save") && ReferenceEquals(ActiveStore(editor), main),
+                "Save confirmation must save and close the prefab.");
+            var dialogSaved = PrefabFile.OpenForEditing(prefabPath, session.Components.Registry, out _, out _);
+            Check(dialogSaved.RootObjects.Single().Name == "Saved by dialog",
+                "Save confirmation must persist the Inspector edit.");
+        }
+        finally
+        {
+            if (editor.IsPlaying) Call(editor, "StopPlay");
+            Window[] dialogs = [.. editor.OwnedWindows];
+            foreach (var dialog in dialogs) dialog.Close("discard");
+            Call(editor, "CloseDataAssetForEdit");
+            Call(editor, "ClosePrefabEditor");
+            main.MarkClean();
+            editor.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+        Console.WriteLine("PASS: isolated Prefab Editor context, Inspector, independent saves, stable IDs, tabs, pane positions, child/root guards, Play asset selection/save targeting, invalid-open preservation, Save As rejection, and transactional close dialogs.");
+    }
+
+    private static void CheckActivationFailure(string root)
+    {
+        using var session = ProjectSession.Create(root, "PrefabActivationFailure");
+        session.Components.Registry.Register<PrefabActivationFailurePart>("checks.prefab-activation-failure");
+        var source = new Scene();
+        var sourceRoot = source.AddEmpty();
+        sourceRoot.Attach(new PrefabActivationFailurePart());
+        var path = Path.Combine(session.Project.RootDirectory, "Throwing.pure.prefab.yaml");
+        PrefabFile.Create(path, source, sourceRoot, session.Components.Registry);
+        var bytes = File.ReadAllBytes(path);
+        var editor = new MainWindow(session);
+        editor.Show();
+        Dispatcher.UIThread.RunJobs();
+        var main = ActiveStore(editor);
+        var activated = false;
+        var disposals = PrefabActivationFailurePart.Disposals;
+        PrefabActivationFailurePart.ShouldThrow = () =>
+        {
+            activated = !ReferenceEquals(ActiveStore(editor), main);
+            return activated;
+        };
+        try
+        {
+            var open = (Task)Call(editor, "OpenPrefabEditorCore", path)!;
+            try
+            {
+                Program.Wait(open);
+                throw new InvalidOperationException("The throwing Inspector getter must fail activation.");
+            }
+            catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException
+                { Message: "Inspector activation failure." }) { }
+            Check(activated && ReferenceEquals(ActiveStore(editor), main)
+                && typeof(MainWindow).GetField("_prefabScene", Instance)!.GetValue(editor) is null
+                && !editor.FindControl<TabItem>("PrefabEditorTab")!.IsVisible
+                && PrefabActivationFailurePart.Disposals == disposals + 1
+                && File.ReadAllBytes(path).SequenceEqual(bytes),
+                "An Inspector getter failure after candidate adoption must release the candidate and restore the main context.");
+        }
+        finally
+        {
+            PrefabActivationFailurePart.ShouldThrow = null;
+            Call(editor, "ClosePrefabEditor");
+            main.MarkClean();
+            editor.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+        Console.WriteLine("PASS: throwing prefab Inspector activation releases the candidate and restores the main context.");
+    }
+
+    private static bool AnswerClose(MainWindow editor, string answer)
+    {
+        var close = (Task<bool>)Call(editor, "ConfirmClosePrefabEditor")!;
+        Dispatcher.UIThread.RunJobs();
+        var dialog = editor.OwnedWindows.Single(window => window.Title == "Unsaved Prefab");
+        var button = dialog.GetVisualDescendants().OfType<Avalonia.Controls.Button>()
+            .Single(item => Equals(item.Content, answer));
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Program.Wait(close);
+        return close.GetAwaiter().GetResult();
+    }
+
+    private static void AnswerDialog(MainWindow editor, string title, string answer)
+    {
+        Program.Until(() => editor.OwnedWindows.Any(window => window.Title == title));
+        var dialog = editor.OwnedWindows.Single(window => window.Title == title);
+        dialog.GetVisualDescendants().OfType<Avalonia.Controls.Button>()
+            .Single(button => Equals(button.Content, answer))
+            .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static object? Call(MainWindow editor, string method, params object?[] args) =>
@@ -264,4 +580,20 @@ public sealed class PrefabDropTarget
     [Inspector] public PrefabEditorPart? Part { get; set; }
     [Inspector] public PureEngine.Core.Text? Text { get; set; }
     [Inspector] public SceneObject? Root { get; set; }
+}
+
+public sealed class PrefabActivationFailurePart : IDisposable
+{
+    public static Func<bool>? ShouldThrow { get; set; }
+    public static int Disposals { get; private set; }
+
+    [Inspector]
+    public int Value
+    {
+        get => ShouldThrow?.Invoke() == true
+            ? throw new InvalidOperationException("Inspector activation failure.") : field;
+        set;
+    }
+
+    public void Dispose() => Disposals++;
 }

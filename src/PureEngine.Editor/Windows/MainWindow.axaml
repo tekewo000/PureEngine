@@ -500,7 +500,7 @@
         <Border Grid.Column="2" Classes="pane">
           <TabControl Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
             <TabItem Classes="first" Header="Stuffs" AutomationProperties.Name="Stuffs">
-              <Grid x:Name="SceneSurface" Background="Transparent" DragDrop.AllowDrop="True">
+              <Grid x:Name="SceneSurface" RowDefinitions="Auto,*" Background="Transparent" DragDrop.AllowDrop="True">
                 <Grid.ContextMenu>
                   <ContextMenu>
                     <MenuItem x:Name="AddObjectMenuItem" Header="Add Empty" Click="OnAddObject" />
@@ -516,7 +516,9 @@
                               InputGesture="Delete" IsEnabled="False" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <TreeView x:Name="SceneObjects" Background="Transparent" BorderThickness="0" Margin="8"
+                <TextBlock x:Name="StuffsContext" IsVisible="False" Margin="12,8,12,0"
+                           TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
+                <TreeView x:Name="SceneObjects" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="8"
                           SelectionMode="Single" AutomationProperties.Name="Stuffs objects"
                           DragDrop.AllowDrop="True"
                           KeyDown="OnSceneKeyDown" SelectionChanged="OnObjectSelected">
@@ -536,8 +538,25 @@
         </Border>
         <Border x:Name="SceneViewPane" Classes="pane">
           <TabControl x:Name="ViewportTabs" Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View"><Grid x:Name="SceneViewport" /></TabItem>
+            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View">
+              <Grid x:Name="SceneViewHost"><Grid x:Name="SceneViewport" /></Grid>
+            </TabItem>
             <TabItem Header="Game" AutomationProperties.Name="Game"><Grid x:Name="GameViewport" /></TabItem>
+            <TabItem x:Name="PrefabEditorTab" Header="Prefab Editor" AutomationProperties.Name="Prefab Editor" IsVisible="False">
+              <Grid RowDefinitions="Auto,*">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,8">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="PrefabEditorTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="PrefabEditorPath" Classes="hint" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                  <Button x:Name="SavePrefabEditorButton" Grid.Column="1" Content="Save" Click="OnSavePrefabEditor"
+                          VerticalAlignment="Center" AutomationProperties.Name="Save Prefab" ToolTip.Tip="Save prefab (Ctrl+S)" />
+                  <Button Grid.Column="2" Content="Close" Click="OnClosePrefabEditor" VerticalAlignment="Center"
+                          AutomationProperties.Name="Close Prefab Editor" />
+                </Grid>
+                <Grid x:Name="PrefabViewHost" Grid.Row="1" />
+              </Grid>
+            </TabItem>
           </TabControl>
         </Border>
         <Border Grid.Row="2" Grid.ColumnSpan="3" Classes="pane">

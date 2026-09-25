@@ -213,7 +213,7 @@ public partial class MainWindow
         ProjectFilesCount.Text = entries.Count == 0 ? "Empty folder" : $"{entries.Count} item(s)";
         ProjectFiles.SelectedItem = entries.FirstOrDefault(entry =>
             entry.FullPath is not null && string.Equals(entry.FullPath, _explorerSelectedFile, PathComparison()));
-        var editPath = _editScene.Path;
+        var editPath = _sceneDocument.Path;
         if (ProjectFiles.SelectedItem is null && _explorerSelectedFile is not null
             && editPath is not null && entries.Any(entry => string.Equals(entry.FullPath, editPath, PathComparison())))
             ProjectFiles.SelectedItem = entries.First(entry => string.Equals(entry.FullPath, editPath, PathComparison()));
@@ -294,7 +294,8 @@ public partial class MainWindow
         var entry = ProjectFiles.SelectedItem as ProjectExplorerEntry;
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var hasProject = _project is not null;
-        FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset };
+        FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset }
+            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
         FilesPlaceMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
@@ -328,7 +329,7 @@ public partial class MainWindow
         if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
         if (entry.Kind == ProjectExplorerKind.Prefab && entry.FullPath is not null)
         {
-            await PlacePrefabAsync(entry.FullPath);
+            await OpenPrefabEditorAsync(entry.FullPath);
             return;
         }
         if (IsPlaying)
@@ -568,6 +569,7 @@ public partial class MainWindow
             else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
             if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
+            if (ContainsOpenPrefab(oldFull!, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
             RemapSceneReferences(oldFull!, newFull, isDirectory);
@@ -618,7 +620,7 @@ public partial class MainWindow
                 SetFileStatus("Cannot delete because it contains the startup scene. Change the startup scene first.", true);
                 return;
             }
-            var editPath = _editScene.Path;
+            var editPath = _sceneDocument.Path;
             var containsOpen = editPath is not null && (string.Equals(target, editPath, PathComparison())
                 || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison())));
             if (containsOpen)
@@ -628,6 +630,7 @@ public partial class MainWindow
             }
             var display = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
             if (!await ConfirmExplorerDelete(display, isDirectory)) return;
+            if (ContainsOpenPrefab(target, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Delete(target, recursive: true);
             else File.Delete(target);
             if (isDirectory && string.Equals(_explorerFolder, display, StringComparison.Ordinal))
@@ -643,15 +646,20 @@ public partial class MainWindow
             SetFileStatus($"Deleted: {display}");
         });
 
+    private bool ContainsOpenPrefab(string path, bool isDirectory) => _prefabScene?.Path is { } prefabPath
+        && (string.Equals(prefabPath, path, PathComparison())
+            || isDirectory && prefabPath.StartsWith(
+                Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar, PathComparison()));
+
     /// <summary>Repoints the edited-scene and startup-scene references after a move or rename. Rejects moves that take the startup scene outside Scenes.</summary>
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)
     {
         if (_project is null) return;
-        var editPath = _editScene.Path;
+        var editPath = _sceneDocument.Path;
         if (editPath is not null && (string.Equals(editPath, oldFull, PathComparison())
             || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison()))))
         {
-            _editScene.SetPath(isDirectory
+            _sceneDocument.SetPath(isDirectory
                 ? Path.Combine(newFull, Path.GetRelativePath(oldFull, editPath))
                 : newFull);
             UpdateSceneTitle();

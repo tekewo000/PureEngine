@@ -52,6 +52,7 @@ public partial class MainWindow
             return;
         }
 
+        if (IsPrefabEditing) ActivateEditorViewport(1);
         // Runs Clear on Play before Start without clearing that Play run start log.
         if (ConsoleClearOnPlay.IsChecked == true)
             ClearConsole();
@@ -63,7 +64,7 @@ public partial class MainWindow
             var assets = BuildProjectAssetStore(_components.Registry);
             var prefabs = BuildPrefabCatalog();
             var configure = GameServices.ForProject(_components);
-            session = PlaySession.Prepare(_editScene.Current, _components.Registry, services =>
+            session = PlaySession.Prepare(_sceneDocument.Current, _components.Registry, services =>
             {
                 configure(services);
                 if (assets is not null) services.AddSingleton(assets);
@@ -338,6 +339,7 @@ public partial class MainWindow
         PlayButton.IsEnabled = !playing;
         StopButton.IsEnabled = playing;
         SetEditingEnabled(!playing);
+        UpdatePrefabEditorChrome();
     }
 
     /// <summary>Disables scene editing and switching while running, then restores them after Stop. Never disables closing (Close).</summary>
@@ -355,7 +357,7 @@ public partial class MainWindow
         StartupSceneMenu.IsEnabled = enabled && _project is not null;
         AddObjectMenuItem.IsEnabled = enabled;
         AddUiMenuItem.IsEnabled = enabled;
-        DeleteObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is not null;
+        DeleteObjectMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is { } item && !IsPrefabRoot(item);
         SavePrefabMenuItem.IsEnabled = enabled && GetSelectedSceneObject() is not null;
     }
 

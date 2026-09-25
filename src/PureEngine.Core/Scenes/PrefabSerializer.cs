@@ -144,6 +144,16 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
         return document;
     }
 
+    /// <summary>Restores an isolated authoring scene while preserving the prefab's object and component IDs.</summary>
+    public Scene RestoreForEditing(PrefabDocument document, out bool membersChanged,
+        DataAssetStore? assets = null, PrefabCatalog? prefabs = null, Func<Type, object>? factory = null)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ValidateStructure(document);
+        return new SceneSerializer(registry, assets, prefabs).Restore(
+            new SceneDocument { Version = StrictReferenceVersion, Objects = document.Objects }, factory, out membersChanged);
+    }
+
     /// <summary>Copies the prefab into the destination scene as plain objects with fresh IDs. Returns the new root.</summary>
     /// <remarks>Placement appends at the end: as a root, or as the last child of <paramref name="parent"/>.</remarks>
     public SceneObject Instantiate(Scene target, PrefabDocument prefab, SceneObject? parent = null, Func<Type, object>? factory = null) =>

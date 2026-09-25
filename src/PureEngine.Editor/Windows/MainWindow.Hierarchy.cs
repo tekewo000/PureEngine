@@ -242,7 +242,7 @@ public partial class MainWindow
         var (container, position) = HierarchyDropTarget(e, e.Source as Visual);
         var node = container?.DataContext as HierarchyNode;
         var targetId = node?.Ref.Id;
-        if (!HierarchyDrop.CanDrop(_editScene.Current, draggedId, targetId))
+        if (!CanDropInEditingDocument(draggedId, targetId, position))
         {
             ClearHierarchyDropIndicator();
             e.DragEffects = DragDropEffects.None;
@@ -348,6 +348,7 @@ public partial class MainWindow
         if (GetDraggedId(e) is not { } draggedId) return;
         var node = container?.DataContext as HierarchyNode;
         var targetId = node?.Ref.Id;
+        if (!CanDropInEditingDocument(draggedId, targetId, position)) return;
         try
         {
             HierarchyDrop.Execute(_editScene.Current, draggedId, targetId, position);
@@ -369,4 +370,13 @@ public partial class MainWindow
     }
 
     internal bool IsRefreshingHierarchyForTest() => _hierarchyRefreshing;
+
+    private bool CanDropInEditingDocument(Guid draggedId, Guid? targetId, HierarchyDropPosition position)
+    {
+        if (!HierarchyDrop.CanDrop(_editScene.Current, draggedId, targetId)) return false;
+        if (!IsPrefabEditing) return true;
+        return FindObject(draggedId) is { Parent: not null }
+            && targetId is { } id && FindObject(id) is { } target
+            && (position == HierarchyDropPosition.AsChild || target.Parent is not null);
+    }
 }

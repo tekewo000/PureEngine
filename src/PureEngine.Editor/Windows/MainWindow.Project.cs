@@ -24,6 +24,12 @@ public partial class MainWindow
             return;
         }
         if (!await ConfirmCloseDataAsset()) return;
+        if (HasInputErrors)
+        {
+            SetFileStatus("Fix the Inspector input errors before creating a scene.", true);
+            return;
+        }
+        ActivateEditorViewport(0);
         if (!await ConfirmUnsavedChanges()) return;
         SetCurrentScene(new Scene(), null);
         MarkSceneChanged();
@@ -42,8 +48,13 @@ public partial class MainWindow
         }
         else
         {
-            if (_editScene.Path is null && !await SaveSceneAsync(false)) return;
-            _project.SetStartupScene(_editScene.Path!);
+            if (_sceneDocument.Path is null)
+            {
+                if (HasInputErrors || !await ConfirmCloseDataAsset()) return;
+                ActivateEditorViewport(0);
+                if (!await SaveSceneAsync(false)) return;
+            }
+            _project.SetStartupScene(_sceneDocument.Path!);
         }
         RefreshProjectExplorer();
         SetFileStatus($"Set as startup scene: {_project.Document.StartupScene}");
