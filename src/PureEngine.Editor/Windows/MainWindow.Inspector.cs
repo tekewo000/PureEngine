@@ -460,23 +460,19 @@ public partial class MainWindow
         return button;
     }
 
-    /// <summary>Fixed-width remove button so collection rows align vertically. Content stays centered.</summary>
+    /// <summary>Circular dismiss button. The round shape comes from the dismissButton style; keep chrome out of code so hover stays round.</summary>
     private static Avalonia.Controls.Button BuildRemoveButton(string automationName)
     {
         var remove = new Avalonia.Controls.Button
         {
-            Padding = new Avalonia.Thickness(6, 2),
-            MinWidth = 28,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
             Content = new PathIcon
             {
                 Data = (StreamGeometry?)Application.Current?.FindResource("Icon.DismissCircle"),
-                Width = 12,
-                Height = 12,
+                Width = 14,
+                Height = 14,
             },
         };
+        remove.Classes.Add("dismissButton");
         remove.SetValue(AutomationProperties.NameProperty, automationName);
         return remove;
     }

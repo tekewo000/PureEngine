@@ -400,14 +400,17 @@ public static class SceneViewMath
     {
         var offset = point - pivot;
         var along = Vector2.Dot(offset, dir);
-        var headCenter = pivot + (dir * GizmoLength);
-        var halfHead = GizmoHeadSize / 2;
-        if (Math.Abs(point.X - headCenter.X) <= halfHead
-            && Math.Abs(point.Y - headCenter.Y) <= halfHead)
-            return true;
+        var perpendicular = offset - (dir * along);
+        var baseStart = GizmoLength - GizmoHeadSize;
+        if (along >= baseStart && along <= GizmoLength)
+        {
+            var halfHead = GizmoHeadSize / 2;
+            var widthAt = halfHead * ((GizmoLength - along) / GizmoHeadSize);
+            if (perpendicular.Length() <= widthAt)
+                return true;
+        }
         if (along < GizmoShaftStart || along > GizmoLength)
             return false;
-        var perpendicular = offset - (dir * along);
         return perpendicular.Length() <= GizmoShaftHalfWidth;
     }
 
