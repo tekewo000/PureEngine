@@ -50,6 +50,7 @@ internal static class Program
         RenderingChecks.Run();
         ComponentSearchChecks.Run();
         EditPreviewChecks.Run();
+        ProjectExplorerIconChecks.Run();
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PureEngine-LauncherChecks-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(root);
         try

@@ -62,7 +62,7 @@ public sealed record ProjectExplorerEntry(
     public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
         && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
-    public bool IsPlainFile => !IsFolder && !IsScene && !IsCSharpFile;
+    public bool IsPlainFile => !IsFolder && !IsScene && !IsPrefab && !IsCSharpFile;
 
     public bool HasDetail => !string.IsNullOrEmpty(Detail);
 }

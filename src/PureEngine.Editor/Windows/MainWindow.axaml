@@ -49,11 +49,29 @@
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <Style Selector="Path.rowIcon">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="Stroke" Value="{StaticResource EditorTextSecondaryBrush}" />
+      <Setter Property="StrokeThickness" Value="1.5" />
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
     <Style Selector="TreeView#ProjectTree TreeViewItem">
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="Padding" Value="8,2" />
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="HeaderTemplate">
+        <DataTemplate DataType="TreeViewItem">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Path Classes="rowIcon" Data="M3 5H10L12 7H21V19H3Z" AutomationProperties.Name="Folder" />
+            <TextBlock Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </DataTemplate>
+      </Setter>
     </Style>
     <Style Selector="ListBox#ConsoleList ListBoxItem">
       <Setter Property="MinHeight" Value="0" />
@@ -419,13 +437,13 @@
       <Setter Property="Margin" Value="6,4" />
     </Style>
     <Style Selector="GridSplitter.paneSplitter">
-      <Setter Property="Background" Value="{StaticResource EditorBorderBrush}" />
+      <Setter Property="Background" Value="Transparent" />
       <Setter Property="Template">
-        <ControlTemplate><Border Background="{TemplateBinding Background}" CornerRadius="1" Margin="3" /></ControlTemplate>
+        <ControlTemplate><Border Background="Transparent" /></ControlTemplate>
       </Setter>
     </Style>
     <Style Selector="GridSplitter.paneSplitter:pointerover">
-      <Setter Property="Background" Value="{StaticResource EditorBorderStrongBrush}" />
+      <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="GridSplitter.paneSplitter:focus-visible">
       <Setter Property="Background" Value="{StaticResource EditorAccentBrush}" />
@@ -506,7 +524,11 @@
                           KeyDown="OnSceneKeyDown" SelectionChanged="OnObjectSelected">
                   <TreeView.DataTemplates>
                     <TreeDataTemplate DataType="editor:HierarchyNode" ItemsSource="{Binding Children}">
-                      <TextBlock Text="{Binding Ref.Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Ref.Name}" />
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                        <Path Classes="rowIcon" Data="M4 8L12 4L20 8V18L12 22L4 18Z M4 8L12 12L20 8 M12 12V22"
+                              AutomationProperties.Name="SceneObject" />
+                        <TextBlock Grid.Column="1" Text="{Binding Ref.Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Ref.Name}" />
+                      </Grid>
                     </TreeDataTemplate>
                   </TreeView.DataTemplates>
                 </TreeView>
@@ -615,6 +637,7 @@
                                     HorizontalAlignment="Center" VerticalAlignment="Center" Data="M0 0L12 7L0 14z" />
                             </Border>
                             <Path Classes="tileIcon" Data="M6 3h8l5 5v13H6z M14 3v5h5 M11 12l-2.5 3L11 18 M13 12l2.5 3L13 18" IsVisible="{Binding IsCSharpFile}" />
+                            <Path Classes="tileIcon" Data="M4 8L14 3L26 8V22L14 27L4 22Z M4 8L14 14L26 8 M14 14V27" IsVisible="{Binding IsPrefab}" />
                             <Path Classes="tileIcon" Data="M6 3h8l5 5v13H6z M14 3v5h5" IsVisible="{Binding IsPlainFile}" />
                           </Panel>
                           <TextBlock Text="{Binding DisplayName}" MaxLines="1"
