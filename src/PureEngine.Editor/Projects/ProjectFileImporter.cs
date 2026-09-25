@@ -87,6 +87,52 @@ public static class ProjectFileImporter
         return destination;
     }
 
+    /// <summary>Moves a single file into targetDirectory and returns the destination full path. Appends a sequence number on name collision.</summary>
+    public static string MoveFileInto(string sourceFilePath, string targetDirectory)
+    {
+        if (!File.Exists(sourceFilePath))
+            throw new FileNotFoundException("The source file was not found.", sourceFilePath);
+        if ((File.GetAttributes(sourceFilePath) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Links cannot be moved.");
+        Directory.CreateDirectory(targetDirectory);
+        targetDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(targetDirectory));
+        var sourceFull = Path.GetFullPath(sourceFilePath);
+
+        // Moving into the same folder is a no-op rather than a rename (same as the OS Explorer).
+        if (string.Equals(Path.GetDirectoryName(sourceFull), targetDirectory, PathComparison()))
+            return sourceFull;
+
+        var destination = GetUniqueDestinationPath(targetDirectory, Path.GetFileName(sourceFull));
+        File.Move(sourceFull, destination);
+        return destination;
+    }
+
+    /// <summary>Moves a single folder under targetDirectory and returns the destination full path. Appends a sequence number on name collision.</summary>
+    public static string MoveDirectoryInto(string sourceDirectoryPath, string targetDirectory)
+    {
+        if (!Directory.Exists(sourceDirectoryPath))
+            throw new DirectoryNotFoundException($"The source folder was not found: {sourceDirectoryPath}");
+        if ((File.GetAttributes(sourceDirectoryPath) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Links cannot be moved.");
+        targetDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(targetDirectory));
+        var sourceFull = Path.TrimEndingDirectorySeparator(Path.GetFullPath(sourceDirectoryPath));
+
+        // Reject when target is under (or equal to) source because it would nest into itself.
+        var relative = Path.GetRelativePath(sourceFull, targetDirectory);
+        if (!Path.IsPathRooted(relative) && relative != ".."
+            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new IOException("Cannot move a folder into itself.");
+
+        // Moving into the same parent is a no-op rather than a rename.
+        if (string.Equals(Path.GetDirectoryName(sourceFull), targetDirectory, PathComparison()))
+            return sourceFull;
+
+        Directory.CreateDirectory(targetDirectory);
+        var destination = GetUniqueDestinationPath(targetDirectory, Path.GetFileName(sourceFull), isDirectory: true);
+        Directory.Move(sourceFull, destination);
+        return destination;
+    }
+
     /// <summary>Imports local paths into targetDirectory. Returns the imported destination full paths (excluding skipped entries).</summary>
     public static IReadOnlyList<string> ImportLocalPaths(string targetDirectory, IEnumerable<string> sourcePaths)
     {

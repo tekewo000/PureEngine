@@ -101,6 +101,7 @@ MyGame/
 - Recent Projectsはダブルクリック、または選択してEnterで開く。履歴は最大12件を `%LOCALAPPDATA%/PureEngine/recent-projects.json` に保存し、Projectフォルダには含めない。
 - File → New Scene（Ctrl+N）で空のシーンを作り、Ctrl+SでScenesフォルダ内へ保存する。
 - 下部Project ExplorerのフォルダツリーからScenesを選び、右のシーンをダブルクリック、または選択してEnterで開く。サブフォルダもツリーから選べる。
+- Project内のファイルやフォルダはD&Dで移動できる。右の一覧からフォルダタイルや左のツリーへドラッグし、余白に落とすと表示中のフォルダへ移動する。シーンはScenes配下のみ、同名は自動で連番化、Scenes自体や自分への移動は不可。画像は登録情報ごと移動してIDを維持する。
 - File → Set Current Scene as Startupで現在のシーンを起動シーンに設定する。
 - File → Return to Launcher（Ctrl+Shift+O）、またはEditorを閉じるとLauncherに戻る。未保存の変更はSave／Discard／Cancelで確認する。Launcherを閉じるとアプリが終了する。
 - Project内のシーンは `.pure.scene.yaml` で保存する。パスはProjectからの相対パスなので、フォルダごと移動できる。

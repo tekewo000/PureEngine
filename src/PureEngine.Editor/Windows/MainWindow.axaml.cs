@@ -130,10 +130,13 @@ public partial class MainWindow : Window
         _pressedDataAsset = null;
         _pressedPrefab = null;
         _pressedImage = null;
+        _pressedMoveEntry = null;
         if (!e.GetCurrentPoint(ProjectFiles).Properties.IsLeftButtonPressed) return;
         var entry = ((e.Source as Visual)?.GetSelfAndVisualAncestors()
             .OfType<ListBoxItem>().FirstOrDefault()?.DataContext as ProjectExplorerEntry);
         if (entry is null) return;
+        if (IsMovableExplorerEntry(entry) && !IsPlaying)
+            _pressedMoveEntry = entry;
         if (entry.Kind == ProjectExplorerKind.DataAsset)
         {
             if (IsPlaying) return;
@@ -161,11 +164,12 @@ public partial class MainWindow : Window
         {
             // C# files in the Project column can drag in attachable classes via D&D.
             // When one file holds multiple classes, attaches all unattached classes from that file.
+            // Files without attachable types remain movable within the Project pane.
             var types = _components.GetTypesForFile(entry.FullPath);
-            if (types.Count == 0) return;
-            _dragTypes = types;
+            if (types.Count > 0)
+                _dragTypes = types;
         }
-        else return;
+        if (_pressedDataAsset is null && _pressedImage is null && _pressedPrefab is null && _dragTypes is null && _pressedMoveEntry is null) return;
         _assetPressPosition = e.GetPosition(ProjectFiles);
         _assetPress = e;
     }
@@ -180,57 +184,69 @@ public partial class MainWindow : Window
             _pressedDataAsset = null;
             _pressedPrefab = null;
             _pressedImage = null;
+            _pressedMoveEntry = null;
             return;
         }
         var delta = e.GetPosition(ProjectFiles) - _assetPressPosition;
         if (Math.Abs(delta.X) < 4 && Math.Abs(delta.Y) < 4) return;
         var press = _assetPress;
-        if (_pressedDataAsset is { } entry)
+        var moveEntry = _pressedMoveEntry;
+        var movePath = moveEntry?.FullPath;
+        // Project pane moves share the drag with scene attaches: drop targets pick the payload they understand.
+        using var transfer = new DataTransfer();
+        var hasPayload = false;
+        var hasMove = false;
+        if (!string.IsNullOrEmpty(movePath) && (File.Exists(movePath) || Directory.Exists(movePath)))
         {
-            _pressedDataAsset = null;
-            _assetPress = null;
+            transfer.Add(DataTransferItem.Create(ProjectPathFormat, movePath));
+            hasPayload = true;
+            hasMove = true;
+        }
+        if (_pressedDataAsset is { FullPath: not null } dataEntry && _project is not null)
+        {
             RefreshReferenceAssets();
             var assets = _editScene.Current.DataAssets;
-            var relative = Path.GetRelativePath(_project!.RootDirectory, entry.FullPath!).Replace('\\', '/');
+            var relative = Path.GetRelativePath(_project.RootDirectory, dataEntry.FullPath).Replace('\\', '/');
             var id = assets.Ids.FirstOrDefault(id => assets.DisplayName(id) == relative);
-            if (id == Guid.Empty) return;
-            using var transfer = new DataTransfer();
-            transfer.Add(DataTransferItem.Create(DataAssetIdFormat, id.ToString("D")));
-            await DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Copy);
-            return;
+            if (id != Guid.Empty)
+            {
+                transfer.Add(DataTransferItem.Create(DataAssetIdFormat, id.ToString("D")));
+                hasPayload = true;
+            }
         }
         if (_pressedImage is { FullPath: not null } imageEntry)
         {
-            _pressedImage = null;
-            _assetPress = null;
             RefreshProjectAssets();
             var image = _projectAssets.Images.Values.FirstOrDefault(candidate => SamePath(candidate.FullPath, imageEntry.FullPath));
-            if (image is null)
+            if (image is not null)
             {
-                SetFileStatus("The image has no valid project asset registration.", true);
-                return;
+                transfer.Add(DataTransferItem.Create(ImageIdFormat, image.Id.ToString("D")));
+                hasPayload = true;
             }
-            using var imageTransfer = new DataTransfer();
-            imageTransfer.Add(DataTransferItem.Create(ImageIdFormat, image.Id.ToString("D")));
-            await DragDrop.DoDragDropAsync(press, imageTransfer, DragDropEffects.Copy);
-            return;
         }
         if (_pressedPrefab is { FullPath: not null } prefabEntry)
         {
-            _pressedPrefab = null;
-            _assetPress = null;
-            using var prefabTransfer = CreatePrefabTransfer(prefabEntry.FullPath);
-            await DragDrop.DoDragDropAsync(press, prefabTransfer, DragDropEffects.Copy);
-            return;
+            transfer.Add(DataTransferItem.Create(PrefabPathFormat, Path.GetFullPath(prefabEntry.FullPath)));
+            hasPayload = true;
         }
-        var types = _dragTypes!;
+        if (_dragTypes is { Count: > 0 } types)
+        {
+            transfer.Add(DataTransferItem.Create(ComponentTypesFormat, types));
+            if (types.Count == 1)
+                transfer.Add(DataTransferItem.Create(ComponentFormat, types[0]));
+            hasPayload = true;
+        }
         _assetPress = null;
         _dragTypes = null;
-        using var data = new DataTransfer();
-        data.Add(DataTransferItem.Create(ComponentTypesFormat, types));
-        if (types.Count == 1)
-            data.Add(DataTransferItem.Create(ComponentFormat, types[0]));
-        await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy);
+        _pressedDataAsset = null;
+        _pressedPrefab = null;
+        _pressedImage = null;
+        _pressedMoveEntry = null;
+        if (!hasPayload) return;
+        var effects = hasMove
+            ? DragDropEffects.Move | DragDropEffects.Copy
+            : DragDropEffects.Copy;
+        await DragDrop.DoDragDropAsync(press, transfer, effects);
     }
 
     private SceneObject? DropTarget(object? sender, DragEventArgs e) =>
