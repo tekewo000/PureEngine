@@ -113,26 +113,43 @@ public partial class MainWindow
             target = root;
             return true;
         }
-        List<object> matches = [];
+        List<object> direct = [];
+        foreach (var component in root.Components)
+        {
+            if (declaredType.IsAssignableFrom(component.GetType()))
+                direct.Add(component);
+        }
+        if (direct.Count == 1)
+        {
+            target = direct[0];
+            return true;
+        }
+        if (direct.Count > 1)
+        {
+            error = $"Multiple {declaredType.Name} candidates on the dragged object.";
+            return false;
+        }
+        List<object> descendants = [];
         var pending = new Stack<SceneObject>();
-        pending.Push(root);
+        foreach (var child in root.Children)
+            pending.Push(child);
         while (pending.Count > 0)
         {
             var current = pending.Pop();
             foreach (var component in current.Components)
             {
                 if (declaredType.IsAssignableFrom(component.GetType()))
-                    matches.Add(component);
+                    descendants.Add(component);
             }
             foreach (var child in current.Children)
                 pending.Push(child);
         }
-        if (matches.Count == 1)
+        if (descendants.Count == 1)
         {
-            target = matches[0];
+            target = descendants[0];
             return true;
         }
-        error = matches.Count == 0
+        error = descendants.Count == 0
             ? $"No {declaredType.Name} in the dragged object subtree."
             : $"Multiple {declaredType.Name} candidates in the dragged object subtree.";
         return false;
