@@ -39,6 +39,54 @@ public static class SceneReferenceTypes
     public static bool ContainsReference(Type type, ComponentRegistry registry) =>
         ContainsReferenceCore(type, registry, []);
 
+    /// <summary>
+    /// Whether the type holds a reference that cannot live inside a data asset file: SceneObject or
+    /// data asset references, including inside containers and nested values. Registered plain component
+    /// types count as nested values here because asset files own their data and have no scene to point at.
+    /// </summary>
+    public static bool ContainsAssetExternalReference(Type type, ComponentRegistry registry) =>
+        ContainsAssetExternalReferenceCore(type, registry, []);
+
+    private static bool ContainsAssetExternalReferenceCore(Type type, ComponentRegistry registry, HashSet<Type> chain)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(registry);
+        if (IsSceneObjectReference(type))
+            return true;
+        if (DataAssetStore.IsAssetType(type))
+            return true;
+        var underlying = Nullable.GetUnderlyingType(type);
+        if (underlying is not null)
+            return ContainsAssetExternalReferenceCore(underlying, registry, chain);
+        if (type.IsArray)
+            return type.GetArrayRank() == 1 && ContainsAssetExternalReferenceCore(type.GetElementType()!, registry, chain);
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+            return ContainsAssetExternalReferenceCore(type.GetGenericArguments()[0], registry, chain);
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+        {
+            var args = type.GetGenericArguments();
+            return args[0] == typeof(string) && ContainsAssetExternalReferenceCore(args[1], registry, chain);
+        }
+        if (!IsCustomShape(type))
+            return false;
+        if (!chain.Add(type))
+            return false;
+        try
+        {
+            foreach (var member in ComponentSchema.GetInspectorMembers(type))
+            {
+                var memberType = member is FieldInfo field ? field.FieldType : ((PropertyInfo)member).PropertyType;
+                if (ContainsAssetExternalReferenceCore(memberType, registry, chain))
+                    return true;
+            }
+            return false;
+        }
+        finally
+        {
+            chain.Remove(type);
+        }
+    }
+
     private static bool ContainsReferenceCore(Type type, ComponentRegistry registry, HashSet<Type> chain)
     {
         if (IsSingleReference(type, registry))

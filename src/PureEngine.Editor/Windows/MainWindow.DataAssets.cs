@@ -45,10 +45,12 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Routes an Inspector edit to the asset file or the scene by instance ownership.</summary>
+    /// <summary>Routes an Inspector edit to the asset table, the asset file, or the scene by instance ownership.</summary>
     private void MarkEdited(object? owner)
     {
-        if (owner is not null && _assetEdit is not null && _assetOwned.Contains(owner))
+        if (owner is not null && _tableOwned.Contains(owner))
+            MarkTableRowDirty(owner);
+        else if (owner is not null && _assetEdit is not null && _assetOwned.Contains(owner))
             MarkDataAssetChanged();
         else
             MarkSceneChanged();
@@ -113,9 +115,9 @@ public partial class MainWindow
             return;
         }
         _assetEdit = new DataAssetEditState(Path.GetFullPath(path), instance, id, typeId) { Dirty = membersChanged };
+        DetachInvalidFields(ComponentEditors);
         ComponentEditors.Children.Clear();
         NameError.IsVisible = false;
-        _invalidFields.Clear();
         SelectSceneObject(null, focus: false);
         _explorerSelectedFile = _assetEdit.Path;
         RefreshAssetOwned();
@@ -159,8 +161,8 @@ public partial class MainWindow
         ToolTip.SetTip(DataAssetType, state.Instance.GetType().FullName);
         SaveDataAssetButton.IsEnabled = state.Dirty && !IsPlaying;
         DataAssetError.IsVisible = false;
+        DetachInvalidFields(DataAssetEditors);
         DataAssetEditors.Children.Clear();
-        _invalidFields.Clear();
         var members = ComponentSchema.GetInspectorMembers(state.Instance.GetType());
         foreach (var member in members)
         {
@@ -265,7 +267,7 @@ public partial class MainWindow
     {
         _assetEdit = null;
         _assetOwned.Clear();
-        _invalidFields.Clear();
+        DetachInvalidFields(DataAssetEditors);
         DataAssetEditors.Children.Clear();
         DataAssetInspector.IsVisible = false;
         RefreshObjectInspector();

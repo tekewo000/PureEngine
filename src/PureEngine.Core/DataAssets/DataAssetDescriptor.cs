@@ -47,7 +47,7 @@ public sealed record DataAssetDescriptor(Type Type, string TypeId, string MenuPa
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
         {
             var memberType = member is FieldInfo field ? field.FieldType : ((PropertyInfo)member).PropertyType;
-            if (!SceneReferenceTypes.ContainsReference(memberType, registry)) continue;
+            if (!SceneReferenceTypes.ContainsAssetExternalReference(memberType, registry)) continue;
             error = $"{type.FullName}.{member.Name}: scene references cannot be stored in data assets.";
             return false;
         }
