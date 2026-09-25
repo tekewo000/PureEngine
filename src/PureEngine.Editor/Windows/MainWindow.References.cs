@@ -163,8 +163,10 @@ public partial class MainWindow
     private static bool IsSourceWithin(Visual? source, Control boundary) =>
         source is not null && source.GetSelfAndVisualAncestors().Contains(boundary);
 
-    private void AttachEditorDropHandlers(Control row, Control editor)
+    private void AttachEditorDropHandlers(Grid row, Control editor)
     {
+        if (editor.Tag is ReferenceDropRegistration or ImageDropRegistration)
+            row.SetCurrentValue(Panel.BackgroundProperty, Brushes.Transparent);
         switch (editor.Tag)
         {
             case ReferenceDropRegistration reference:

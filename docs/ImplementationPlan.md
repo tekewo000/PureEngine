@@ -39,10 +39,13 @@
 設計上の仕様は [EngineArchitecture.md](EngineArchitecture.md)、操作方法・起動手順は [README.md](../README.md) を参照する。
 実装済み・自動検証済み・実画面確認済みは区別する。2026-09-21、ライフサイクルの仕様整理とCoreの最小実行機構を完了。2026-09-22、Priorityの保持・Inspector・保存・実行順と、ゲーム用コンストラクタ注入（Coreのfactory、Game登録、編集・Play接続、PlaySession）を完了。2026-09-21、EditorのPlay／Stopボタン接続を完了。2026-09-23、共通ログAPIとEditorのConsole・Play接続を完了。2026-09-22、アーキテクチャ改善A1（プロジェクト側のサービス登録）を完了。2026-09-23、下記のUI5項目（Component検索・追加から保存・Cloneまで）を実装し、自動検証を通過した。2026-09-23、V4前半のScene View編集操作（グリッド・パン／ズーム・選択・XY移動Gizmo・F表示）を実装・レビュー修正し、自動検証と実GPUチェックを通過した。実画面は表示を確認済み。2026-09-23、Stuffsの親子ツリー表示とドラッグ＆ドロップの子付け・並べ替えを実装し、自動検証を通過した。Stuffsの主要なドラッグ操作・折りたたみ・改名は実画面でも確認済み。青線とホバー待機の目視、実画面での保存往復、今回の差分のCIは未確認として区別する。2026-09-23、Buttonに先立つ描画順の共通基盤（`RendererComponent.Order`）を実装し、自動検証を通過した。実画面・実GPU・CIは未確認として区別する。2026-09-23、Game表示とButton操作（Game描画・`core.button`・`IUiButtonHandler`・Game入力・更新境界ディスパッチ）を実装し、自動検証を通過した。実画面・実GPU・CIは未確認として区別する。今回はGame表示とButton操作までとし、V3〜V5全体の完了とは区別する。2026-09-23、Transformのみの親のGizmo表示と子の配置追従を修正し、自動検証を通過した。実画面・実GPU・CIは未確認として区別する。
 
-## Inspector参照欄へのD&D拡張（2026-09-25実装）
+## 次に着手する作業
+
+### Inspector参照欄へのD&D拡張（2026-09-25実装）
 
 - SceneObject／登録Componentの参照欄を、ComboBoxだけでなく欄全体の行で受け付ける。Stuffsの行は従来どおり同じSceneのIDを解決し、Prefabファイルは選択中オブジェクトの子として複製してからRootまたは型一致Componentを一意に選んで割り当てる。DataAssetは型一致時だけ既存のID経路で割り当てる。
 - Projectの画像ファイルを`Sprite`欄へドラッグできる経路を追加し、登録済みImage IDをそのまま設定する。SceneObject、Component、DataAsset、PrefabのDragOver／Drop、型不一致・複数候補・Play中拒否、参照欄の行全体へのDropをEditor Checksで確認する。
+- 参照欄とSprite欄の行に透明な背景を設定し、ラベルと入力欄の間の余白もヒットテスト対象にする。Editor Checksの画像DropはSprite未設定からの割り当てを検証する。余白への実画面Dropは未確認。
 - Prefab参照は既存のコピーのみ仕様に従い、Prefabアセットへのライブリンクや永続化的Prefab参照は追加しない。SceneObjectdropは複製Root、Component dropは複製サブツリー内の唯一の型一致Componentを割り当てる。実画面の手動D&DとCIは未確認として区別する。
 
 

@@ -154,6 +154,10 @@ internal static class UiImageEditorChecks
             Dispatcher.UIThread.RunJobs();
             Check(image.Sprite is not null && image.Sprite.ImageId == imported.Id,
                 "Sprite selection must set the formal image ID.");
+            combo.SelectedItem = combo.Items.Cast<object>().First(option => option.ToString() == "None");
+            Dispatcher.UIThread.RunJobs();
+            Check(image.Sprite is null, "Clear the Sprite before testing image D&D assignment.");
+            combo = SpriteCombo(editor);
             var imageFormat = (DataFormat<string>)typeof(MainWindow).GetField("ImageIdFormat",
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
             using (var dragData = new DataTransfer())
