@@ -11,6 +11,8 @@ public sealed class ProjectSession : IDisposable
     public ProjectComponents Components { get; }
     public Scene Scene { get; }
     internal bool SceneNeedsSave { get; private init; }
+    /// <summary>Duration of the compilation that opened the project. Null when no compilation ran.</summary>
+    internal TimeSpan? InitialCompileElapsed { get; private init; }
     public GameSession EditServices { get; }
     private bool _disposed;
     private bool _ownershipTransferred;
@@ -47,6 +49,7 @@ public sealed class ProjectSession : IDisposable
         ProjectCodeWorkspace.Ensure(project);
         var cache = new UserCodeIncrementalCompiler(project.RootDirectory);
         UserCodeCompileResult compiled;
+        var timer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             compiled = cache.CompileProject();
@@ -56,7 +59,7 @@ public sealed class ProjectSession : IDisposable
             try { cache.Dispose(); } catch { }
             throw;
         }
-        return Prepare(project, compiled, cache);
+        return Prepare(project, compiled, cache, timer.Elapsed);
     }
 
     public static async Task<ProjectSession> OpenAsync(string manifestPath,
@@ -75,7 +78,7 @@ public sealed class ProjectSession : IDisposable
         try
         {
             // Keep the caller's context: constructors and scene restoration run on the UI thread.
-            return Prepare(project, attempt.Result ?? throw new InvalidOperationException("Compilation returned no result."), cache);
+            return Prepare(project, attempt.Result ?? throw new InvalidOperationException("Compilation returned no result."), cache, attempt.Elapsed);
         }
         catch
         {
@@ -87,7 +90,7 @@ public sealed class ProjectSession : IDisposable
         }
     }
 
-    private static ProjectSession Prepare(ProjectFile project, UserCodeCompileResult compiled, UserCodeIncrementalCompiler? userCodeCache)
+    private static ProjectSession Prepare(ProjectFile project, UserCodeCompileResult compiled, UserCodeIncrementalCompiler? userCodeCache, TimeSpan? compileElapsed = null)
     {
         var components = new ProjectComponents();
         Scene? scene = null;
@@ -121,7 +124,11 @@ public sealed class ProjectSession : IDisposable
                         .Select(UserCodeCompiler.FormatDiagnostic)), error);
             }
             components.Adopt(compiled.Success ? compiled : null);
-            var session = new ProjectSession(project, components, scene, services, userCodeCache) { SceneNeedsSave = membersChanged };
+            var session = new ProjectSession(project, components, scene, services, userCodeCache)
+            {
+                SceneNeedsSave = membersChanged,
+                InitialCompileElapsed = compileElapsed,
+            };
             userCodeCache = null;
             return session;
         }
