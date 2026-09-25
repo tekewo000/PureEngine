@@ -2,6 +2,7 @@ using System.Numerics;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -37,6 +38,14 @@ static class InspectorValueEditorChecks
         {
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
+        }
+        static ColorView PickerFor(MainWindow window, string previewName)
+        {
+            var swatch = window.GetVisualDescendants().OfType<Border>()
+                .Single(border => Equals(border.GetValue(AutomationProperties.NameProperty) as string, previewName));
+            if (FlyoutBase.GetAttachedFlyout(swatch) is not Flyout attached || attached.Content is not ColorView picker)
+                throw new Exception($"Color picker must be attached to {previewName}.");
+            return picker;
         }
 
         var sceneObjects = Control<TreeView>(editor, "SceneObjects");
@@ -99,47 +108,43 @@ static class InspectorValueEditorChecks
         Check(positionY.Text == "2", $"Esc must restore last valid vector component, got '{positionY.Text}'.");
         Check(!errorBadge.IsVisible, "Esc must clear the vector error.");
 
-        // Color editing reaches the scene, shows a preview, and validates channels.
-        var tintR = Box(editor, $"{nameof(InspectorValueProbe)}.Tint.R");
-        Check(tintR.Text == "1", $"Initial Tint.R must be 1, got '{tintR.Text}'.");
-        Check(AxisBadge(tintR)?.Text == "R", "Color channel must carry its channel badge.");
-        tintR.Text = "0.25";
-        Dispatcher.UIThread.RunJobs();
-        Check(MathF.Abs(probe.Tint.R - 0.25f) < 1e-6f, "Color edit did not reach the scene.");
-        var tintG = Box(editor, $"{nameof(InspectorValueProbe)}.Tint.G");
-        tintG.Text = "abc";
-        Dispatcher.UIThread.RunJobs();
-        Check(errorBadge.IsVisible, "Invalid color input must show an error badge.");
-        Check(MathF.Abs(probe.Tint.G - 0.5f) < 1e-6f, "Invalid color input must not change the scene.");
-        tintG.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
-        Dispatcher.UIThread.RunJobs();
-        Check(tintG.Text == "0.5", $"Esc must restore last valid color channel, got '{tintG.Text}'.");
-        Check(!errorBadge.IsVisible, "Esc must clear the color error.");
+        // Member colors edit through the Spectrum/Palette/Sliders picker; the preview is the entry point.
         var preview = editor.GetVisualDescendants().OfType<Border>().Single(border =>
             Equals(border.GetValue(AutomationProperties.NameProperty), $"{nameof(InspectorValueProbe)}.Tint.Preview"));
-        Check((preview.Background as Avalonia.Media.SolidColorBrush)?.Color == Avalonia.Media.Color.FromArgb(255, 64, 128, 64),
-            "Color preview must reflect edited RGBA without rewriting channels.");
         Check((ToolTip.GetTip(preview) as string)?.Contains("Spectrum") == true,
             "Color preview must advertise the Spectrum/Palette/Sliders picker.");
-        Box(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.A").Text = "NaN";
+        var picker = PickerFor(editor, $"{nameof(InspectorValueProbe)}.Tint.Preview");
+        Check(Equals(picker.GetValue(AutomationProperties.NameProperty), $"{nameof(InspectorValueProbe)}.Tint.Picker"), "Color picker must carry its automation name.");
+        Check(picker.IsColorSpectrumVisible && picker.IsColorPaletteVisible && picker.IsColorComponentsVisible,
+            "Color picker must show Spectrum, Palette, and Sliders.");
+        Check(picker.IsHexInputVisible && picker.IsAlphaEnabled,
+            "Color picker must offer hex input and alpha.");
+        picker.Color = Avalonia.Media.Color.FromArgb(255, 64, 128, 64);
         Dispatcher.UIThread.RunJobs();
-        Check(errorBadge.IsVisible, "Invalid nullable Color must block saving.");
+        Check(MathF.Abs(probe.Tint.R - 64f / 255f) < 1e-6f && MathF.Abs(probe.Tint.G - 128f / 255f) < 1e-6f
+            && MathF.Abs(probe.Tint.B - 64f / 255f) < 1e-6f && MathF.Abs(probe.Tint.A - 1f) < 1e-6f,
+            $"Picker selection did not reach the scene, got {probe.Tint}.");
+        Check((preview.Background as Avalonia.Media.SolidColorBrush)?.Color == Avalonia.Media.Color.FromArgb(255, 64, 128, 64),
+            "Color preview must reflect the picked color.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Null"));
         Dispatcher.UIThread.RunJobs();
         Check(probe.MaybeTint is null, "Nullable Color Set Null must clear the member.");
-        Check(!errorBadge.IsVisible, "Set Null must clear errors from hidden Color fields.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Create"));
         Dispatcher.UIThread.RunJobs();
         Check(probe.MaybeTint == Color.White, "Nullable Color Create must assign white.");
+        var maybePicker = PickerFor(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Preview");
+        maybePicker.Color = Avalonia.Media.Color.FromArgb(255, 32, 64, 96);
+        Dispatcher.UIThread.RunJobs();
+        Check(probe.MaybeTint == new Color(32f / 255f, 64f / 255f, 96f / 255f, 1f),
+            $"Nullable picker selection did not reach the scene, got {probe.MaybeTint}.");
         var swatchR = Box(editor, $"{nameof(InspectorValueProbe)}.Swatches[0].R");
         swatchR.Text = "0";
         Dispatcher.UIThread.RunJobs();
         Check(probe.Swatches[0].R == 0f, "Color list element edit did not reach the scene.");
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Add"));
         Check(probe.Swatches[1] == Color.White, "New color elements must start white.");
-        Check(!editor.GetVisualDescendants().OfType<Button>().Any(button =>
-            Equals(button.GetValue(AutomationProperties.NameProperty) as string, $"{nameof(InspectorValueProbe)}.Swatches.Clear")),
-            "List headers must not carry a Clear button; rows remove individually.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Clear"));
+        Check(probe.Swatches.Count == 0, "List Clear must remove all rows and keep the list.");
         Box(editor, $"{nameof(InspectorValueProbe)}.Palette.Value[0].A").Text = "0.25";
         Box(editor, $"{nameof(InspectorValueProbe)}.Colors[0].B").Text = "0.5";
         Dispatcher.UIThread.RunJobs();
@@ -199,6 +204,8 @@ static class InspectorValueEditorChecks
         Click(countsToggle);
         Dispatcher.UIThread.RunJobs();
         Check(valueBox.IsEffectivelyVisible, "Expanded dictionary must show entries again.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Counts.Clear"));
+        Check(probe.Counts.Count == 0, "Dictionary Clear must remove all entries and keep the dictionary.");
 
         // Transform member is a reference slot: None -> select scene Transform -> Clear.
         var targetCombo = Combo(editor, $"{nameof(InspectorValueProbe)}.Target");
