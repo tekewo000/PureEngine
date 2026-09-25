@@ -70,9 +70,15 @@ static class ReferenceEditorChecks
         var tip = ToolTip.GetTip(combo) as string;
         Check(tip is not null && tip.Contains("RefTarget", StringComparison.Ordinal) && tip.Contains(targetButtonId.ToString("D"), StringComparison.Ordinal),
             $"Reference tooltip must show the target name and ID, got '{tip}'.");
-        var clearContent = ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear").Content as PathIcon;
+        var clearButton = ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear");
+        var clearContent = clearButton.Content as PathIcon;
         Check(clearContent is not null && ReferenceEquals(clearContent.Data, Application.Current?.FindResource("Icon.DismissCircle")),
             "Reference clear must be an inline remove button.");
+        Check(clearButton.Classes.Contains("dismissButton"), "Reference clear must use the round dismiss button style.");
+        Check(clearButton.Width == clearButton.Height && clearButton.Width > 0
+            && clearButton.CornerRadius.TopLeft == clearButton.Width / 2 && clearButton.CornerRadius.TopRight == clearButton.Width / 2
+            && clearButton.CornerRadius.BottomLeft == clearButton.Width / 2 && clearButton.CornerRadius.BottomRight == clearButton.Width / 2,
+            "Dismiss buttons must be circular, not square buttons with a circle glyph.");
 
         Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));
         Check(holder.Target is null, "Reference Clear must null the member.");
@@ -168,7 +174,14 @@ static class ReferenceEditorChecks
             "Missing must display as Missing, not None.");
         Check(editor.Title!.StartsWith("* "), "Deletion must mark dirty.");
 
-        Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Remove[0]"));
+        var nestedRemove = ButtonByName(editor, $"{nameof(TestRefHolder)}.Config.Buttons.Remove[0]");
+        Check(nestedRemove.Classes.Contains("dismissButton") && nestedRemove.Content is PathIcon nestedRemoveIcon
+            && ReferenceEquals(nestedRemoveIcon.Data, Application.Current?.FindResource("Icon.DismissCircle")),
+            "Collection row remove must use the round dismiss button.");
+        Check(nestedRemove.Width == nestedRemove.Height && nestedRemove.Width > 0
+            && nestedRemove.CornerRadius.TopLeft == nestedRemove.Width / 2,
+            "Collection row remove must be circular.");
+        Click(nestedRemove);
         Check(holder.Config.Buttons.Count == 1
             && scene.References.TryGetMissing(holderComponentId, "Config.Buttons[0]", out var nestedMissing) && nestedMissing == targetButtonId
             && !scene.References.TryGetMissing(holderComponentId, "Config.Buttons[1]", out _), "Removing a nested list row must move its retained ID.");

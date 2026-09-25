@@ -421,6 +421,36 @@
       <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
       <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
+    <Style Selector="Button.dismissButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Width" Value="26" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="13" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.dismissButton:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="Button.dismissButton:pressed">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.dismissButton:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Button.dismissButton:focus-visible">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
+    </Style>
     <Style Selector="Border.unsupportedBadge">
       <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
