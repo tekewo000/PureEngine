@@ -8,12 +8,14 @@ public sealed record UserCodeCompileTicket(long Generation, string ProjectRoot);
 
 /// <summary>
 /// Completion state of a single background compilation. Used to decide adoption and release; holds no scene or UI.
+/// Elapsed measures the wall-clock time from request to completion, including queue waits and skipped inputs.
 /// </summary>
 public sealed record UserCodeCompileAttempt(
     UserCodeCompileTicket Ticket,
     UserCodeCompileResult? Result,
     bool Superseded,
-    bool Canceled);
+    bool Canceled,
+    TimeSpan Elapsed);
 
 /// <summary>
 /// Runs only source reading and compilation in the background.
@@ -112,21 +114,22 @@ public sealed class UserCodeCompileTracker : IDisposable
         UserCodeCompileTicket ticket, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ticket);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
         lock (_sync)
         {
             if (_disposed || ticket.Generation != _latest
                 || !string.Equals(ticket.ProjectRoot, ProjectRoot, StringComparison.Ordinal))
-                return new UserCodeCompileAttempt(ticket, null, Superseded: true, Canceled: false);
+                return new UserCodeCompileAttempt(ticket, null, Superseded: true, Canceled: false, Elapsed: timer.Elapsed);
         }
         if (cancellationToken.IsCancellationRequested)
-            return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true);
+            return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true, Elapsed: timer.Elapsed);
         try
         {
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true);
+            return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true, Elapsed: timer.Elapsed);
         }
         Func<string, CancellationToken, Task<UserCodeCompileResult>>? custom;
         UserCodeIncrementalCompiler? cache;
@@ -137,12 +140,12 @@ public sealed class UserCodeCompileTracker : IDisposable
                 || !string.Equals(ticket.ProjectRoot, ProjectRoot, StringComparison.Ordinal))
             {
                 _gate.Release();
-                return new UserCodeCompileAttempt(ticket, null, Superseded: true, Canceled: false);
+                return new UserCodeCompileAttempt(ticket, null, Superseded: true, Canceled: false, Elapsed: timer.Elapsed);
             }
             if (cancellationToken.IsCancellationRequested)
             {
                 _gate.Release();
-                return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true);
+                return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true, Elapsed: timer.Elapsed);
             }
             custom = _customCompile;
             cache = _cache;
@@ -154,11 +157,11 @@ public sealed class UserCodeCompileTracker : IDisposable
             // Run the whole func on a pool thread without waiting for the caller (UI) continuation.
             var result = await Task.Run(() => RunCompileAsync(ProjectRoot, custom, cache, running.Token), running.Token)
                 .ConfigureAwait(false);
-            return new UserCodeCompileAttempt(ticket, result, Superseded: false, Canceled: false);
+            return new UserCodeCompileAttempt(ticket, result, Superseded: false, Canceled: false, Elapsed: timer.Elapsed);
         }
         catch (OperationCanceledException)
         {
-            return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true);
+            return new UserCodeCompileAttempt(ticket, null, Superseded: false, Canceled: true, Elapsed: timer.Elapsed);
         }
         finally
         {

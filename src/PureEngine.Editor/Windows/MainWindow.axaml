@@ -230,12 +230,6 @@
       <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
       <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
-    <Style Selector="TabControl.editorTabs:focus-within">
-      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
-    </Style>
-    <Style Selector="TabControl.editorTabs:focus-within TabItem.paneTab:selected">
-      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
-    </Style>
     <Style Selector="TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -893,14 +887,12 @@
       </Border>
     </Grid>
     <Border Grid.Row="2" Background="{StaticResource EditorSurfaceBrush}" BorderBrush="{StaticResource EditorBorderBrush}" BorderThickness="0,1,0,0" Padding="10,0">
-      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
         <TextBlock x:Name="FileStatus" Classes="muted" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" AutomationProperties.Name="Scene file status" />
         <Rectangle Grid.Column="1" Classes="columnDivider" />
-        <TextBlock Grid.Column="2" x:Name="SelectionStatus" Classes="muted" VerticalAlignment="Center"
-                   TextTrimming="CharacterEllipsis" AutomationProperties.Name="Selection status" />
-        <TextBlock Grid.Column="3" x:Name="SceneZoomStatus" Classes="muted" VerticalAlignment="Center"
-                   AutomationProperties.Name="Scene zoom status" />
+        <TextBlock Grid.Column="2" x:Name="CompileStatus" Classes="muted" VerticalAlignment="Center"
+                   AutomationProperties.Name="Compile status" />
       </Grid>
     </Border>
   </Grid>

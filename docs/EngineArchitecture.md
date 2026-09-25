@@ -652,7 +652,7 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 - ベース `#1A1C20`、ペイン面 `#23262C`、カード `#2E333B`、入力欄 `#333842`、枠線 `#3A3F47`、文字は `#E8EAED` / `#B8BDC5` / `#7D848F` の3段。
 - 構造アクセントは紫 `#8B7CF6` に1色化する。Playボタン・Startupピル・フォーカス枠・選択背景（ウォッシュ `#2E2A4A`）に使う。Info／Warning／Errorは青 `#7AB5F0`／黄 `#E0B45A`／赤 `#E06A5A`。
 - タブ文字は左揃え。すべてのペインで同じタブ表現を使う。
-- 枠線は1px。フォーカス中だけアクセント紫、それ以外は枠線色。
+- ペインの枠線は1pxで常に枠線色とし、フォーカス中もアクセント紫に変えない。
 - タブにはホバーによる色変化を付けない。
 - 操作部品の角丸は4、カード・タイル・ピルは6に統一する。ダークでは効かないドロップシャドウは付けない。
 - アイコンは `src/PureEngine.Editor/Resources/Icons.axaml` に集約し、各画面は `PathIcon` + `StaticResource` で参照する（インラインの `Path Data` や文字グリフ `▶■✕🗑` を置かない）。図形は Fluent UI System Icons（MIT）の Filled・20px 系に統一し、由来とライセンスは同ファイルのコメントに残す（C# 文書のみ 16px）。色は構造アクセント紫と文字色の範囲に収め、アイコンごとの多色化はしない。一括 Clear には `Icon.Delete`、List・Dictionary の追加には `Icon.AddSquare` を使う。折りたたみトグルは `Icon.TriangleDown`（展開時）／`Icon.TriangleRight`（折りたたみ時）、ツリー（Stuff・Project）の展開矢印は `Icon.ChevronRight`（折りたたみ時）／`Icon.ChevronDown`（展開時）を使う。
