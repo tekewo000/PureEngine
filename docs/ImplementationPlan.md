@@ -433,6 +433,17 @@ Stuffsをフラットな一覧から親子のツリー表示へ変え、行の�
 - 実画面確認：Windowsの一時シーンを使い、Computer Useのマウスドラッグで親の中央への子付け、展開中の親の上端／下端への前後移動、余白へのルート化を確認。折りたたみとInspectorでの日本語改名の即時反映も確認。青線の描画プロパティ・500ms継続ホバーはHeadless検証で、ドラッグ途中の青線・待機時間の目視と実画面での保存往復は未確認。
 - CI：今回の未コミット差分に対しては未実行。ローカルでGitHub Actionsと同じ`-Check`を通過したことと区別する。
 
+### Stuffsの複数選択・複製・削除（2026-09-25）
+
+StuffsのTreeViewを`Multiple`にし、Ctrl＋クリック／Shift＋クリックで複数選択できるようにした。単純クリックのpress抑制・release選択と参照D&D中のInspector維持は維持し、Ctrl／Shift押下だけTreeViewへ素通しする。Inspector・追加の親・Prefab配置・Scene View連動は先頭選択（`SelectedItem`）を使い、削除・複製だけ全選択で動作する。右クリックは選択内なら維持し、選択外・余白は単一選択／解除する。
+
+- 複製は右クリック→「Duplicate」またはCtrl+D。選択中の最上位だけを対象にし、各行の子孫ごと`PrefabSerializer`のCapture／Instantiateでfresh IDへ複製する。内部参照は複製先へ付け替え、外部参照は維持し、Prefabリンクは元のまま引き継ぐ。配置は元の直後へ移動し、複製分を選択する。Prefab Editorのルートは複製できない。Play中は拒否する。
+- 削除は右クリック→「Delete」またはDeleteキー。選択中の最上位だけを対象にし、子孫は親とまとめて削除する。Prefab Editorのルートは除外し、除外があればステータスで案内する。削除後は兄弟内の次の生存対象へ選択を移す。Play中は拒否する。
+- ローカル品質：`./tools/code-quality.ps1 -Check`は終了コード0でPASS。提案レベル診断・警告をエラー扱いにしたビルドの警告／エラー0、Core／Editorチェック通過。
+- Editor追加（`StuffsMultiChecks`）：`Multiple`設定・Duplicateメニュー・表示順の複数選択・再構築後の選択維持・メニュー有効化、2件複製の件数・直後配置・fresh ID・複製選択・dirty、複製分のまとめ削除と兄弟への選択移動、親子同時選択の単一化、Ctrl+DとDeleteキーの実経路を確認。
+- 実画面確認：未実施。HeadlessのキーイベントとTreeView操作で確認し、実ウィンドウでのCtrl／Shift＋クリックとCtrl+D・Deleteの手触りは未確認。
+- CI：今回の未コミット差分に対しては未実行。ローカルでGitHub Actionsと同じ`-Check`を通過したことと区別する。
+
 ### V4前半のScene View編集操作（2026-09-23）
 
 画像を表示 → グリッドを基準にパン／ズーム → 画像クリックで選択 → Gizmoで移動 → Inspectorと表示が一致 → 保存・再Openで位置を再現する一連を、既存のTransform＋UiElement＋UiLayoutと描画・保存処理の再利用で接続した。データ・計算はXYZを維持し、GizmoはX・Y・XYの移動だけとする。LocalPosition.Zを変更・初期化せず、Zハンドル・3D視点回転・透視投影・Zによる描画順変更は実装しない。専用RectTransform、Camera Component、別の親子構造は作っていない。サイズ変更・回転Gizmo、複数選択、スナップ、汎用Undo／Redo、Button操作、InputFieldは今回含めない。namespaceは変更していない。
