@@ -61,6 +61,26 @@ public sealed class DrawList : IDisposable
     public void Rectangle(Vector2 size, Matrix3x2 transform, Vector4 color, Vector4 clip) =>
         Quad(size, new SKRect(1.5f, 1.5f, 1.5f, 1.5f), transform, color, clip);
 
+    /// <summary>Solid-color triangle for overlay arrowheads. Uses the shared white atlas pixel.</summary>
+    public void Triangle(Vector2 a, Vector2 b, Vector2 c, Vector4 color, Vector4 clip)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!float.IsFinite(a.X + a.Y + b.X + b.Y + c.X + c.Y + color.X + color.Y + color.Z + color.W + clip.X + clip.Y + clip.Z + clip.W))
+            throw new ArgumentException("Draw coordinates must be finite.");
+        if (clip.Z <= clip.X || clip.W <= clip.Y)
+            return;
+        var area = ((b.X - a.X) * (c.Y - a.Y)) - ((b.Y - a.Y) * (c.X - a.X));
+        if (!float.IsFinite(area) || area == 0)
+            return;
+        if (_vertices.Count + 3 > MaxVertices)
+            throw new InvalidOperationException("Draw vertex limit exceeded.");
+        color = Vector4.Clamp(color, Vector4.Zero, Vector4.One);
+        var uv = new Vector2(1.5f, 1.5f) / AtlasSize;
+        _vertices.Add(new(a, uv, color, clip));
+        _vertices.Add(new(b, uv, color, clip));
+        _vertices.Add(new(c, uv, color, clip));
+    }
+
     public void Image(string key, ReadOnlySpan<byte> encodedImage, Vector2 size, Matrix3x2 transform, Vector4 color, Vector4 clip)
         => Quad(size, GetImageRegion("image:" + key, encodedImage, null), transform, color, clip);
 
