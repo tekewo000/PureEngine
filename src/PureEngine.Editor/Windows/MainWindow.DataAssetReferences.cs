@@ -33,6 +33,7 @@ public partial class MainWindow
         _pressedDataAsset = null;
         _pressedPrefab = null;
         _pressedImage = null;
+        _pressedMoveEntry = null;
         _assetPress = null;
         if (e.InitialPressMouseButton != MouseButton.Left) return;
         if (entry is not null)

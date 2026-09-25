@@ -82,6 +82,31 @@ static class ProjectImportChecks
             Reject(() => ProjectFileImporter.CopyStreamIntoAsync(broken, target, "broken.txt").GetAwaiter().GetResult(),
                 "Stream failures must propagate.");
             Check(!File.Exists(Path.Combine(target, "broken.txt")), "Failed stream copies must remove partial files.");
+
+            // Internal moves within the Project pane.
+            var moveSource = Path.Combine(outside, "move.txt");
+            File.WriteAllText(moveSource, "move");
+            var moveTarget = Path.Combine(target, "MoveTarget");
+            Directory.CreateDirectory(moveTarget);
+            var moved = ProjectFileImporter.MoveFileInto(moveSource, moveTarget);
+            Check(File.ReadAllText(moved) == "move" && !File.Exists(moveSource), "File move must relocate bytes.");
+            var sameFolderMove = ProjectFileImporter.MoveFileInto(moved, moveTarget);
+            Check(sameFolderMove == Path.GetFullPath(moved), "Moving a file onto its own folder must be a no-op.");
+            File.WriteAllText(moveSource, "move");
+            var movedCollision = ProjectFileImporter.MoveFileInto(moveSource, moveTarget);
+            Check(movedCollision.EndsWith("move (2).txt", StringComparison.Ordinal) && File.Exists(movedCollision), "Move collisions must be numbered.");
+            var moveDirSource = Path.Combine(outside, "MoveFolder");
+            Directory.CreateDirectory(Path.Combine(moveDirSource, "Sub"));
+            File.WriteAllText(Path.Combine(moveDirSource, "root.txt"), "root");
+            File.WriteAllText(Path.Combine(moveDirSource, "Sub", "nested.txt"), "nested");
+            var movedDir = ProjectFileImporter.MoveDirectoryInto(moveDirSource, moveTarget);
+            Check(File.ReadAllText(Path.Combine(movedDir, "root.txt")) == "root"
+                && File.ReadAllText(Path.Combine(movedDir, "Sub", "nested.txt")) == "nested"
+                && !Directory.Exists(moveDirSource), "Directory move must be recursive.");
+            var sameParentMove = ProjectFileImporter.MoveDirectoryInto(movedDir, moveTarget);
+            Check(sameParentMove == Path.GetFullPath(movedDir), "Moving a folder onto its own parent must be a no-op.");
+            Reject(() => ProjectFileImporter.MoveDirectoryInto(moveTarget, Path.Combine(moveTarget, "Child")), "Moving a folder into itself was accepted.");
+            Reject(() => ProjectFileImporter.MoveFileInto(Path.Combine(outside, "missing.txt"), moveTarget), "Missing move source was accepted.");
         }
         finally
         {

@@ -239,7 +239,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 | --- | --- | --- |
 | Launcher | Project新規作成、既存Projectを開く、最近開いたProject、Editorからの復帰 | [LauncherWindow](../src/PureEngine.Editor/Windows/LauncherWindow.axaml.cs)、[ProjectSession](../src/PureEngine.Editor/Projects/ProjectSession.cs) |
 | Project | manifest、複数シーン、起動シーン指定、相対パス、Projectフォルダの移動 | [ProjectFile](../src/PureEngine.Editor/Projects/ProjectFile.cs)、[ProjectDocument](../src/PureEngine.Core/Projects/ProjectDocument.cs) |
-| Project Explorer | フォルダツリーとファイル一覧、シーンを開く、作成・改名・削除・更新、名前指定で空のsealedクラスを作るCreate C#。組み込みComponents一覧は表示しない | [MainWindow.ProjectExplorer](../src/PureEngine.Editor/Windows/MainWindow.ProjectExplorer.cs) |
+| Project Explorer | フォルダツリーとファイル一覧、シーンを開く、作成・改名・削除・更新、D&D移動、名前指定で空のsealedクラスを作るCreate C#。組み込みComponents一覧は表示しない | [MainWindow.ProjectExplorer](../src/PureEngine.Editor/Windows/MainWindow.ProjectExplorer.cs)、[MainWindow.ProjectDrop](../src/PureEngine.Editor/Windows/MainWindow.ProjectDrop.cs) |
 | Editorの配置 | 左がScene View／Game、中央がStuffs、右がInspector、下部がProject／Console。ペインのサイズ変更 | [MainWindow.axaml](../src/PureEngine.Editor/Windows/MainWindow.axaml) |
 | シーンとオブジェクト | ID・名前、追加・選択・名前変更・削除。Stuffsは親子のツリー表示、ドラッグ＆ドロップの子付け・前後並べ替え・ルート化、選択中への子追加 | [Scenes](../src/PureEngine.Core/Scenes/Scene.cs)、[StuffsHierarchy](../src/PureEngine.Editor/Editing/StuffsHierarchy.cs)、[MainWindow.Hierarchy](../src/PureEngine.Editor/Windows/MainWindow.Hierarchy.cs) |
 | クラスのアタッチ | 普通のC#インスタンスをAttach／GetComponentで扱う。同じ型の重複を拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs) |
