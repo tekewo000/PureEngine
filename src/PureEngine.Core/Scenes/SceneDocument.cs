@@ -13,6 +13,7 @@ public sealed class SceneObjectDocument
     public string? Name { get; set; }
     public Guid? ParentId { get; set; }
     public int? SiblingIndex { get; set; }
+    public Guid? PrefabId { get; set; }
     public List<ComponentDocument>? Components { get; set; }
 }
 

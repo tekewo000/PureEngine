@@ -19,6 +19,7 @@ public enum ComponentLifecycle
 public sealed class SceneObject : INotifyPropertyChanged
 {
     private string _name;
+    private Guid? _prefabId;
     private readonly List<object> _components = [];
     private readonly Dictionary<object, Priorities> _priorities = [with(ReferenceEqualityComparer.Instance)];
     private readonly Dictionary<object, Guid> _componentIds = [with(ReferenceEqualityComparer.Instance)];
@@ -41,6 +42,18 @@ public sealed class SceneObject : INotifyPropertyChanged
     public Guid Id { get; }
     /// <summary>Display name edited in the Editor.</summary>
     public string Name => _name;
+    /// <summary>Source prefab file ID for display. Copy-only: placement duplicates content without live links or overrides.</summary>
+    public Guid? PrefabId
+    {
+        get => _prefabId;
+        set
+        {
+            if (value == Guid.Empty) throw new ArgumentException("Prefab ID must not be empty.", nameof(value));
+            if (_prefabId == value) return;
+            _prefabId = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PrefabId)));
+        }
+    }
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public SceneObject? Parent { get; private set; } = null;

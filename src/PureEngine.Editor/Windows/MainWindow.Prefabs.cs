@@ -65,7 +65,10 @@ public partial class MainWindow
         _project.ValidatePrefabPath(path);
         if (File.Exists(path) || Directory.Exists(path))
             throw new IOException("A folder or file with the same name already exists.");
-        PrefabFile.Create(path, _editScene.Current, root, _components.Registry);
+        var prefabId = PrefabFile.Create(path, _editScene.Current, root, _components.Registry);
+        root.PrefabId = prefabId;
+        MarkSceneChanged();
+        RefreshHierarchy();
         _explorerFolder = relativeDirectory;
         _explorerSelectedFile = path;
         RefreshProjectExplorer();

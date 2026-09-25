@@ -68,6 +68,16 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>Builds Stuffs nodes with prefab icons. Prefab editor roots show the prefab icon even for files saved before origin markers.</summary>
+    private ObservableCollection<HierarchyNode> BuildHierarchyRoots()
+    {
+        var roots = StuffsHierarchy.Build(_editScene.Current);
+        if (IsPrefabEditing)
+            foreach (var root in roots)
+                root.IsPrefab = true;
+        return roots;
+    }
+
     /// <summary>Rebuilds the Stuffs tree from scene parent-child links. Preserves expansion and selection by ID.</summary>
     internal void RefreshHierarchy(Guid? keepSelectedId = null, Guid? expandId = null)
     {
@@ -79,7 +89,7 @@ public partial class MainWindow
             var expanded = new HashSet<Guid>();
             foreach (var node in EnumerateHierarchyNodes())
                 if (node.IsExpanded) expanded.Add(node.Ref.Id);
-            _hierarchyRoots = StuffsHierarchy.Build(_editScene.Current);
+            _hierarchyRoots = BuildHierarchyRoots();
             foreach (var node in EnumerateHierarchyNodes())
                 if (expanded.Contains(node.Ref.Id)) node.IsExpanded = true;
             SceneObjects.ItemsSource = _hierarchyRoots;

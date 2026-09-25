@@ -69,6 +69,7 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
                 Name = item.Name,
                 ParentId = parentId,
                 SiblingIndex = siblingIndex,
+                PrefabId = item.PrefabId,
                 Components = [],
             };
             foreach (var component in item.Components)
@@ -144,7 +145,10 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
                     throw new InvalidDataException($"{saved.Name}: version 1 must not contain parentId or siblingIndex.");
                 if (document.Version is 2 or 3 && saved.SiblingIndex is null)
                     throw new InvalidDataException($"{saved.Name}: version {document.Version} requires siblingIndex.");
-                _ = scene.RestoreObject(saved.Id, saved.Name);
+                if (saved.PrefabId == Guid.Empty)
+                    throw new InvalidDataException($"{saved.Name}: prefab ID must not be empty.");
+                var restoredItem = scene.RestoreObject(saved.Id, saved.Name);
+                restoredItem.PrefabId = saved.PrefabId;
             }
             RestoreParentLinks(document, scene);
             var objectsById = scene.Objects.ToDictionary(item => item.Id);

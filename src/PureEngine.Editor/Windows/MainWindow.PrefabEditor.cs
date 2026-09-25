@@ -159,7 +159,7 @@ public partial class MainWindow
             _hierarchyRefreshing = true;
             try
             {
-                _hierarchyRoots = StuffsHierarchy.Build(_editScene.Current);
+                _hierarchyRoots = BuildHierarchyRoots();
                 foreach (var node in EnumerateHierarchyNodes())
                     node.IsExpanded = next.Expanded.Contains(node.Ref.Id);
                 SceneObjects.ItemsSource = _hierarchyRoots;

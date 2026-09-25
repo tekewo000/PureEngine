@@ -8,10 +8,27 @@ namespace PureEngine.Editor;
 public sealed class HierarchyNode(SceneObject item) : INotifyPropertyChanged
 {
     private bool _isExpanded;
+    private bool _isPrefab;
 
     public SceneObject Ref { get; } = item ?? throw new ArgumentNullException(nameof(item));
 
     public ObservableCollection<HierarchyNode> Children { get; } = [];
+
+    /// <summary>Whether the row represents a prefab source or a placed prefab root. Drives the Stuffs icon.</summary>
+    public bool IsPrefab
+    {
+        get => _isPrefab;
+        set
+        {
+            if (_isPrefab == value) return;
+            _isPrefab = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPrefab)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSceneObject)));
+        }
+    }
+
+    /// <summary>Whether the row represents an ordinary scene object. The negation of <see cref="IsPrefab"/> for XAML visibility.</summary>
+    public bool IsSceneObject => !_isPrefab;
 
     public bool IsExpanded
     {
@@ -131,7 +148,7 @@ public static class StuffsHierarchy
 
     private static HierarchyNode BuildNode(SceneObject item)
     {
-        var node = new HierarchyNode(item);
+        var node = new HierarchyNode(item) { IsPrefab = item.PrefabId.HasValue };
         foreach (var child in item.Children)
             node.Children.Add(BuildNode(child));
         return node;
