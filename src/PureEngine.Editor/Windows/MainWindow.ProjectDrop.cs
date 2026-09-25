@@ -88,6 +88,10 @@ public partial class MainWindow
             var moveRelative = ResolveMoveTargetFolder(sender, e);
             e.DragEffects = CanDropProjectPath(sourceFull, moveRelative) ? DragDropEffects.Move : DragDropEffects.None;
         }
+        else if (e.DataTransfer.Contains(SceneObjectIdFormat))
+        {
+            e.DragEffects = CanDropSceneObjectForPrefab(e) ? DragDropEffects.Copy : DragDropEffects.None;
+        }
         else if (!e.DataTransfer.Formats.Contains(DataFormat.File))
         {
             e.DragEffects = DragDropEffects.None;
@@ -97,6 +101,15 @@ public partial class MainWindow
             e.DragEffects = DragDropEffects.Copy;
         }
         e.Handled = true;
+    }
+
+    /// <summary>Lightweight hover check for Stuff-to-Project prefab creation. Full validation runs on drop.</summary>
+    private bool CanDropSceneObjectForPrefab(DragEventArgs e)
+    {
+        if (_project is null || IsPlaying || IsFileBusy) return false;
+        if (e.DataTransfer.TryGetValue(SceneObjectIdFormat) is not { } text) return false;
+        if (!Guid.TryParse(text, out var id)) return false;
+        return FindObject(id) is not null;
     }
 
     /// <summary>Lightweight hover check for internal moves. Full validation (scene containment scan, open editors) runs on drop.</summary>
@@ -153,6 +166,17 @@ public partial class MainWindow
         {
             var moveTarget = ResolveMoveTargetFolder(sender, e);
             await RunFileOperation(() => MoveProjectEntryAsync(sourceFull, moveTarget));
+            return;
+        }
+        if (e.DataTransfer.TryGetValue(SceneObjectIdFormat) is { } idText
+            && Guid.TryParse(idText, out var draggedId))
+        {
+            var prefabTarget = ResolveProjectDropFolder(sender, e);
+            await RunFileOperation(() =>
+            {
+                CreatePrefabFromDrop(draggedId, prefabTarget);
+                return Task.CompletedTask;
+            });
             return;
         }
         IStorageItem[] items = [.. e.DataTransfer.TryGetFiles() ?? []];

@@ -220,5 +220,115 @@
     <Style Selector="ComboBox:disabled">
       <Setter Property="Opacity" Value="0.55" />
     </Style>
+    <!-- Inspector ColorPicker: align the Fluent ColorView with Editor surfaces and accent. Visual-only. -->
+    <Style Selector="ColorView">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="ColorView /template/ Border#TabBackgroundBorder">
+      <Setter Property="Background" Value="{StaticResource EditorSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="CornerRadius" Value="6,6,0,0" />
+    </Style>
+    <Style Selector="ColorView /template/ Border#ContentBackgroundBorder">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0,0,6,6" />
+    </Style>
+    <Style Selector="ColorView TabItem">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem:selected">
+      <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="ColorView TabItem:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem:pressed /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem:selected:pressed /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem /template/ Border#PART_SelectedPipe">
+      <Setter Property="Background" Value="{StaticResource EditorAccentBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem PathIcon">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem:pointerover PathIcon">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ColorView TabItem:selected PathIcon">
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="ColorView TextBox">
+      <Setter Property="Background" Value="{StaticResource EditorFieldBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+      <Setter Property="CaretBrush" Value="#FFFFFF" />
+      <Setter Property="SelectionBrush" Value="{StaticResource EditorAccentBrush}" />
+      <Setter Property="SelectionForegroundBrush" Value="#1A1C20" />
+    </Style>
+    <Style Selector="ColorView TextBox:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ColorView TextBox:focus">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
+    </Style>
+    <Style Selector="ColorView NumericUpDown">
+      <Setter Property="Background" Value="{StaticResource EditorFieldBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ColorView NumericUpDown:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ColorView NumericUpDown:focus-within">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
+    </Style>
+    <Style Selector="ColorView RadioButton /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource EditorFieldBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="ColorView RadioButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ColorView RadioButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="ColorView RadioButton:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentHoverBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="ColorView RadioButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ColorView ListBox">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ColorView ColorPreviewer">
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
   </Application.Styles>
 </Application>
