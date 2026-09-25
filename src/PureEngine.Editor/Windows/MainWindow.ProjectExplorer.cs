@@ -63,7 +63,7 @@ public sealed record ProjectExplorerEntry(
         && FullPath is not null && ProjectAssets.IsSupportedImage(FullPath);
 
     public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
-        && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
+        && ExternalEditor.IsCSharpFile(FullPath);
 
     public bool IsPlainFile => !IsFolder && !IsScene && !IsDataAsset && !IsPrefab && !IsImageFile && !IsCSharpFile;
 
@@ -298,7 +298,8 @@ public partial class MainWindow
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var hasProject = _project is not null;
         FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset }
-            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
+            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying
+            || entry is { IsCSharpFile: true };
         FilesPlaceMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
@@ -335,6 +336,11 @@ public partial class MainWindow
             await OpenPrefabEditorAsync(entry.FullPath);
             return;
         }
+        if (entry.IsCSharpFile && entry.FullPath is not null)
+        {
+            OpenCSharpInZed(entry.FullPath);
+            return;
+        }
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
@@ -359,6 +365,19 @@ public partial class MainWindow
             try { await OpenScenePathAsync(entry.FullPath); }
             finally { RefreshProjectExplorer(); }
         });
+    }
+
+    /// <summary>Opens a C# file in Zed without blocking scene switching or Play.</summary>
+    private void OpenCSharpInZed(string fullPath)
+    {
+        if (ExternalEditor.TryOpenCSharpInZed(fullPath, out var error))
+        {
+            SetFileStatus($"Opened in Zed: {Path.GetFileName(fullPath)}");
+            return;
+        }
+        var message = error ?? "Could not open in Zed.";
+        SetFileStatus(message, true);
+        Log.Engine.Warning(message);
     }
 
     /// <summary>Destination folder for creation. Uses the right-pane folder row when selected, otherwise the Tree selection.</summary>
@@ -502,6 +521,7 @@ public partial class MainWindow
             _explorerFolder = folder;
             _explorerSelectedFile = path;
             RefreshProjectExplorer();
+            RescanTableRows();
             SetFileStatus($"Created data asset: {folder}/{name}");
             await Task.CompletedTask;
         });
@@ -514,6 +534,7 @@ public partial class MainWindow
         RefreshProjectAssets();
         RefreshProjectExplorer();
         RefreshComponents();
+        if (await ConfirmTableRowsClose(closeOnConfirm: false)) RescanTableRows();
         SetFileStatus(_project is null ? "No project is open." : $"Refreshed: {_project.Document.Name}");
         await Task.CompletedTask;
     });
@@ -572,6 +593,7 @@ public partial class MainWindow
             else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
             if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
+            if (ContainsOpenTable(oldFull!) && !await ConfirmCloseTableRows()) return;
             if (ContainsOpenPrefab(oldFull!, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
@@ -586,6 +608,7 @@ public partial class MainWindow
                 _explorerSelectedFile = newFull;
             }
             RefreshProjectExplorer();
+            RescanTableRows();
             SetFileStatus($"Renamed to: {name}");
         });
 
@@ -609,6 +632,7 @@ public partial class MainWindow
             else return;
 
             if (ContainsOpenDataAsset(target) && !await ConfirmCloseDataAsset()) return;
+            if (ContainsOpenTable(target) && !await ConfirmCloseTableRows()) return;
             var startup = _project.StartupScenePath;
             var targetRelative = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))
@@ -646,6 +670,7 @@ public partial class MainWindow
                 _explorerSelectedFile = null;
             }
             RefreshProjectExplorer();
+            RescanTableRows();
             SetFileStatus($"Deleted: {display}");
         });
 

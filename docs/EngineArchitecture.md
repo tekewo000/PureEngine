@@ -111,7 +111,7 @@ UnityのScriptableObjectに当たる、継承なしの普通のクラスで作�
 
 - `[DataAsset]` を付けたpublic・非abstract・非ジェネリックのクラスが対象。作成メニューに出すためpublicな引数なしコンストラクターが必要。`[DataAsset("Items/Weapon")]` の引数でメニューの場所を指定でき、省略時は型名になる。判定とメニュー表記の正本はCoreの `DataAssetDescriptor`。
 - 保存形式は `.pure.asset.yaml`（version: 1、ID、typeId、values）。アセットIDとファイルパスはエンジン側の管理情報とし、ユーザーのクラスに持たせない。読み書きの正本はCoreの `DataAssetSerializer`。
-- 値の変換はシーンと同じ `[Inspector]` 規則（`InspectorValueTypes`）を使い、旧名解決・不明項目の無視・ membersChanged 報告も同じにする。`SceneObject` や登録Componentへの参照はシーン側の所有とし、データアセットには保存できない。
+- 値の変換はシーンと同じ `[Inspector]` 規則（`InspectorValueTypes`）を使い、旧名解決・不明項目の無視・ membersChanged 報告も同じにする。アセットが所有する値の判定は `SceneReferenceTypes.ContainsAssetExternalReference` が正本で、`SceneObject` とデータアセット型への参照だけを拒否する。登録済みの普通のクラスや `Transform` はシーンでは参照だが、アセット内では入れ子の値として保存する（YAML形式はシーンの入れ子と同じ写像で版は上げない）。
 - 作成メニューはProjectペインの Create Data Asset（型のメニューパス順、フォルダ階層付き）。使えない型は黙って隠さず理由を表示する。新規アセットの初期値はコンストラクターと初期化子の値を使う。実行中は読み取り用として扱い、メモリ上の変更をファイルへ自動で書き戻さない。
 - Inspector編集はシーンと同じ行エディターを流用する。編集の dirty 振り分けは `MarkEdited` がインスタンスの所有（アセット到達集合か）で決め、シーン側の操作は従来の `MarkSceneChanged` のままにする。参照系エディターは所有IDを持たないため非対応表示になり、保存時にも拒否する。未保存はシーンと別管理で、選択切替・シーン切替・終了時に保存確認を出す。C#再反映時は反映前のYAMLを新旧の型IDで付け替える。
 - 実行中の読み込みはCoreの `DataAssetStore`（ID・型引き、フォルダ走査と診断）。プロジェクトを開く・C#を反映する・Playするたびにスナップショットを作り直し、編集用と各Play実行で共有しない。ゲーム側はコンストラクタ注入で受け取る。
@@ -119,6 +119,7 @@ UnityのScriptableObjectに当たる、継承なしの普通のクラスで作�
 - Component内の属性付きメンバーが `[DataAsset]` 型なら、入れ子の値でもシーンComponent参照でもなく、プロジェクトのアセット参照として扱う。専用の公開ラッパーは要求しない。単体・配列・List・stringキーDictionary・入れ子メンバーは既存の参照Codec経由で `{ref: asset-id}` を保存し、Sceneのスナップショットから通常のC#インスタンスを解決する。同じスナップショット内では共有し、Clone・Playでは分離する。Missingは既存のSceneReferenceStoreでIDを保持する。
 - Editorは型の一致するアセットを候補に出し、同じ型のシーン上のインスタンスを候補に混ぜない。ファイルD&Dは専用のIDペイロードを使い、押下ではなくクリック完了時にアセットのInspectorへ移る。候補更新では保存済みアセットを再走査する。重複IDはどちらも解決せず診断する。SceneObject／登録Componentの参照欄はStuffs行、型一致Prefab、DataAssetの専用payloadを同じ行Drop経路で受け付け、Prefabは非実行テンプレートのRootまたは一意なComponentを割り当て、Hierarchyには追加しない。
 - 今回の接続範囲は **Component → DataAsset**。DataAsset内から別のDataAssetやSceneを参照する保存は未対応のまま。既存のDataAsset編集と同様に、Playで使う値は明示的に保存した値であり、実行中の変更は書き戻さない。
+- 一覧編集（実装済み）：`ViewportTabs` のGame横に `DataAssetEditor` タブを置き、型セレクターで同型の全アセットを行に並べる。行=1ファイル、列=`[Inspector]` 順。セルは単体Inspectorの行エディターを流用し、スカラーは直接、`List`・`Dictionary`・入れ子単体は箱＋内スクロールで編集する（箱内のAdd／削除・Create／Set Nullは単体と同じ）。行高は既定固定＋下辺ドラッグの一時伸縮で、ファイルには保存しない。表全体で1つのdirtyとして一括保存し、入力エラー・Play中は全体を止める。型切替・終了時は保存確認を出す。C#再反映は行インスタンスを新旧の型IDで付け替え、列は新Typeで組み直す。
 
 ### Prefabs
 
@@ -352,7 +353,7 @@ components:
 - `ProjectDocument` はCoreの保存用データ。version（現在1）、name、startupScene（相対パス）を持つ。
 - Editorの `ProjectFile` がProjectの作成・読み込み・シーンの列挙・起動シーンの変更を扱う。シーン一覧自体は保存せず、Scenesフォルダから取得する。
 - Launcherで新規Projectを作り、空のMainシーンで開始する。作成途中は一時フォルダに書き込み、完成後に新しいProjectフォルダとして配置する。既存の同名フォルダは上書きしない。
-- Projectを開くと起動シーンを編集対象にする。Project Explorerの右ペインでシーンファイルをダブルクリックまたはEnterで切り替える。
+- Projectを開くと起動シーンを編集対象にする。Project Explorerの右ペインでシーンファイルをダブルクリックまたはEnterで切り替える。C#ファイルのダブルクリック／Enter／OpenはZedでそのファイルを開く。Play中も開ける。`zed` コマンドが見つからない場合はステータスとConsoleに理由を表示する。
 - 底ペインのProject Explorerは左にフォルダTree、右に中身を出す。Assets／Scenesタブは廃止し、Projectルートの下には実在するフォルダとファイルだけを表示する。組み込みサンプルの仮想Components一覧は表示しない。自作C#は元のフォルダ内のファイルからアタッチする。
 - 右クリック（またはF2・Delete・Enter）でフォルダ作成・シーン作成・改名・削除・起動シーン設定・更新ができる。シーン作成はScenes配下のみ。Scenesフォルダ自体の改名・削除は不可。
 - 改名・削除では編集中シーンと起動シーンの参照を付け替える。起動シーンと編集中シーン（を含むフォルダ）は削除できず、改名時はScenes外への脱出を拒否する。

@@ -64,7 +64,7 @@ public partial class MainWindow
         viewportSize = SceneViewportSize();
         return SceneViewMath.IsValidViewport(viewportSize)
             && SceneViewMath.IsValidView(_scenePan, _sceneZoom)
-            && ViewportTabs.SelectedIndex is 0 or 2
+            && ViewportTabs.SelectedIndex is SceneViewportIndex or PrefabViewportIndex
             && SceneViewport.IsEffectivelyVisible;
     }
 
@@ -330,7 +330,7 @@ public partial class MainWindow
     {
         if (IsSceneDragging || !SceneViewport.IsKeyboardFocusWithin || e.Key != Key.F || e.KeyModifiers != KeyModifiers.None)
             return;
-        if (ViewportTabs.SelectedIndex is not (0 or 2) || !SceneViewport.IsEffectivelyVisible)
+        if (ViewportTabs.SelectedIndex is not (SceneViewportIndex or PrefabViewportIndex) || !SceneViewport.IsEffectivelyVisible)
             return;
         if (GetSelectedSceneObject() is not SceneObject target)
             return;

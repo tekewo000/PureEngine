@@ -64,6 +64,7 @@ public partial class MainWindow : Window
             RefreshProjectAssets();
             // Rebuild before showing the window; the initial Inspector used the placeholder asset index.
             RefreshComponents();
+            RefreshDataAssetTableTypes();
             if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
             StartUserCodeWatching();
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
         InitProjectDrop();
         InitPlayControls();
         InitConsole();
+        RefreshDataAssetTableTypes();
         var viewport = new PureEngine.Rendering.Avalonia.VulkanViewport();
         viewport.RenderingFailed += error => Log.Engine.Error(error);
         ConnectPreviewViewport(viewport);
@@ -307,8 +309,8 @@ public partial class MainWindow : Window
 
     private void RefreshComponents()
     {
+        DetachInvalidFields(ComponentEditors);
         ComponentEditors.Children.Clear();
-        _invalidFields.Clear();
         if (_assetEdit is not null && GetSelectedSceneObject() is null)
         {
             AttachedClasses.IsVisible = false;
@@ -331,6 +333,13 @@ public partial class MainWindow : Window
             ComponentEditors.Children.Add(BuildComponentCard(item, component));
     }
 
+    /// <summary>Detaches input errors owned by a rebuilt container. Other containers keep their errors and dirty state.</summary>
+    private void DetachInvalidFields(Control root)
+    {
+        foreach (var box in root.GetVisualDescendants().OfType<TextBox>().ToArray())
+            _invalidFields.Remove(box);
+    }
+
     private void UpdateErrorBadge()
     {
         ComponentsError.IsVisible = _invalidFields.Count > 0;
@@ -343,6 +352,7 @@ public partial class MainWindow : Window
         ToolTip.SetTip(DataAssetInvalid, _invalidFields.Count > 0
             ? $"{_invalidFields.Count} field(s) have invalid input — fix the highlighted fields to save."
             : null);
+        UpdateDataAssetTableChrome();
     }
 
     /// <summary>Collapse toggle colors. The glyph always carries the structural accent; collapsed state adds a wash fill.</summary>
@@ -699,7 +709,7 @@ public partial class MainWindow : Window
         var memberType = GetMemberType(member);
         automationName ??= $"{component.GetType().Name}.{member.Name}";
 
-        if (ShouldShowReferenceEditor(memberType))
+        if (ShouldShowReferenceEditorFor(memberType, component))
             return BuildMemberReferenceEditor(component, member, automationName);
         if ((memberType.IsArray || memberType.IsGenericType)
             && SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
@@ -851,7 +861,8 @@ public partial class MainWindow : Window
     private void MarkInvalid(TextBox box, string? message, string? validTip = null)
     {
         if (!box.GetVisualAncestors().Contains(ComponentEditors)
-            && !box.GetVisualAncestors().Contains(DataAssetEditors)) return;
+            && !box.GetVisualAncestors().Contains(DataAssetEditors)
+            && !box.GetVisualAncestors().Contains(DataAssetTableRows)) return;
         if (message is null)
         {
             box.ClearValue(TextBox.BorderBrushProperty);

@@ -41,7 +41,7 @@ public sealed class DataAssetSerializer(ComponentRegistry registry)
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
         {
             var memberType = MemberType(member);
-            if (SceneReferenceTypes.ContainsReference(memberType, registry))
+            if (SceneReferenceTypes.ContainsAssetExternalReference(memberType, registry))
                 throw new InvalidDataException($"{descriptor.TypeId}.{member.Name}: scene references cannot be stored in data assets.");
             InspectorValueTypes.ValidateType(memberType);
             var value = member is FieldInfo field ? field.GetValue(asset) : ((PropertyInfo)member).GetValue(asset);
@@ -96,7 +96,7 @@ public sealed class DataAssetSerializer(ComponentRegistry registry)
         foreach (var member in ComponentSchema.GetInspectorMembers(type))
         {
             var memberType = MemberType(member);
-            if (SceneReferenceTypes.ContainsReference(memberType, registry))
+            if (SceneReferenceTypes.ContainsAssetExternalReference(memberType, registry))
                 throw new InvalidDataException($"{document.TypeId}.{member.Name}: scene references cannot be stored in data assets.");
             InspectorValueTypes.ValidateType(memberType);
             if (!values.TryGetValue(member, out var raw))

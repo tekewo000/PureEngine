@@ -51,7 +51,17 @@ internal static class Program
         ComponentSearchChecks.Run();
         EditPreviewChecks.Run();
         ProjectExplorerIconChecks.Run();
+        ExternalEditorChecks.Run();
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PureEngine-LauncherChecks-" + Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(root);
+        if (args.Contains("--table-only"))
+        {
+            AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions())
+                .SetupWithClassicDesktopLifetime([]);
+            using var desktop = (ClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+            DataAssetTableChecks.Run(root);
+            return;
+        }
         Directory.CreateDirectory(root);
         try
         {
@@ -87,6 +97,7 @@ internal static class Program
             IntegratedArchitectureChecks.Run(root);
             ProjectAssetChecks.Run(root);
             DataAssetEditorChecks.Run(root);
+            DataAssetTableChecks.Run(root);
             DirectAssetEditorChecks.Run(root);
             DataAssetMenuChecks.Run(root);
             PrefabEditorChecks.Run(root);

@@ -269,11 +269,13 @@ public partial class MainWindow
             }
         }
         if (!EditorOperationGate.NeedsUnsavedConfirmation(
-            _sceneDocument.IsDirty || _prefabScene is { IsDirty: true } || _assetEdit is { Dirty: true }, HasInputErrors)) return;
+            _sceneDocument.IsDirty || _prefabScene is { IsDirty: true } || _assetEdit is { Dirty: true } || IsDataAssetTableDirty, HasInputErrors)) return;
         e.Cancel = true;
         await RunFileOperation(async () =>
         {
             // Do not discard any document until every confirmation accepts closing the window.
+            if (!await ConfirmTableRowsClose(closeOnConfirm: false)) return;
+            if (!await ConfirmCloseDataAsset()) return;
             if (!await ConfirmDataAssetClose(closeOnConfirm: false)) return;
             if (!await ConfirmPrefabEditorClose(closeOnConfirm: false)) return;
             if (!await ConfirmUnsavedChanges()) return;
@@ -288,7 +290,9 @@ public partial class MainWindow
         if (e.Key == Key.S)
         {
             e.Handled = true;
-            if (_assetEdit is not null && GetSelectedSceneObject() is null)
+            if (ViewportTabs.SelectedIndex == DataAssetTableViewportIndex && _tableType is not null)
+                await RunFileOperation(SaveDataAssetTableAsync);
+            else if (_assetEdit is not null && GetSelectedSceneObject() is null)
                 await RunFileOperation(SaveDataAssetAsync);
             else
                 await RunFileOperation(async () => await SaveSceneAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)));
