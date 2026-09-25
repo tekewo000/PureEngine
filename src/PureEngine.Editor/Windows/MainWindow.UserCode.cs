@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
@@ -9,7 +10,23 @@ public partial class MainWindow
     private UserCodeWatcher? _userCodeWatcher;
     private UserCodeCompileTracker? _compileTracker;
     private UserCodeCompileAttempt? _pendingCompilation;
+    private TimeSpan? _lastCompileElapsed;
     internal Task ReloadTask { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Right-hand status segment showing the last user-code compilation time.</summary>
+    private void UpdateCompileStatus()
+    {
+        var text = _lastCompileElapsed is { } elapsed ? $"Compile: {elapsed.TotalSeconds:0.00}s" : "Compile: —";
+        CompileStatus.Text = text;
+        ToolTip.SetTip(CompileStatus, text);
+    }
+
+    /// <summary>Overwrites the last compilation time for headless verification.</summary>
+    internal void SetCompileStatusForTest(TimeSpan elapsed)
+    {
+        _lastCompileElapsed = elapsed;
+        UpdateCompileStatus();
+    }
 
     private void StartUserCodeWatching(UserCodeIncrementalCompiler? userCodeCache = null)
     {
@@ -66,6 +83,8 @@ public partial class MainWindow
     {
         var tracker = _compileTracker;
         if (tracker is null) return Task.CompletedTask;
+        CompileStatus.Text = "Compiling...";
+        ToolTip.SetTip(CompileStatus, "Compiling...");
         var ticket = tracker.Request();
         return ReloadTask = CompileAndQueue(tracker, ticket);
     }
@@ -78,6 +97,8 @@ public partial class MainWindow
             attempt = await tracker.CompileAsync(ticket);
             if (!ReferenceEquals(tracker, _compileTracker) || !tracker.IsCurrent(ticket)
                 || attempt.Canceled || attempt.Superseded) return;
+            _lastCompileElapsed = attempt.Elapsed;
+            UpdateCompileStatus();
             if (attempt.Result?.Unchanged == true) return;
             UserCodeCompileTracker.Release(_pendingCompilation?.Result);
             _pendingCompilation = attempt;
@@ -90,6 +111,7 @@ public partial class MainWindow
             {
                 Log.Engine.Error("Cannot apply C# changes. Keeping the previous state.", error);
                 SetFileStatus(error.GetBaseException().Message, true);
+                UpdateCompileStatus();
             }
         }
         finally { UserCodeCompileTracker.Release(attempt?.Result); }

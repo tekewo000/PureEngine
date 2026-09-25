@@ -30,21 +30,22 @@ static class EditorChromeChecks
         {
             var sceneTab = editor.FindControl<TabItem>("SceneViewTab")!;
             var placeholder = editor.FindControl<TextBlock>("GamePlaceholder")!;
-            var selection = editor.FindControl<TextBlock>("SelectionStatus")!;
-            var zoom = editor.FindControl<TextBlock>("SceneZoomStatus")!;
+            var compile = editor.FindControl<TextBlock>("CompileStatus")!;
             Check(Equals(sceneTab.Header, "Scene View"), "A clean scene must show a plain Scene View tab.");
             Check(placeholder.IsVisible, "The Game tab must explain itself before Play.");
-            Check(selection.Text == "No selection", "The status bar must show the empty selection.");
-            Check(zoom.Text == "Scene View: 100%", "The status bar must show the initial zoom.");
+            Check(compile.Text == "Compile: —", "The status bar must show that no compilation has run yet.");
 
             var menu = editor.FindControl<Grid>("SceneSurface")!.ContextMenu!;
             Click(menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Add Empty")));
             Check(Equals(sceneTab.Header, "Scene View *"), "The Scene tab must carry the same unsaved marker as the title.");
-            Check(selection.Text == "Selected: Empty", "The status bar must follow the Stuffs selection.");
+            Check(compile.Text == "Compile: —", "Selection changes must not touch the compile status.");
+
+            typeof(MainWindow).GetMethod("SetCompileStatusForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(editor, [TimeSpan.FromSeconds(1.23)]);
+            Check(compile.Text == "Compile: 1.23s", "The status bar must show the last compilation time.");
 
             typeof(MainWindow).GetField("_sceneZoom", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(editor, 1.5f);
-            typeof(MainWindow).GetMethod("UpdateStatusBarSegments", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Check(zoom.Text == "Scene View: 150%", "The status bar must follow the Scene View zoom.");
+            Check(compile.Text == "Compile: 1.23s", "Scene View zoom changes must not touch the compile status.");
 
             var ui = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "UI"));
             Click(ui.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Image")));
@@ -64,6 +65,6 @@ static class EditorChromeChecks
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
-        Console.WriteLine("PASS: Editor chrome status segments, dirty tab marker, Game placeholder, and numeric field face.");
+        Console.WriteLine("PASS: Editor chrome compile status, dirty tab marker, Game placeholder, and numeric field face.");
     }
 }
