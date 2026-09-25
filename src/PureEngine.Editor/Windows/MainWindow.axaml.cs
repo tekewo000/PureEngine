@@ -54,6 +54,7 @@ public partial class MainWindow : Window
         var placeholder = _components;
         _components = session.Components;
         session.TransferOwnership();
+        var userCodeCache = session.TakeUserCodeCache();
         try { placeholder.Dispose(); } catch { }
         try
         {
@@ -67,10 +68,15 @@ public partial class MainWindow : Window
             RefreshDataAssetTableTypes();
             if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
-            StartUserCodeWatching();
+            StartUserCodeWatching(userCodeCache);
+            userCodeCache = null;
         }
         catch (Exception error)
         {
+            if (userCodeCache is not null)
+            {
+                try { userCodeCache.Dispose(); } catch { }
+            }
             try { CloseEditSession(); }
             catch (Exception cleanup) { throw new AggregateException(error, cleanup); }
             throw;

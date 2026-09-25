@@ -11,11 +11,29 @@ public partial class MainWindow
     private UserCodeCompileAttempt? _pendingCompilation;
     internal Task ReloadTask { get; private set; } = Task.CompletedTask;
 
-    private void StartUserCodeWatching()
+    private void StartUserCodeWatching(UserCodeIncrementalCompiler? userCodeCache = null)
     {
         StopUserCodeWatching();
-        if (_project is null) return;
-        _compileTracker = new UserCodeCompileTracker(_project.RootDirectory);
+        if (_project is null)
+        {
+            if (userCodeCache is not null)
+            {
+                try { userCodeCache.Dispose(); } catch { }
+            }
+            return;
+        }
+        try
+        {
+            _compileTracker = new UserCodeCompileTracker(_project.RootDirectory, cache: userCodeCache);
+            userCodeCache = null;
+        }
+        finally
+        {
+            if (userCodeCache is not null)
+            {
+                try { userCodeCache.Dispose(); } catch { }
+            }
+        }
         try
         {
             _userCodeWatcher = new UserCodeWatcher(_project.RootDirectory);
@@ -49,8 +67,6 @@ public partial class MainWindow
         var tracker = _compileTracker;
         if (tracker is null) return Task.CompletedTask;
         var ticket = tracker.Request();
-        UserCodeCompileTracker.Release(_pendingCompilation?.Result);
-        _pendingCompilation = null;
         return ReloadTask = CompileAndQueue(tracker, ticket);
     }
 
@@ -62,6 +78,8 @@ public partial class MainWindow
             attempt = await tracker.CompileAsync(ticket);
             if (!ReferenceEquals(tracker, _compileTracker) || !tracker.IsCurrent(ticket)
                 || attempt.Canceled || attempt.Superseded) return;
+            if (attempt.Result?.Unchanged == true) return;
+            UserCodeCompileTracker.Release(_pendingCompilation?.Result);
             _pendingCompilation = attempt;
             attempt = null; // The pending slot now owns the result.
             FlushPendingUserCodeReload();

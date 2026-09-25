@@ -109,15 +109,21 @@ static class IntegratedArchitectureChecks
             var first = Reload();
             Program.Until(() => Volatile.Read(ref calls) == 1);
             var second = Reload();
-            Program.Until(() => Volatile.Read(ref calls) == 2);
             var uiRan = false;
             Dispatcher.UIThread.Post(() => uiRan = true);
             Program.Until(() => uiRan);
-            Check(!second.IsCompleted && workerThread != uiThread, "The actual Editor compile path must leave UI work responsive.");
+            Check(Volatile.Read(ref calls) == 1 && !second.IsCompleted && workerThread != uiThread,
+                "The actual Editor compile path must queue requests and leave UI work responsive.");
             var oldPlayer = Player(editor);
             oldPlayer.GetType().GetField("Health")!.SetValue(oldPlayer, 81);
             store.MarkChanged();
             Select(editor, store.Current.Objects.Single());
+            gates[0].SetResult(old);
+            Program.Wait(first);
+            var intermediate = Player(editor);
+            Check(Version(intermediate) == 1 && (int)intermediate.GetType().GetField("Health")!.GetValue(intermediate)! == 81 && store.IsDirty,
+                "Stale queued compilations must not replace the current code.");
+            Program.Until(() => Volatile.Read(ref calls) == 2);
             gates[1].SetResult(latest);
             Program.Wait(second);
             var current = Player(editor);
@@ -130,9 +136,7 @@ static class IntegratedArchitectureChecks
             Check(store.Current.Objects.Single().GetStartPriority(current) == -12
                 && ReferenceEquals(Selected(editor), store.Current.Objects.Single()),
                 "Priority and selection must survive async adoption.");
-            gates[0].SetResult(old);
-            Program.Wait(first);
-            Check(staleUnloaded == 1 && ReferenceEquals(Player(editor), current), "Late results must unload without replacing newer code.");
+            Check(staleUnloaded == 1 && ReferenceEquals(Player(editor), current), "Replaced code must unload without replacing newer code.");
 
             var whilePlaying = Compile(project, 4);
             var third = Reload();

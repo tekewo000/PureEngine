@@ -63,7 +63,7 @@ static class UserCodeBackgroundChecks
         Interlocked.Increment(ref gate.Invocations);
         gate.Open.Task.GetAwaiter().GetResult();
         cancellationToken.ThrowIfCancellationRequested();
-        return UserCodeCompiler.CompileProject(directory);
+        return UserCodeCompiler.CompileProject(directory, cancellationToken);
     }
 
     /// <summary>Test-only reproduction of the documented adoption procedure. It verifies the caller contract, not a duplicate of creation management.</summary>
@@ -138,7 +138,7 @@ static class UserCodeBackgroundChecks
             sawUiThread = Dispatcher.UIThread.CheckAccess();
             workerThread = Environment.CurrentManagedThreadId;
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(UserCodeCompiler.CompileProject(root));
+            return Task.FromResult(UserCodeCompiler.CompileProject(root, cancellationToken));
         });
         var ticket = tracker.Request();
         var attempt = tracker.CompileAsync(ticket).GetAwaiter().GetResult();
@@ -158,18 +158,16 @@ static class UserCodeBackgroundChecks
         try
         {
             WriteSource(directory, "Probe.cs", string.Format(TinyTemplate, "ReverseProbe"));
-            var unloads = ReverseOverlapAndRelease(directory);
-            CheckUnloaded(unloads[0], "Rejected oldest user code must be released.");
-            CheckUnloaded(unloads[1], "Rejected older user code must be released.");
-            CheckUnloaded(unloads[2], "Adopted user code must unload after its owner releases it.");
+            var unload = ReverseOverlapAndRelease(directory);
+            CheckUnloaded(unload, "Adopted user code must unload after its owner releases it.");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
 
-    private static WeakReference[] ReverseOverlapAndRelease(string directory)
+    private static WeakReference ReverseOverlapAndRelease(string directory)
     {
-        // Assign gates in start order. Serialize the starts themselves to keep the mapping deterministic.
-        var queue = new ConcurrentQueue<Gate>([new Gate(), new Gate(), new Gate()]);
+        // Serialized execution: only one compilation runs, queued requests collapse to the latest.
+        var queue = new ConcurrentQueue<Gate>([new Gate(), new Gate()]);
         var order = new ConcurrentQueue<Gate>();
         using var tracker = new UserCodeCompileTracker(directory, (root, cancellationToken) =>
         {
@@ -182,33 +180,30 @@ static class UserCodeBackgroundChecks
         SpinUntil(() => order.Count == 1, "First background compile must start.");
         var second = tracker.Request();
         var run2 = tracker.CompileAsync(second);
-        SpinUntil(() => order.Count == 2, "Second background compile must start.");
         var third = tracker.Request();
         var run3 = tracker.CompileAsync(third);
-        SpinUntil(() => order.Count == 3, "Third background compile must start.");
+        Thread.Sleep(50);
+        Check(order.Count == 1, "Queued compilations must wait for the active one instead of running concurrently.");
+        Check(!run2.IsCompleted && !run3.IsCompleted, "Queued requests must stay pending while the active compile runs.");
         var started = order.ToArray();
-        Check(started.Length == 3, "Three overlapped compiles must be in flight.");
+        Check(started.Length == 1, "Only the active compile must be in flight.");
 
-        // Reverse the completion order: complete the latest first, then the older ones.
-        var adopted = new List<UserCodeCompileResult>();
-        started[2].Open.SetResult(true);
-        var attempt3 = run3.GetAwaiter().GetResult();
-        Check(TryAdopt(tracker, attempt3, adopted.Add), "The latest completion must be adopted.");
-        Check(adopted.Count == 1, "Only the latest result must be adopted.");
-        Check(TrackForUnload(adopted[0]).IsAlive, "Adopted user code must stay alive while owned.");
-        started[1].Open.SetResult(true);
-        var attempt2 = run2.GetAwaiter().GetResult();
-        var unload2 = TrackForUnload(attempt2.Result!);
-        Check(!TryAdopt(tracker, attempt2, adopted.Add) && adopted.Count == 1,
-            "An older result completing later must not overwrite the latest.");
+        // Newer requests cancel the active work. The middle queued ticket collapses without running.
         started[0].Open.SetResult(true);
         var attempt1 = run1.GetAwaiter().GetResult();
-        var unload1 = TrackForUnload(attempt1.Result!);
-        Check(!TryAdopt(tracker, attempt1, adopted.Add) && adopted.Count == 1,
-            "The oldest result completing last must be rejected.");
-        var unload3 = TrackForUnload(adopted[0]);
+        Check(attempt1.Canceled && attempt1.Result is null, "Stale active work must observe cancellation for the latest request.");
+        var attempt2 = run2.GetAwaiter().GetResult();
+        Check(attempt2.Superseded && attempt2.Result is null, "A queued ticket overtaken by a newer request must not run.");
+        SpinUntil(() => order.Count == 2, "Only the latest queued request must run after the active one finishes.");
+        var latest = order.ToArray()[1];
+        latest.Open.SetResult(true);
+        var attempt3 = run3.GetAwaiter().GetResult();
+        var adopted = new List<UserCodeCompileResult>();
+        Check(TryAdopt(tracker, attempt3, adopted.Add) && adopted.Count == 1, "The latest completion must be adopted.");
+        Check(TrackForUnload(adopted[0]).IsAlive, "Adopted user code must stay alive while owned.");
+        var unload = TrackForUnload(adopted[0]);
         UserCodeCompileTracker.Release(adopted[0]);
-        return [unload1, unload2, unload3];
+        return unload;
     }
 
     private static void ContinuousRequestsCollapse(string parent)
@@ -253,9 +248,8 @@ static class UserCodeBackgroundChecks
         {
             WriteSource(directoryA, "Alpha.cs", string.Format(TinyTemplate, "Alpha"));
             WriteSource(directoryB, "Beta.cs", string.Format(TinyTemplate, "Beta"));
-            var unloads = SwitchProjectsAndRelease(directoryA, directoryB);
-            CheckUnloaded(unloads[0], "Late results from the previous project must be released.");
-            CheckUnloaded(unloads[1], "The new project's user code must unload after release.");
+            var unload = SwitchProjectsAndRelease(directoryA, directoryB);
+            CheckUnloaded(unload, "The new project's user code must unload after release.");
         }
         finally
         {
@@ -264,7 +258,7 @@ static class UserCodeBackgroundChecks
         }
     }
 
-    private static WeakReference[] SwitchProjectsAndRelease(string directoryA, string directoryB)
+    private static WeakReference SwitchProjectsAndRelease(string directoryA, string directoryB)
     {
         var gateA = new Gate();
         var trackerA = new UserCodeCompileTracker(directoryA, (root, cancellationToken) =>
@@ -278,8 +272,7 @@ static class UserCodeBackgroundChecks
         gateA.Open.SetResult(true);
         var attemptA = compileA.GetAwaiter().GetResult();
         Check(!trackerA.IsCurrent(attemptA.Ticket), "Tickets must expire when their project is switched away.");
-        var unloadA = TrackForUnload(attemptA.Result!);
-        UserCodeCompileTracker.Release(attemptA.Result);
+        Check(attemptA.Canceled && attemptA.Result is null, "Switching away must cancel the previous project's work.");
         trackerA.Dispose();
 
         var adopted = new List<UserCodeCompileResult>();
@@ -289,7 +282,7 @@ static class UserCodeBackgroundChecks
             "Switching projects must not disturb the new project's adoption.");
         var unloadB = TrackForUnload(adopted[0]);
         UserCodeCompileTracker.Release(adopted[0]);
-        return [unloadA, unloadB];
+        return unloadB;
     }
 
     private static void ShutdownTouchesNoUi(string parent)
@@ -298,13 +291,12 @@ static class UserCodeBackgroundChecks
         try
         {
             WriteSource(directory, "Probe.cs", string.Format(TinyTemplate, "ShutdownProbe"));
-            CheckUnloaded(ShutdownAndRelease(directory),
-                "Results completing after shutdown must be released.");
+            ShutdownAndRelease(directory);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
 
-    private static WeakReference ShutdownAndRelease(string directory)
+    private static void ShutdownAndRelease(string directory)
     {
         var gate = new Gate();
         var tracker = new UserCodeCompileTracker(directory, (root, cancellationToken) =>
@@ -318,8 +310,8 @@ static class UserCodeBackgroundChecks
         gate.Open.SetResult(true);
         var attempt = compile.GetAwaiter().GetResult();
         Check(!tracker.IsCurrent(attempt.Ticket), "Shutdown must invalidate every pending ticket.");
-        var unload = TrackForUnload(attempt.Result!);
-        // Do not call the closed window's adoption callback. Release only the result.
+        Check(attempt.Canceled && attempt.Result is null, "Shutdown must cancel in-flight work without producing adoptable state.");
+        // Do not call the closed window's adoption callback.
         Check(!TryAdopt(tracker, attempt, _ => adoptedCount++),
             "Completion after shutdown must be rejected, not adopted.");
         Check(adoptedCount == 0, "Completion after shutdown must not touch closed UI.");
@@ -328,7 +320,6 @@ static class UserCodeBackgroundChecks
         try { tracker.Request(); throw new Exception("Request after shutdown must be rejected."); }
         catch (ObjectDisposedException) { }
         tracker.Dispose();
-        return unload;
     }
 
     private static void FailureKeepsOldStateAndRetries(string parent)
