@@ -106,10 +106,65 @@ static class PrefabEditorChecks
                 Check(store.Current.Objects.Count == dropCount + 2, "Routed prefab Drop must place the subtree.");
             }
 
+            var stuffFormat = (DataFormat<string>)typeof(MainWindow).GetField("SceneObjectIdFormat", Static)!.GetValue(null)!;
+            using (var unrelatedProject = new DataTransfer())
+            {
+                var ignoredProject = new DragEventArgs(DragDrop.DragOverEvent, unrelatedProject, files, default, KeyModifiers.None);
+                files.RaiseEvent(ignoredProject);
+                Check(ignoredProject.Handled && ignoredProject.DragEffects == DragDropEffects.None,
+                    "Project DragOver must reject unrelated payloads.");
+            }
+            using (var unknownDrag = new DataTransfer())
+            {
+                unknownDrag.Add(DataTransferItem.Create(stuffFormat, Guid.NewGuid().ToString("D")));
+                var unknownOver = new DragEventArgs(DragDrop.DragOverEvent, unknownDrag, files, default, KeyModifiers.None);
+                files.RaiseEvent(unknownOver);
+                Check(unknownOver.Handled && unknownOver.DragEffects == DragDropEffects.None,
+                    "Project DragOver must reject unknown objects.");
+            }
+            RejectThrow(() => Call(editor, "CreatePrefabFromDrop", Guid.NewGuid(), ""),
+                "Prefab creation with an unknown object must fail.");
+            var projectTree = editor.FindControl<TreeView>("ProjectTree")!;
+            var projectRootItem = projectTree.Items.OfType<TreeViewItem>().First(item => item.Tag is string tag && tag == "");
+            var prefabFilesBeforeDrop = Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories).Length;
+            string droppedPrefabPath;
+            using (var stuffDrag = new DataTransfer())
+            {
+                stuffDrag.Add(DataTransferItem.Create(stuffFormat, tower.Id.ToString("D")));
+                var stuffOver = new DragEventArgs(DragDrop.DragOverEvent, stuffDrag, projectRootItem, default, KeyModifiers.None);
+                projectTree.RaiseEvent(stuffOver);
+                Check(stuffOver.Handled && stuffOver.DragEffects == DragDropEffects.Copy,
+                    "Stuffs-to-Project DragOver must offer prefab creation.");
+                var sceneCountBeforePrefabDrop = store.Current.Objects.Count;
+                var dirtyBeforePrefabDrop = store.IsDirty;
+                projectTree.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, stuffDrag, projectRootItem, default, KeyModifiers.None));
+                Program.Until(() => Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories).Length == prefabFilesBeforeDrop + 1);
+                Dispatcher.UIThread.RunJobs();
+                droppedPrefabPath = Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories)
+                    .Single(candidate => candidate != path && candidate != bad);
+                Check(Path.GetFileName(droppedPrefabPath) == "Tower2.pure.prefab.yaml",
+                    "Stuffs-to-Project Drop must auto-name the prefab without overwriting.");
+                Check(files.ItemsSource!.Cast<ProjectExplorerEntry>().Any(entry => entry.IsPrefab && entry.FullPath == droppedPrefabPath),
+                    "The dropped prefab must appear in the Project pane.");
+                var droppedDocument = PrefabFile.Load(droppedPrefabPath);
+                var expectedSubtreeCount = 1;
+                var subtreeStack = new Stack<SceneObject>(tower.Children);
+                while (subtreeStack.Count > 0) { var child = subtreeStack.Pop(); expectedSubtreeCount++; foreach (var grandchild in child.Children) subtreeStack.Push(grandchild); }
+                Check(droppedDocument.Objects?.Count == expectedSubtreeCount
+                    && droppedDocument.Objects?.SingleOrDefault(item => item.ParentId is null)?.Name == "Tower",
+                    "The dropped prefab must capture the subtree.");
+                Check(store.Current.Objects.Count == sceneCountBeforePrefabDrop && store.IsDirty == dirtyBeforePrefabDrop,
+                    "Prefab creation by Drop must leave the scene untouched.");
+                var droppedCatalog = (PrefabCatalog)Call(editor, "BuildPrefabCatalog")!;
+                Check(droppedCatalog.Find(droppedDocument.Id) is not null, "Dropped prefabs must be listed for Play.");
+            }
+
             Call(editor, "StartPlay");
             Check(editor.IsPlaying, "Play must start for the guard test.");
             RejectThrow(() => Call(editor, "SavePrefabToPath", tower, "", "Other.pure.prefab.yaml"),
                 "Saving prefabs during Play must be rejected.");
+            RejectThrow(() => Call(editor, "CreatePrefabFromDrop", tower.Id, ""),
+                "Prefab creation by Drop during Play must be rejected.");
             RejectThrow(() => Call(editor, "PlacePrefabForTest", path), "Placing prefabs during Play must be rejected.");
             using (var guardedDrag = new DataTransfer())
             {
@@ -120,7 +175,21 @@ static class PrefabEditorChecks
                 Dispatcher.UIThread.RunJobs();
                 Check(store.Current.Objects.Count == guardedCount, "Prefab Drop during Play must be rejected.");
             }
-            Check(Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories).Length == 2,
+            using (var guardedStuffDrag = new DataTransfer())
+            {
+                guardedStuffDrag.Add(DataTransferItem.Create(
+                    (DataFormat<string>)typeof(MainWindow).GetField("SceneObjectIdFormat", Static)!.GetValue(null)!, tower.Id.ToString("D")));
+                var guardedOver = new DragEventArgs(DragDrop.DragOverEvent, guardedStuffDrag, files, default, KeyModifiers.None);
+                files.RaiseEvent(guardedOver);
+                Check(guardedOver.Handled && guardedOver.DragEffects == DragDropEffects.None,
+                    "Stuffs-to-Project DragOver during Play must be rejected.");
+                var guardedPrefabCount = Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories).Length;
+                files.RaiseEvent(new DragEventArgs(DragDrop.DropEvent, guardedStuffDrag, files, default, KeyModifiers.None));
+                Dispatcher.UIThread.RunJobs();
+                Check(Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories).Length == guardedPrefabCount,
+                    "Stuffs-to-Project Drop during Play must be rejected.");
+            }
+            Check(Directory.GetFiles(session.Project.RootDirectory, "*.pure.prefab.yaml", SearchOption.AllDirectories).Length == 3,
                 "Guarded saves must not write prefab files during Play.");
             Call(editor, "StopPlay");
             Check(!editor.IsPlaying, "Stop must end Play.");
@@ -236,7 +305,7 @@ static class PrefabEditorChecks
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
-        Console.WriteLine("PASS: prefab save, listing, placement, parents, invalid files, double-click, scene/Inspector drag-drop, and Play guards.");
+        Console.WriteLine("PASS: prefab save, listing, placement, parents, invalid files, double-click, scene/Inspector drag-drop, Stuffs-to-Project creation, and Play guards.");
         CheckEditingWorkflow(root);
         CheckActivationFailure(root);
     }
