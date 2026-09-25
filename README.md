@@ -304,7 +304,7 @@ dotnet run --project src/PureEngine.Editor
 - `tests/PureEngine.Core.Checks/`：Coreの動作チェック。
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。
 - `tools/code-quality.ps1`：一括修正・提案診断・ビルド・Core/Editorチェック。
-- `.github/workflows/code-quality.yml`：push/PR時に同じ品質チェックを実行。
+- `.github/workflows/code-quality.yml`：push/PR/merge_group時に同じ品質チェックを実行。
 - [EngineArchitecture.md](docs/EngineArchitecture.md)：設計仕様と未決定事項。
 
 Coreのクラスのアタッチ・取得と属性検出、Editorからのアタッチ・値とPriorityの編集、YAMLシーン保存、Coreのライフサイクル実行（Priority順）とEditorのPlay／Stopによる開始・停止は実装済み。Game描画とImage／Textの配置、Button操作も実装済みです。単体配布、Steam連携は後続です。
@@ -410,7 +410,7 @@ if (play.Runtime.IsRunning) play.Step(1f / 60f);
 ./tools/code-quality.ps1
 ```
 
-変更せずに検査する場合は `./tools/code-quality.ps1 -Check`。GitHub Actionsもpush/PRで同じ検査を実行します。
+変更せずに検査する場合は `./tools/code-quality.ps1 -Check`。GitHub Actionsもpush/PR/merge_groupで同じ検査を実行します。mainへのマージはPR経由で、この検査の通過が必須です。
 対象は `PureEngine.slnx`。リポジトリの `.editorconfig`、SDKの `global.json`、エージェント向けの [AGENTS.md](AGENTS.md) を共通の基準にします。生成したゲーム用プロジェクトへ、この品質設定一式を自動コピーする機能ではありません。
 namespaceの名前・有無・宣言形式は修正対象外です。
 static化・未使用引数の削除・引数順序の変更は自動適用せず、呼び出し元とリフレクション利用を確認して修正します。
