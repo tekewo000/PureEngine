@@ -19,6 +19,7 @@ public partial class MainWindow
         const string hint = "Enter a number — Press Esc to revert";
         var box = new TextBox { Text = FormatDoubleMember(component, member), PlaceholderText = "0.0" };
         box.Classes.Add("inspectorField");
+        box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>
@@ -186,6 +187,7 @@ public partial class MainWindow
     {
         var box = new TextBox { Text = FormatNullableMember(component, member), PlaceholderText = "Null" };
         box.Classes.Add("inspectorField");
+        box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>
@@ -507,6 +509,7 @@ public partial class MainWindow
             grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
             var badge = BuildAxisBadge(axes[i]);
             Grid.SetColumn(badge, i * 2);
+            boxes[i].Classes.Add("numericField");
             boxes[i].MinWidth = 40;
             boxes[i].HorizontalAlignment = HorizontalAlignment.Stretch;
             Grid.SetColumn(boxes[i], i * 2 + 1);

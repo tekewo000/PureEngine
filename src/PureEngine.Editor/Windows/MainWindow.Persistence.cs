@@ -25,9 +25,26 @@ public partial class MainWindow
         _editScene.MarkChanged();
         UpdateSceneTitle();
         UpdatePrefabEditorChrome();
+        UpdateStatusBarSegments();
     }
 
-    private void UpdateSceneTitle() => Title = $"{(_editScene.IsDirty ? "* " : "")}{Path.GetFileName(_editScene.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
+    private void UpdateSceneTitle()
+    {
+        Title = $"{(_editScene.IsDirty ? "* " : "")}{Path.GetFileName(_editScene.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
+        SceneViewTab.Header = _editScene.IsDirty ? "Scene View *" : "Scene View";
+    }
+
+    /// <summary>Right-hand status segments. Refreshed with the scene, selection, or view state.</summary>
+    private void UpdateStatusBarSegments()
+    {
+        var selected = GetSelectedSceneObject();
+        SelectionStatus.Text = selected is not null ? $"Selected: {selected.Name}"
+            : _assetEdit is not null ? $"Data asset: {Path.GetFileName(_assetEdit.Path)}"
+            : "No selection";
+        ToolTip.SetTip(SelectionStatus, SelectionStatus.Text);
+        SceneZoomStatus.Text = $"Scene View: {_sceneZoom * 100:0}%";
+        ToolTip.SetTip(SceneZoomStatus, SceneZoomStatus.Text);
+    }
 
     private void SetFileStatus(string message, bool error = false)
     {

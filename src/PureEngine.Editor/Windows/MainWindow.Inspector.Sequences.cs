@@ -70,6 +70,7 @@ public partial class MainWindow
         const string hint = "Enter an integer — Press Esc to revert";
         var box = new TextBox { Text = SequenceScalarText(component, member, index), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
+        box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>
@@ -99,6 +100,7 @@ public partial class MainWindow
         const string hint = "Enter a number — Press Esc to revert";
         var box = new TextBox { Text = SequenceScalarText(component, member, index), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
+        box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>
@@ -247,6 +249,8 @@ public partial class MainWindow
         const string hint = "Empty = null — Press Esc to revert";
         var box = new TextBox { Text = SequenceScalarText(component, member, index), MinWidth = 40, PlaceholderText = "Null", HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
+        if (underlying == typeof(int) || underlying == typeof(float) || underlying == typeof(double))
+            box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>
@@ -283,6 +287,7 @@ public partial class MainWindow
         var intHint = "Enter an integer — Press Esc to revert";
         var box = new TextBox { Text = DictionaryScalarText(component, member, key), MinWidth = 40, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
+        box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, isInt ? intHint : hint);
         box.TextChanged += (_, _) =>
@@ -348,6 +353,7 @@ public partial class MainWindow
         {
             var box = new TextBox { Text = DictionaryVectorAxisText(component, member, key, axis), MinWidth = 40, FontSize = 12, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
+            box.Classes.Add("numericField");
             box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{axis}");
             const string hint = "Enter a number — Press Esc to revert";
             ToolTip.SetTip(box, hint);
@@ -394,6 +400,7 @@ public partial class MainWindow
         {
             var box = new TextBox { Text = DictionaryColorChannelText(component, member, key, channel), MinWidth = 40, FontSize = 12, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
             box.Classes.Add("inspectorField");
+            box.Classes.Add("numericField");
             box.SetValue(AutomationProperties.NameProperty, $"{automationName}.{channel}");
             const string hint = "Enter a number — Press Esc to revert";
             ToolTip.SetTip(box, hint);
@@ -434,6 +441,8 @@ public partial class MainWindow
         const string hint = "Empty = null — Press Esc to revert";
         var box = new TextBox { Text = DictionaryScalarText(component, member, key), MinWidth = 40, PlaceholderText = "Null", HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         box.Classes.Add("inspectorField");
+        if (underlying == typeof(int) || underlying == typeof(float) || underlying == typeof(double))
+            box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>

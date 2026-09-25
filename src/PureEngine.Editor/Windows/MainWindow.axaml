@@ -334,6 +334,9 @@
     <Style Selector="TextBox.inspectorField:disabled">
       <Setter Property="Opacity" Value="0.55" />
     </Style>
+    <Style Selector="TextBox.inspectorField.numericField">
+      <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+    </Style>
     <Style Selector="ComboBox.inspectorCombo">
       <Setter Property="MinHeight" Value="26" />
       <Setter Property="Padding" Value="6,3" />
@@ -414,11 +417,11 @@
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.collapseToggle:pointerover">
-      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
       <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.collapseToggle:pressed">
-      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Background" Value="{StaticResource EditorFloatBrush}" />
       <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Border.unsupportedBadge">
@@ -430,6 +433,13 @@
     </Style>
     <Style Selector="Border.pane">
       <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.viewportFrame">
+      <Setter Property="Background" Value="{StaticResource EditorViewportBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Margin" Value="8" />
     </Style>
     <Style Selector="Rectangle.columnDivider">
       <Setter Property="Fill" Value="{StaticResource EditorBorderBrush}" />
@@ -538,10 +548,19 @@
         </Border>
         <Border x:Name="SceneViewPane" Classes="pane">
           <TabControl x:Name="ViewportTabs" Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem Classes="first" Header="Scene View" AutomationProperties.Name="Scene View">
-              <Grid x:Name="SceneViewHost"><Grid x:Name="SceneViewport" /></Grid>
+            <TabItem x:Name="SceneViewTab" Classes="first" Header="Scene View" AutomationProperties.Name="Scene View">
+              <Border Classes="viewportFrame">
+                <Grid x:Name="SceneViewHost"><Grid x:Name="SceneViewport" /></Grid>
+              </Border>
             </TabItem>
-            <TabItem Header="Game" AutomationProperties.Name="Game"><Grid x:Name="GameViewport" /></TabItem>
+            <TabItem Header="Game" AutomationProperties.Name="Game">
+              <Grid>
+                <Grid x:Name="GameViewport" />
+                <TextBlock x:Name="GamePlaceholder" Classes="hint" Text="Press Play to show the game."
+                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                           AutomationProperties.Name="Game placeholder" />
+              </Grid>
+            </TabItem>
             <TabItem x:Name="PrefabEditorTab" Header="Prefab Editor" AutomationProperties.Name="Prefab Editor" IsVisible="False">
               <Grid RowDefinitions="Auto,*">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,8">
@@ -810,8 +829,15 @@
       </Border>
     </Grid>
     <Border Grid.Row="2" Background="{StaticResource EditorSurfaceBrush}" BorderBrush="{StaticResource EditorBorderBrush}" BorderThickness="0,1,0,0" Padding="10,0">
-      <TextBlock x:Name="FileStatus" Classes="muted" VerticalAlignment="Center"
-                 TextTrimming="CharacterEllipsis" AutomationProperties.Name="Scene file status" />
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
+        <TextBlock x:Name="FileStatus" Classes="muted" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" AutomationProperties.Name="Scene file status" />
+        <Rectangle Grid.Column="1" Classes="columnDivider" />
+        <TextBlock Grid.Column="2" x:Name="SelectionStatus" Classes="muted" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" AutomationProperties.Name="Selection status" />
+        <TextBlock Grid.Column="3" x:Name="SceneZoomStatus" Classes="muted" VerticalAlignment="Center"
+                   AutomationProperties.Name="Scene zoom status" />
+      </Grid>
     </Border>
   </Grid>
 </Window>

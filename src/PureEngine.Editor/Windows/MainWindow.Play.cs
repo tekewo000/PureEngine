@@ -338,6 +338,7 @@ public partial class MainWindow
         var playing = _play is not null;
         PlayButton.IsEnabled = !playing;
         StopButton.IsEnabled = playing;
+        GamePlaceholder.IsVisible = !playing;
         SetEditingEnabled(!playing);
         UpdatePrefabEditorChrome();
     }

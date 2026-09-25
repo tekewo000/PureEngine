@@ -4,6 +4,7 @@
              RequestedThemeVariant="Dark">
   <Application.Resources>
     <SolidColorBrush x:Key="EditorBackgroundBrush" Color="#1A1C20" />
+    <SolidColorBrush x:Key="EditorViewportBrush" Color="#121419" />
     <SolidColorBrush x:Key="EditorSurfaceBrush" Color="#23262C" />
     <SolidColorBrush x:Key="EditorFloatBrush" Color="#2E333B" />
     <SolidColorBrush x:Key="EditorFieldBrush" Color="#333842" />
@@ -46,6 +47,54 @@
       <Setter Property="Opacity" Value="0.55" />
     </Style>
     <Style Selector="MenuItem:disabled">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextTertiaryBrush}" />
+    </Style>
+    <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+    </Style>
+    <Style Selector="MenuItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="MenuItem:selected /template/ TextBlock#PART_InputGestureText">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="MenuItem:selected /template/ Path#PART_ChevronPath">
+      <Setter Property="Fill" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="MenuItem:pressed /template/ Border#PART_LayoutRoot:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+    </Style>
+    <Style Selector="MenuItem:pressed /template/ Border#PART_LayoutRoot:pointerover > ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="MenuItem:open /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:pressed /template/ Border#PART_LayoutRoot:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot > ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot:pointerover > ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="TreeViewItem:pressed:selected /template/ Border#PART_LayoutRoot:pointerover">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="TreeViewItem:disabled /template/ ContentPresenter#PART_HeaderPresenter">
       <Setter Property="Foreground" Value="{StaticResource EditorTextTertiaryBrush}" />
     </Style>
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
@@ -122,6 +171,39 @@
       <Setter Property="Foreground" Value="{StaticResource EditorTextTertiaryBrush}" />
     </Style>
     <Style Selector="ComboBoxItem:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="{StaticResource EditorFieldBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ComboBox:pressed /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource EditorFieldHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorBorderStrongBrush}" />
+    </Style>
+    <Style Selector="ComboBox:focus-visible /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource EditorAccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource EditorAccentBrush}" />
+    </Style>
+    <Style Selector="ComboBox:focus-visible /template/ Border#HighlightBackground">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ PathIcon#DropDownGlyph">
+      <Setter Property="Foreground" Value="{StaticResource EditorTextBrush}" />
+    </Style>
+    <Style Selector="ComboBox:disabled">
       <Setter Property="Opacity" Value="0.55" />
     </Style>
   </Application.Styles>

@@ -118,6 +118,7 @@ public partial class MainWindow : Window
         InitSceneView();
         InitGameInput();
         ViewportTabs.SelectionChanged += OnEditorViewportChanged;
+        UpdateStatusBarSegments();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
@@ -541,6 +542,7 @@ public partial class MainWindow : Window
         };
         ToolTip.SetTip(box, displayName);
         box.Classes.Add("inspectorField");
+        box.Classes.Add("numericField");
         box.SetValue(AutomationProperties.NameProperty, $"{type.Name}.{kind}Priority");
         box.TextChanged += (_, _) =>
         {
@@ -725,6 +727,7 @@ public partial class MainWindow : Window
             const string hint = "Enter an integer — Press Esc to revert";
             var box = new TextBox { Text = FormatMemberValue(component, member), PlaceholderText = "0" };
             box.Classes.Add("inspectorField");
+            box.Classes.Add("numericField");
             box.SetValue(AutomationProperties.NameProperty, automationName);
             ToolTip.SetTip(box, hint);
             box.TextChanged += (_, _) =>
@@ -748,6 +751,7 @@ public partial class MainWindow : Window
             const string hint = "Enter a number — Press Esc to revert";
             var box = new TextBox { Text = FormatMemberValue(component, member), PlaceholderText = "0.0" };
             box.Classes.Add("inspectorField");
+            box.Classes.Add("numericField");
             box.SetValue(AutomationProperties.NameProperty, automationName);
             ToolTip.SetTip(box, hint);
             box.TextChanged += (_, _) =>
@@ -1006,6 +1010,7 @@ public partial class MainWindow : Window
     private void RefreshObjectInspector()
     {
         var item = GetSelectedSceneObject();
+        UpdateStatusBarSegments();
         if (_assetEdit is not null && item is null)
         {
             DeleteObjectMenuItem.IsEnabled = false;
