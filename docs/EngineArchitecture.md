@@ -123,12 +123,12 @@ UnityのScriptableObjectに当たる、継承なしの普通のクラスで作�
 
 ### Prefabs
 
-UnityのPrefabに当たる、SceneObjectの単一ルート＋子孫をファイル化して複製する仕組み。コピーのみで、配置後は普通のSceneObjectとして扱う。リンク・Override・Variant・入れ子は作らない。使い方はREADMEの「プレハブを使う」を参照。
+UnityのPrefabに当たる、SceneObjectの単一ルート＋子孫をファイル化して複製する仕組み。コピーのみで、配置後の自動更新・Override・Variantは作らない。保存元・配置したルートは表示用の配置元IDを持ち、StuffsではPrefabアイコンになる（子や通常オブジェクトはSceneObjectアイコン）。使い方はREADMEの「プレハブを使う」を参照。
 
-- 保存形式は `.pure.prefab.yaml`（version: 1、PrefabのID、objects）。objectsの1件分の形はシーンの `version: 3` と同じ（id・name・parentId・siblingIndex・components、Componentの `id`・typeId・values・priorities）。Prefab内の最上位のparentIdはなし。読み書きと配置の正本はCoreの `PrefabSerializer`。
+- 保存形式は `.pure.prefab.yaml`（version: 1、PrefabのID、objects）。objectsの1件分の形はシーンの `version: 3` と同じ（id・name・parentId・siblingIndex・components、Componentの `id`・typeId・values・priorities）に、表示用の配置元 `prefabId`（省略可）を加えた形。Prefab内の最上位のparentIdはなし。読み書きと配置の正本はCoreの `PrefabSerializer`。シーンの `SceneObject`／`SceneObjectDocument` も同じ `prefabId` を持ち、保存往復とCloneで維持する。
 - 値の変換・旧名解決・不明項目の無視・membersChanged報告はシーンの `[Inspector]` 規則を再利用する。メンバーの追加・改名（`FormerlySerializedAs`）・削除には耐え、非互換な型変更・未知のtypeId・ライフサイクルのないPriorityは配置を拒否して配置先を変えない。Prefabだけの別仕様は作らない。
 - 配置時は複製範囲の内部参照だけ新しいIDへ付け替え、範囲外・画像・データアセット参照は維持する。対象不在はシーン参照と同じくC#はnull＋ID保持（Missing）とし、同じIDが戻れば再接続する。配置は末尾への追加（ルートまたは指定親の末子）とし、Prefab内の兄弟順を保つ。失敗時は作りかけを除去し、実行中は予約削除に任せて二重解放しない。
-- Editor配置とゲーム実行中の動的生成は同じ配置経路を使う。EditorはStuffsの右クリック保存・Stuffs→ProjectへのD&D保存（SceneObject ID単位のペイロード、落としたフォルダへ自動連番で作成）・Projectペインの管理（作成相当の一覧・改名・削除）・明示的な配置メニュー・Project→StuffsへのD&D配置（ファイルパス単位のペイロード、行上はその子・余白はルート、行のハイライト付き）・Play中の保存・配置・D&D禁止に対応する。新規保存先はProject内の `.pure.prefab.yaml` で、Save as PrefabとD&D保存はいずれも既存ファイルの上書きをしない。InspectorのSceneObject／登録Component参照欄へのD&Dは後述の非実行テンプレート参照であり、配置はしない。
+- Editor配置とゲーム実行中の動的生成は同じ配置経路を使う。EditorはStuffsの右クリック保存・Stuffs→ProjectへのD&D保存（SceneObject ID単位のペイロード、落としたフォルダへ自動連番で作成）・Projectペインの管理（作成相当の一覧・改名・削除）・明示的な配置メニュー・Project→StuffsへのD&D配置（ファイルパス単位のペイロード、行上はその子・余白はルート、行のハイライト付き）・Play中の保存・配置・D&D禁止に対応する。新規保存先はProject内の `.pure.prefab.yaml` で、Save as PrefabとD&D保存はいずれも既存ファイルの上書きをしない。保存元のルートには新規PrefabのIDを付けてシーンを未保存にし、配置したルートには配置元PrefabのIDを付ける。Stuffsは `HierarchyNode.IsPrefab` でPrefab／SceneObjectアイコンを切り替え、Prefab Editorのルートは旧ファイル救済のため編集中はPrefab表示にする。InspectorのSceneObject／登録Component参照欄へのD&Dは後述の非実行テンプレート参照であり、配置はしない。
 - Projectのダブルクリック／Enter／Openは配置ではなく、中央の単一Prefab Editorタブを開く。既存のペイン位置を変えず、StuffsとInspectorはアクティブな編集コンテキストを共有する。メインシーンの文書とPrefabの編集用Sceneを分離し、タブ切替では両方の編集状態を保持する。Prefab編集はライフサイクルを実行せず、Ctrl+Sによる明示保存で元ファイルを更新し、Prefab・既存Object・ComponentのIDを維持する。閉じる／別Prefabへの置換では未保存を保存・破棄・キャンセルで確認する。Explorerから対象ファイルまたは祖先フォルダを改名・削除するときも、ディスク変更前にPrefabを閉じる確認を行う。
 - Sceneのパス・Startup・Explorerの改名／削除保護とPlayはアクティブなPrefabではなくメインシーンを基準にする。Prefabを開いている間はコードのホットリロードを保留し、閉じて反映する案内をステータスに出す。Prefabの保存による配置済みコピーの自動更新やOverride管理は行わない。
 - InspectorのPrefab参照は`{ prefab: <asset id>, target: <object/component id> }`として保存する。型はSceneObject／登録Componentのまま。`PrefabReferenceStore`が別Sceneにテンプレートを復元し、同じPrefab内の参照は同じインスタンスへ解決する。通常のHierarchy・描画・ライフサイクルには登録しない。編集／Play／コード再読み込みごとに分離し、終了時にテンプレートのIDisposableも解放する。ファイル不在はnull＋両ID保持でClear可能。循環するPrefabアセット参照は拒否する。

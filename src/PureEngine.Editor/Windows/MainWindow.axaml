@@ -567,7 +567,9 @@
                     <TreeDataTemplate DataType="editor:HierarchyNode" ItemsSource="{Binding Children}">
                       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
                         <PathIcon Classes="rowIcon" Data="{StaticResource Icon.Hierarchy}"
-                                  AutomationProperties.Name="SceneObject" />
+                                  IsVisible="{Binding IsSceneObject}" AutomationProperties.Name="SceneObject" />
+                        <PathIcon Classes="rowIcon" Data="{StaticResource Icon.Prefab}"
+                                  IsVisible="{Binding IsPrefab}" AutomationProperties.Name="Prefab" />
                         <TextBlock Grid.Column="1" Text="{Binding Ref.Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Ref.Name}" />
                       </Grid>
                     </TreeDataTemplate>

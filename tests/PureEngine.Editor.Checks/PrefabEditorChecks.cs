@@ -3,6 +3,7 @@ using System.Reflection;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -44,7 +45,7 @@ static class PrefabEditorChecks
 
             var path = (string)Call(editor, "SavePrefabToPath", tower, "", "Tower.pure.prefab.yaml")!;
             Check(File.Exists(path), "Save as Prefab must write the prefab file.");
-            Check(!store.IsDirty && store.Current.Objects.Count == 2, "Saving a prefab must not change the scene.");
+            Check(store.Current.Objects.Count == 2 && store.IsDirty, "Saving a prefab must mark the source without adding objects.");
             var files = editor.FindControl<ListBox>("ProjectFiles")!;
             Check(files.ItemsSource!.Cast<ProjectExplorerEntry>().Any(entry => entry.IsPrefab && entry.FullPath == path),
                 "The saved prefab must appear in the Project pane.");
@@ -53,6 +54,17 @@ static class PrefabEditorChecks
             var prefabId = PrefabFile.Load(path).Id;
             var catalog = (PrefabCatalog)Call(editor, "BuildPrefabCatalog")!;
             Check(catalog.Find(prefabId) is not null, "Play catalogs must include saved prefabs.");
+            Check(tower.PrefabId == prefabId, "Saving as prefab must mark the source root with the prefab ID.");
+            Check(PrefabFile.Load(path).Objects!.Single(item => item.ParentId is null).PrefabId == prefabId,
+                "Saved prefab files must mark their root with the prefab ID.");
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            Check(StuffsNode(editor, tower).IsPrefab && !StuffsNode(editor, tower).IsSceneObject,
+                "Prefab sources must select the prefab Stuffs icon.");
+            Check(!StuffsNode(editor, cannon).IsPrefab && StuffsNode(editor, cannon).IsSceneObject,
+                "Prefab children must keep the SceneObject Stuffs icon.");
+            Check(StuffsIconVisible(editor, tower, "Prefab") && !StuffsIconVisible(editor, tower, "SceneObject"),
+                "Prefab sources must show the Prefab icon instead of the SceneObject icon.");
 
             Call(editor, "SelectSceneObjectForTest", [null]);
             var placed = (SceneObject)Call(editor, "PlacePrefabForTest", path)!;
@@ -66,10 +78,19 @@ static class PrefabEditorChecks
                 "Placed values and internal references must follow the copy.");
             Check(placed.Id != tower.Id && placedCannon.Id != cannon.Id, "Placed objects need fresh IDs.");
             Check(store.IsDirty, "Placement must mark the scene dirty.");
+            Check(placed.PrefabId == prefabId, "Placed prefab roots must remember their source prefab ID.");
+            Check(placedCannon.PrefabId is null, "Placed prefab children must not carry the source marker.");
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            Check(StuffsNode(editor, placed).IsPrefab && !StuffsNode(editor, placedCannon).IsPrefab,
+                "Placed prefab roots must select the prefab Stuffs icon.");
+            Check(StuffsIconVisible(editor, placed, "Prefab") && !StuffsIconVisible(editor, placed, "SceneObject"),
+                "Placed prefabs must show the Prefab icon instead of the SceneObject icon.");
 
             Call(editor, "SelectSceneObjectForTest", cannon);
             var nested = (SceneObject)Call(editor, "PlacePrefabForTest", path)!;
             Check(ReferenceEquals(nested.Parent, cannon), "Placement with a selection must land under it.");
+            Check(nested.PrefabId == prefabId, "Nested prefab placements must remember their source prefab ID.");
 
             var bad = Path.Combine(session.Project.RootDirectory, "Broken.pure.prefab.yaml");
             File.WriteAllText(bad, "version: 1\nobjects: []\n");
@@ -84,6 +105,13 @@ static class PrefabEditorChecks
                 && !ReferenceEquals(ActiveStore(editor), store)
                 && editor.FindControl<TabControl>("ViewportTabs")!.SelectedIndex == 3,
                 "Double-clicking a prefab must open an isolated editor without placing or dirtying the main scene.");
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            var prefabRoot = ActiveStore(editor).Current.RootObjects.Single();
+            Check(StuffsNode(editor, prefabRoot).IsPrefab,
+                "Prefab editor roots must select the prefab Stuffs icon.");
+            Check(StuffsIconVisible(editor, prefabRoot, "Prefab") && !StuffsIconVisible(editor, prefabRoot, "SceneObject"),
+                "Prefab editor roots must show the Prefab icon instead of the SceneObject icon.");
             Call(editor, "ClosePrefabEditor");
 
             var surface = editor.FindControl<Grid>("SceneSurface")!;
@@ -153,8 +181,10 @@ static class PrefabEditorChecks
                 Check(droppedDocument.Objects?.Count == expectedSubtreeCount
                     && droppedDocument.Objects?.SingleOrDefault(item => item.ParentId is null)?.Name == "Tower",
                     "The dropped prefab must capture the subtree.");
+                Check(tower.PrefabId == droppedDocument.Id,
+                    "Prefab creation by Drop must mark the source root with the prefab ID.");
                 Check(store.Current.Objects.Count == sceneCountBeforePrefabDrop && store.IsDirty == dirtyBeforePrefabDrop,
-                    "Prefab creation by Drop must leave the scene untouched.");
+                    "Prefab creation by Drop must not add objects.");
                 var droppedCatalog = (PrefabCatalog)Call(editor, "BuildPrefabCatalog")!;
                 Check(droppedCatalog.Find(droppedDocument.Id) is not null, "Dropped prefabs must be listed for Play.");
             }
@@ -612,6 +642,26 @@ static class PrefabEditorChecks
             .Single(button => Equals(button.Content, answer))
             .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static HierarchyNode StuffsNode(MainWindow editor, SceneObject item) =>
+        StuffsLogicalNode(editor, item);
+
+    private static HierarchyNode StuffsLogicalNode(MainWindow editor, SceneObject item)
+    {
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var nodes = (System.Collections.IEnumerable)typeof(MainWindow).GetMethod("EnumerateHierarchyNodes", flags)!
+            .Invoke(editor, [null])!;
+        return nodes.Cast<HierarchyNode>().Single(node => ReferenceEquals(node.Ref, item));
+    }
+
+    private static bool StuffsIconVisible(MainWindow editor, SceneObject item, string name)
+    {
+        var row = editor.GetVisualDescendants().OfType<TreeViewItem>()
+            .Single(candidate => ReferenceEquals((candidate.DataContext as HierarchyNode)?.Ref, item));
+        return row.GetVisualDescendants().OfType<PathIcon>()
+            .Where(icon => ReferenceEquals(icon.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault(), row))
+            .Single(icon => Equals(AutomationProperties.GetName(icon), name)).IsVisible;
     }
 
     private static object? Call(MainWindow editor, string method, params object?[] args) =>

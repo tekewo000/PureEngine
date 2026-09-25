@@ -161,6 +161,8 @@ static class PrefabChecks
             Check(yaml.Contains("version: 1") && yaml.Contains(source.PrefabId.ToString("D")) && !yaml.Contains("Outside"),
                 "Prefab files must carry their own version and identity, not outside objects.");
             var parsed = PrefabSerializer.Parse(yaml);
+            Check(parsed.Objects!.Single(item => item.ParentId is null).PrefabId == source.PrefabId,
+                "Serialized prefabs must mark their root with the prefab ID.");
             // Parsed scalars lose their runtime types, so file stability means reaching a fixed point, not byte equality.
             var republished = PrefabSerializer.Serialize(parsed);
             Check(PrefabSerializer.Serialize(PrefabSerializer.Parse(republished)) == republished, "Prefab save/load must reach a stable form.");
@@ -181,6 +183,8 @@ static class PrefabChecks
             var placedPart = placedChild.GetComponent<PrefabPart>()!;
             Check(placedChild.Name == "Gun" && placedPart.Value == 42 && placedPart.Name == "Cannon", "Values and names must survive.");
             Check(placed.Id != source.Root.Id && placedChild.Id != source.Child.Id, "Placed objects need fresh IDs.");
+            Check(placed.PrefabId == parsed.Id, "Placed prefab roots must remember their source prefab ID.");
+            Check(placedChild.PrefabId is null, "Placed prefab children must not carry the source marker.");
             Check(ReferenceEquals(placedHolder.Single, placedPart) && ReferenceEquals(placedHolder.Owner, placedChild),
                 "Internal references must reconnect to the copies.");
             Check(ReferenceEquals(placedHolder.Self, placedHolder), "Self references must point at the copy.");
@@ -197,6 +201,10 @@ static class PrefabChecks
                 "Priorities must survive prefab placement.");
             var yamlTarget = new SceneSerializer(registry, assets).Serialize(target);
             Check(yamlTarget.Contains(targetOutside.Id.ToString("D")), "Outside links must persist through scene saves.");
+            var reloadedTarget = new SceneSerializer(registry, assets).Deserialize(yamlTarget);
+            Check(reloadedTarget.Objects.Single(item => item.Id == placed.Id).PrefabId == parsed.Id,
+                "Scene saves must persist placed prefab markers.");
+            Reject(() => placed.PrefabId = Guid.Empty, "Empty prefab IDs must be rejected.");
 
             // Placement under a parent lands as its last child with the subtree order intact.
             var shelter = target.AddEmpty();

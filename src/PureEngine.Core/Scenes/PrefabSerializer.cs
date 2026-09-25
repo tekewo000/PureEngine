@@ -7,9 +7,9 @@ namespace PureEngine.Core;
 
 /// <summary>
 /// Copy-only prefab files: one scene-object subtree saved for duplication.
-/// Placement copies the content as plain scene objects with fresh IDs. References inside the
+/// Placement copies the content with fresh IDs. References inside the
 /// subtree are remapped to the copies; outside, image, and data asset references are preserved.
-/// No live link, override, variant, or nesting support: placed objects are ordinary scene objects.
+/// No live link, override, or variant support: the placed root keeps its source prefab ID for display only.
 /// </summary>
 public sealed class PrefabSerializer(ComponentRegistry registry)
 {
@@ -78,6 +78,7 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
                 Name = item.Name,
                 ParentId = parentId,
                 SiblingIndex = siblingIndex,
+                PrefabId = item.PrefabId,
                 Components = [],
             };
             foreach (var component in item.Components)
@@ -120,6 +121,7 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
         if (prefabId == Guid.Empty) throw new InvalidDataException("Prefab ID must not be empty.");
         var document = Capture(scene, root);
         document.Id = prefabId;
+        document.Objects!.Single(item => item!.ParentId is null)!.PrefabId = prefabId;
         return Writer.Value.Serialize(document);
     }
 
@@ -193,6 +195,7 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
                 var item = target.AddEmpty();
                 createdObjects.Add(item);
                 item.Rename(saved.Name!);
+                item.PrefabId = saved.PrefabId;
                 newByOld.Add(saved.Id, item);
                 idMap.Add(saved.Id, item.Id);
             }
@@ -264,6 +267,7 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
                         newByOld[saved.Id].SetParent(newByOld[parentId]);
             }
             var newRoot = newByOld[prefab.Objects!.Single(saved => saved!.ParentId is null)!.Id];
+            newRoot.PrefabId = prefab.Id;
             if (parent is not null) newRoot.SetParent(parent);
             if (targetId is { } requested)
                 reference = newByOld.TryGetValue(requested, out var referencedObject)
@@ -347,6 +351,8 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
                 throw new InvalidDataException("Each prefab object requires a non-empty id, name and components list.");
             if (saved.SiblingIndex is null)
                 throw new InvalidDataException($"{saved.Name}: siblingIndex is required.");
+            if (saved.PrefabId == Guid.Empty)
+                throw new InvalidDataException($"{saved.Name}: prefab ID must not be empty.");
             if (!byId.TryAdd(saved.Id, saved))
                 throw new InvalidDataException($"{saved.Name}: duplicate object ID {saved.Id:D}.");
         }

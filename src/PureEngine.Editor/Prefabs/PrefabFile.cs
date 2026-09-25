@@ -54,10 +54,13 @@ public static class PrefabFile
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(registry);
+        if (prefabId == Guid.Empty) throw new InvalidDataException("Prefab ID must not be empty.");
         if (scene.RootObjects.Count != 1)
             throw new InvalidDataException("A prefab must contain exactly one root object.");
+        scene.RootObjects[0].PrefabId = prefabId;
         var document = new PrefabSerializer(registry).Capture(scene, scene.RootObjects[0]);
         document.Id = prefabId;
+        document.Objects!.Single(item => item!.ParentId is null)!.PrefabId = prefabId;
         var yaml = PrefabSerializer.Serialize(document);
         SceneFile.Write(path, yaml);
     }

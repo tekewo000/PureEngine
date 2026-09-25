@@ -68,10 +68,10 @@
 
 ### Prefab相当のコピーのみ複製（2026-09-24実装）
 
-- 単一ルート＋子孫を `.pure.prefab.yaml`（version 1・PrefabのID・objects）へ保存し、配置時は普通のSceneObjectとして複製する。リンク・Override・Variant・入れ子は作らない。内部参照だけ新IDへ付け替え、範囲外・画像・データアセット参照は維持し、MissingはScene参照の既存規則に従う。移行規則はScene流用でPrefab独自の仕様は作らない。
+- 単一ルート＋子孫を `.pure.prefab.yaml`（version 1・PrefabのID・objects）へ保存し、配置時は fresh ID で複製する。自動更新・Override・Variantは作らない。保存元ルートには新規PrefabのID、配置したルートには配置元PrefabのIDを表示用に付け、子には付けない。内部参照だけ新IDへ付け替え、範囲外・画像・データアセット参照は維持し、MissingはScene参照の既存規則に従う。移行規則はScene流用でPrefab独自の仕様は作らない。
 - Coreに `PrefabDocument`・`PrefabSerializer`（保存・読み込み・検証・配置・巻き戻し）・`PrefabCatalog`（フォルダ走査と診断）・`PrefabSpawner`（コンストラクター注入で `Spawn`）を追加。値変換・旧名解決・membersChangedは `[Inspector]` 規則を再利用し、`SceneSerializer` の生成・Priority・メンバー走査を内部共有する。`PlaySession` 準備時に実行用Scene・factory・カタログを束縛する。
-- EditorはStuffs右クリックの保存、Stuffs→ProjectへのD&D保存（落としたフォルダへ自動連番で作成）、Projectペインの一覧・改名・削除、配置メニュー、Project→StuffsへのD&D配置（行上はその子、余白はルート、行のハイライト付き）、Play中の保存・配置・D&D禁止に対応する。当初のダブルクリック配置は上記Prefab Editorを開く操作に変更した。Save as PrefabとD&D保存はいずれも既存ファイルを上書きしない。実行中はPlay開始時にカタログを作り直し、編集用と各Play実行で共有しない。
-- 回帰チェック（保存往復・新ID・内部／外部参照・コレクションと入れ子・Missing・Priority・旧名と不明項目・型変更と未知型の拒否・構造拒否・巻き戻し・カタログ走査・スポナー束縛・2回のPlay分離とStart／Update生成）を Core Checks の `PrefabChecks` に、保存・一覧・配置・親付け・不正ファイル・ダブルクリック・Stuffs→ProjectのD&D作成（自動連番・シーン不変・カタログ反映）・Playガードを Editor Checks の `PrefabEditorChecks` に追加。ローカルの `./tools/code-quality.ps1 -Check`（提案レベルの解析・警告ゼロのビルド・Core/Editor Checks）は通過。実画面の手動操作・CIは未確認として区別する。
+- EditorはStuffs右クリックの保存、Stuffs→ProjectへのD&D保存（落としたフォルダへ自動連番で作成）、Projectペインの一覧・改名・削除、配置メニュー、Project→StuffsへのD&D配置（行上はその子、余白はルート、行のハイライト付き）、Play中の保存・配置・D&D禁止に対応する。当初のダブルクリック配置は上記Prefab Editorを開く操作に変更した。Save as PrefabとD&D保存はいずれも既存ファイルを上書きしない。保存はオブジェクトを追加せず保存元ルートに表示用マーカーを付けて未保存にする。実行中はPlay開始時にカタログを作り直し、編集用と各Play実行で共有しない。
+- 回帰チェック（保存往復・新ID・内部／外部参照・コレクションと入れ子・Missing・Priority・旧名と不明項目・型変更と未知型の拒否・構造拒否・巻き戻し・カタログ走査・スポナー束縛・2回のPlay分離とStart／Update生成・表示用Prefabマーカーの保存往復と配置引き継ぎ）を Core Checks の `PrefabChecks` に、保存・一覧・配置・親付け・不正ファイル・ダブルクリック・Stuffs→ProjectのD&D作成（自動連番・オブジェクト数不変・保存元マーカーとカタログ反映）・StuffsのPrefab／SceneObjectアイコン切替（保存元・配置・Prefab Editor）・Playガードを Editor Checks の `PrefabEditorChecks` に追加。ローカルの `./tools/code-quality.ps1 -Check`（提案レベルの解析・警告ゼロのビルド・Core/Editor Checks）は通過。実画面の手動操作・CIは未確認として区別する。
 - 設計は [EngineArchitecture.md](EngineArchitecture.md#prefabs)、操作は [README](../README.md#プレハブを使う)を参照。回帰チェックは配置メニュー経路に加え、両方向のD&DのDragOver／Dropの実経路とPlayガードを確認する。ドラッグ開始のOS側ループは対象外。
 
 ### データアセットの作成と保存（2026-09-24実装）
