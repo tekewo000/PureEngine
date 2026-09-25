@@ -434,15 +434,15 @@ public partial class MainWindow
     /// <summary>Header action button (Add/Clear/Set Null/Create) with unified sizing.</summary>
     private static Avalonia.Controls.Button BuildHeaderButton(string content, string automationName)
     {
-        var button = new Avalonia.Controls.Button { Content = content, FontSize = 11, Padding = new Avalonia.Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center };
+        var button = new Avalonia.Controls.Button { Content = content, FontSize = 11, Padding = new Avalonia.Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         button.SetValue(AutomationProperties.NameProperty, automationName);
         return button;
     }
 
-    /// <summary>Fixed-width remove button so collection rows align vertically.</summary>
+    /// <summary>Fixed-width remove button so collection rows align vertically. Content stays centered.</summary>
     private static Avalonia.Controls.Button BuildRemoveButton(string automationName)
     {
-        var remove = new Avalonia.Controls.Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), MinWidth = 28, VerticalAlignment = VerticalAlignment.Center };
+        var remove = new Avalonia.Controls.Button { Content = "✕", FontSize = 11, Padding = new Avalonia.Thickness(6, 2), MinWidth = 28, VerticalAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         remove.SetValue(AutomationProperties.NameProperty, automationName);
         return remove;
     }
