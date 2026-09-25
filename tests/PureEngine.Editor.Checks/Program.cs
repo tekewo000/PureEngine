@@ -76,6 +76,7 @@ internal static class Program
             PlayConnectionChecks.Run();
             ProjectDropChecks.Run();
             UiMenuChecks.Run();
+            EditorChromeChecks.Run();
             EditorOwnershipChecks.Run(root);
             ConsoleChecks.Run();
             EditorSeparationChecks.Run(root);
