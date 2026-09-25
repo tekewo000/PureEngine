@@ -40,7 +40,7 @@ public sealed record ProjectExplorerEntry(
         ProjectExplorerKind.Scene => "Scene",
         ProjectExplorerKind.DataAsset => "Data Asset",
         ProjectExplorerKind.Prefab => "Prefab",
-        ProjectExplorerKind.File => "File",
+        ProjectExplorerKind.File => IsImageFile ? "Image" : "File",
         _ => "C#",
     };
 
@@ -50,7 +50,7 @@ public sealed record ProjectExplorerEntry(
         ? new SolidColorBrush(Color.Parse("#8B7CF6"))
         : new SolidColorBrush(Color.Parse("#333842"));
 
-    /// <summary>Icon selectors. Exactly one is true per row; C# files are told apart from plain files by extension.</summary>
+    /// <summary>Icon selectors. Exactly one is true per row; C#, images, data assets, scenes, and prefabs are told apart from plain files by kind and extension.</summary>
     public bool IsFolder => Kind == ProjectExplorerKind.Folder;
 
     public bool IsScene => Kind == ProjectExplorerKind.Scene;
@@ -59,10 +59,13 @@ public sealed record ProjectExplorerEntry(
 
     public bool IsPrefab => Kind == ProjectExplorerKind.Prefab;
 
-    public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
-        && FullPath is not null && FullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
+    public bool IsImageFile => !IsFolder && !IsScene && !IsDataAsset && !IsPrefab
+        && FullPath is not null && ProjectAssets.IsSupportedImage(FullPath);
 
-    public bool IsPlainFile => !IsFolder && !IsScene && !IsPrefab && !IsCSharpFile;
+    public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
+        && ExternalEditor.IsCSharpFile(FullPath);
+
+    public bool IsPlainFile => !IsFolder && !IsScene && !IsDataAsset && !IsPrefab && !IsImageFile && !IsCSharpFile;
 
     public bool HasDetail => !string.IsNullOrEmpty(Detail);
 }
@@ -295,7 +298,8 @@ public partial class MainWindow
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var hasProject = _project is not null;
         FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset }
-            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
+            || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying
+            || entry is { IsCSharpFile: true };
         FilesPlaceMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying;
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
@@ -332,6 +336,11 @@ public partial class MainWindow
             await OpenPrefabEditorAsync(entry.FullPath);
             return;
         }
+        if (entry.IsCSharpFile && entry.FullPath is not null)
+        {
+            OpenCSharpInZed(entry.FullPath);
+            return;
+        }
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
@@ -356,6 +365,19 @@ public partial class MainWindow
             try { await OpenScenePathAsync(entry.FullPath); }
             finally { RefreshProjectExplorer(); }
         });
+    }
+
+    /// <summary>Opens a C# file in Zed without blocking scene switching or Play.</summary>
+    private void OpenCSharpInZed(string fullPath)
+    {
+        if (ExternalEditor.TryOpenCSharpInZed(fullPath, out var error))
+        {
+            SetFileStatus($"Opened in Zed: {Path.GetFileName(fullPath)}");
+            return;
+        }
+        var message = error ?? "Could not open in Zed.";
+        SetFileStatus(message, true);
+        Log.Engine.Warning(message);
     }
 
     /// <summary>Destination folder for creation. Uses the right-pane folder row when selected, otherwise the Tree selection.</summary>

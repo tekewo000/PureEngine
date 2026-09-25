@@ -70,7 +70,8 @@ static class ReferenceEditorChecks
         var tip = ToolTip.GetTip(combo) as string;
         Check(tip is not null && tip.Contains("RefTarget", StringComparison.Ordinal) && tip.Contains(targetButtonId.ToString("D"), StringComparison.Ordinal),
             $"Reference tooltip must show the target name and ID, got '{tip}'.");
-        Check(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear").Content as string == "\u2715",
+        var clearContent = ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear").Content as PathIcon;
+        Check(clearContent is not null && ReferenceEquals(clearContent.Data, Application.Current?.FindResource("Icon.DismissCircle")),
             "Reference clear must be an inline remove button.");
 
         Click(ButtonByName(editor, $"{nameof(TestRefHolder)}.Target.Clear"));

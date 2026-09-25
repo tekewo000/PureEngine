@@ -38,25 +38,22 @@
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="VerticalContentAlignment" Value="Stretch" />
     </Style>
-    <Style Selector="Path.tileIcon">
+    <Style Selector="PathIcon.tileIcon">
       <Setter Property="Width" Value="32" />
       <Setter Property="Height" Value="32" />
-      <Setter Property="Stroke" Value="{StaticResource EditorTextSecondaryBrush}" />
-      <Setter Property="StrokeThickness" Value="2" />
-      <Setter Property="Fill" Value="Transparent" />
-      <Setter Property="Stretch" Value="Uniform" />
-      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style Selector="Path.rowIcon">
+    <Style Selector="PathIcon.rowIcon">
       <Setter Property="Width" Value="16" />
       <Setter Property="Height" Value="16" />
-      <Setter Property="Stroke" Value="{StaticResource EditorTextSecondaryBrush}" />
-      <Setter Property="StrokeThickness" Value="1.5" />
-      <Setter Property="Fill" Value="Transparent" />
-      <Setter Property="Stretch" Value="Uniform" />
-      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="Foreground" Value="{StaticResource EditorTextSecondaryBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="PathIcon.buttonIcon">
+      <Setter Property="Width" Value="14" />
+      <Setter Property="Height" Value="14" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TreeView#ProjectTree TreeViewItem">
@@ -67,7 +64,7 @@
       <Setter Property="HeaderTemplate">
         <DataTemplate DataType="TreeViewItem">
           <StackPanel Orientation="Horizontal" Spacing="6">
-            <Path Classes="rowIcon" Data="M3 5H10L12 7H21V19H3Z" AutomationProperties.Name="Folder" />
+            <PathIcon Classes="rowIcon" Data="{StaticResource Icon.Folder}" AutomationProperties.Name="Folder" />
             <TextBlock Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
           </StackPanel>
         </DataTemplate>
@@ -479,8 +476,18 @@
         </Menu>
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
-        <Button x:Name="PlayButton" Classes="accent" Content="▶ Play" MinWidth="96" Click="OnPlayClicked" AutomationProperties.Name="Play" />
-        <Button x:Name="StopButton" Content="■ Stop" MinWidth="96" Click="OnStopClicked" IsEnabled="False" AutomationProperties.Name="Stop" />
+        <Button x:Name="PlayButton" Classes="accent" MinWidth="96" Click="OnPlayClicked" AutomationProperties.Name="Play">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Play}" />
+            <TextBlock Text="Play" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button x:Name="StopButton" MinWidth="96" Click="OnStopClicked" IsEnabled="False" AutomationProperties.Name="Stop">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Stop}" />
+            <TextBlock Text="Stop" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
       </StackPanel>
     </Grid>
 
@@ -535,8 +542,8 @@
                   <TreeView.DataTemplates>
                     <TreeDataTemplate DataType="editor:HierarchyNode" ItemsSource="{Binding Children}">
                       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
-                        <Path Classes="rowIcon" Data="M4 8L12 4L20 8V18L12 22L4 18Z M4 8L12 12L20 8 M12 12V22"
-                              AutomationProperties.Name="SceneObject" />
+                        <PathIcon Classes="rowIcon" Data="{StaticResource Icon.Hierarchy}"
+                                  AutomationProperties.Name="SceneObject" />
                         <TextBlock Grid.Column="1" Text="{Binding Ref.Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Ref.Name}" />
                       </Grid>
                     </TreeDataTemplate>
@@ -672,15 +679,13 @@
                               Background="{StaticResource EditorFloatBrush}" Padding="8,10,8,8" ToolTip.Tip="{Binding ToolTip}">
                         <StackPanel Spacing="6" HorizontalAlignment="Stretch" VerticalAlignment="Top">
                           <Panel Height="36" AutomationProperties.Name="{Binding KindLabel}">
-                            <Path Classes="tileIcon" Data="M3 19V4h5l2 2h11v13H3z" IsVisible="{Binding IsFolder}" />
-                            <Border Width="32" Height="32" BorderBrush="{StaticResource EditorTextSecondaryBrush}" BorderThickness="2"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsScene}">
-                              <Path Width="12" Height="14" Stretch="Uniform" Fill="{StaticResource EditorTextSecondaryBrush}"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center" Data="M0 0L12 7L0 14z" />
-                            </Border>
-                            <Path Classes="tileIcon" Data="M6 3h8l5 5v13H6z M14 3v5h5 M11 12l-2.5 3L11 18 M13 12l2.5 3L13 18" IsVisible="{Binding IsCSharpFile}" />
-                            <Path Classes="tileIcon" Data="M4 8L14 3L26 8V22L14 27L4 22Z M4 8L14 14L26 8 M14 14V27" IsVisible="{Binding IsPrefab}" />
-                            <Path Classes="tileIcon" Data="M6 3h8l5 5v13H6z M14 3v5h5" IsVisible="{Binding IsPlainFile}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.Folder}" IsVisible="{Binding IsFolder}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.Scene}" IsVisible="{Binding IsScene}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.DataAsset}" IsVisible="{Binding IsDataAsset}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.Image}" IsVisible="{Binding IsImageFile}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.CSharp}" IsVisible="{Binding IsCSharpFile}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.Prefab}" IsVisible="{Binding IsPrefab}" />
+                            <PathIcon Classes="tileIcon" Data="{StaticResource Icon.File}" IsVisible="{Binding IsPlainFile}" />
                           </Panel>
                           <TextBlock Text="{Binding DisplayName}" MaxLines="1"
                                      TextTrimming="CharacterEllipsis" TextAlignment="Center" />
@@ -734,8 +739,14 @@
                             ToolTip.Tip="Show engine logs (Info / Warning / Error)">
                     <TextBlock Text="Engine" VerticalAlignment="Center" />
                   </CheckBox>
+                  <PathIcon Data="{StaticResource Icon.Search}" Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,4" Foreground="{StaticResource EditorTextSecondaryBrush}" AutomationProperties.Name="Console search icon" />
                   <TextBox x:Name="ConsoleSearch" Width="160" Margin="0,0,8,4" PlaceholderText="Search…" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
-                  <Button x:Name="ConsoleClear" Content="✕ Clear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" Margin="0,0,8,4" Padding="10,4" />
+                  <Button x:Name="ConsoleClear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" Margin="0,0,8,4" Padding="10,4">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Dismiss}" Width="12" Height="12" />
+                      <TextBlock Text="Clear" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
                   <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" Margin="0,0,8,4" ToolTip.Tip="Clear history when Play starts" />
                   <Border Classes="metaPill" Margin="0,0,0,4">
                     <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" FontSize="11" />

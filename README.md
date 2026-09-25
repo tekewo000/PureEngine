@@ -258,6 +258,8 @@ public class EnemySpawner(PrefabSpawner prefabs)
 
 ZedではC#拡張を導入し、Projectのルートフォルダ（csprojがあるフォルダ）を開いてください。Roslynが補完・診断・using追加に必要な型情報を読み込めます。必要な.NET 11 SDKがインストールされ、Zedからdotnetを実行できることが前提です。既にフォルダを開いていた場合は言語サーバーを再起動するか、フォルダを開き直してください。
 
+Project ExplorerでC#ファイルをダブルクリック／Enter、または右クリック→ **Open** すると、そのファイルをZedで開きます。Play中も開けます。`zed` コマンドがPATHにない場合はステータスとConsoleに理由を表示します。WindowsではZedのインストールフォルダをPATHに追加してください。
+
 生成したcsprojの参照先はProjectを開くたびに更新します。手動作成のcsprojが既にある場合は自動生成を避け、既存のソリューション・global.jsonやZedの設定も上書きしません。自動生成ファイルを自分で管理する場合は先頭の生成コメントを外してください。このcsprojは外部エディター向けです。独自のPackageReferenceやビルド設定をエンジン内のコンパイルへ取り込む機能は含みません。
 
 ### privateライフサイクルメソッドの未使用診断

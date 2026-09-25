@@ -51,6 +51,7 @@ internal static class Program
         ComponentSearchChecks.Run();
         EditPreviewChecks.Run();
         ProjectExplorerIconChecks.Run();
+        ExternalEditorChecks.Run();
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PureEngine-LauncherChecks-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(root);
         if (args.Contains("--table-only"))

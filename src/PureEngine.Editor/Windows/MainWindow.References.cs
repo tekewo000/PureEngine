@@ -607,12 +607,40 @@ public partial class MainWindow
             valueType, ownerId.Value, storePath, automationName, showClear: false);
     }
 
+    /// <summary>
+    /// Reference-holding collection inside a custom class. Mirrors the top-level sequence and
+    /// dictionary editors: one collapsible header (count plus Add/Set Null/Clear) with each row
+    /// keeping its editor and fixed-width remove button on a single Grid line.
+    /// </summary>
     private StackPanel BuildNestedCollectionEditor(object owner, MemberInfo member, Guid ownerId, string path, string automationName)
     {
         var type = GetMemberType(member);
         var mapping = type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
         var elementType = type.IsArray ? type.GetElementType()! : type.GetGenericArguments()[mapping ? 1 : 0];
-        var root = new StackPanel { Spacing = 4 };
+        var root = new StackPanel { Spacing = 6 };
+        var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
+        var add = BuildHeaderButton("Add", $"{automationName}.Add");
+        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        ToolTip.SetTip(setNull, mapping
+            ? "Set the dictionary itself to null. Removing rows keeps an empty dictionary."
+            : "Set the list itself to null. Removing rows keeps an empty list.");
+        var clear = BuildHeaderButton("\U0001F5D1", $"{automationName}.Clear");
+        ToolTip.SetTip(clear, mapping
+            ? "Remove all entries. The empty dictionary stays."
+            : "Remove all rows. The empty list stays.");
+        var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
+        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var body = new StackPanel { Spacing = 4 };
+        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, _collapsedMembers,
+            nowExpanded => body.IsVisible = nowExpanded);
+        var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        left.Children.Add(toggle);
+        left.Children.Add(count);
+        var header = BuildSplitHeader(left, add, setNull, clear);
+        var nullHeader = BuildSplitHeader(nullStatus, create);
+        root.Children.Add(header);
+        root.Children.Add(nullHeader);
+        root.Children.Add(body);
         void assign(object? value)
         {
             if (member is FieldInfo field) field.SetValue(owner, value);
@@ -626,114 +654,228 @@ public partial class MainWindow
         }
         void refresh()
         {
-            root.Children.Clear();
+            foreach (var box in body.GetVisualDescendants().OfType<TextBox>())
+                _invalidFields.Remove(box);
+            body.Children.Clear();
             var value = GetMemberValue(owner, member);
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            root.Children.Add(actions);
-            void action(string label, string suffix, Action edit, string? tip = null)
-            {
-                var button = BuildHeaderButton(label, $"{automationName}.{suffix}");
-                if (tip is not null)
-                    ToolTip.SetTip(button, tip);
-                button.Click += (_, _) => { if (!IsPlaying) { edit(); changed(); } };
-                actions.Children.Add(button);
-            }
             if (value is null)
             {
-                action("Create", "Create", () => assign(type.IsArray ? Array.CreateInstance(elementType, 0) : Activator.CreateInstance(type)));
-                return;
+                nullHeader.IsVisible = true;
+                header.IsVisible = false;
+                body.IsVisible = false;
             }
-            action("Add", "Add", () =>
+            else if (mapping && value is not System.Collections.IDictionary)
             {
-                if (value is System.Collections.IDictionary dictionary)
-                    dictionary.Add(UniqueDictionaryKey(dictionary), DefaultElementValue(elementType));
-                else if (value is Array array)
-                {
-                    var next = Array.CreateInstance(elementType, array.Length + 1);
-                    Array.Copy(array, next, array.Length);
-                    next.SetValue(DefaultElementValue(elementType), array.Length);
-                    assign(next);
-                }
-                else ((System.Collections.IList)value).Add(DefaultElementValue(elementType));
-            });
-            action("Set Null", "Null", () =>
+                nullHeader.IsVisible = true;
+                header.IsVisible = false;
+                body.IsVisible = false;
+            }
+            else if (!mapping && value is not System.Collections.IList)
             {
-                assign(null);
-                _editScene.Current.References.RemovePathsForMember(ownerId, path);
-            });
-            action("\U0001F5D1", "Clear", () =>
+                nullHeader.IsVisible = true;
+                header.IsVisible = false;
+                body.IsVisible = false;
+            }
+            else
             {
-                assign(type.IsArray ? Array.CreateInstance(elementType, 0) : Activator.CreateInstance(type));
-                _editScene.Current.References.RemovePathsForMember(ownerId, path);
-            }, "Remove all rows. The empty collection stays.");
-            var keys = mapping ? ((System.Collections.IDictionary)value).Keys.Cast<string>().ToArray() : [];
-            var count = mapping ? keys.Length : ((System.Collections.IList)value).Count;
-            for (var i = 0; i < count; i++)
-            {
-                var index = i;
-                var key = mapping ? keys[index] : index.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                var slot = SceneReferenceStore.DictionaryPath(path, key);
-                var name = mapping ? $"{automationName}.Value[{index}]" : $"{automationName}[{index}]";
-                object? get() => mapping ? ((System.Collections.IDictionary)value)[key] : ((System.Collections.IList)value)[index];
-                void set(object? element)
-                {
-                    if (IsPlaying) return;
-                    if (mapping) ((System.Collections.IDictionary)value)[key] = element;
-                    else ((System.Collections.IList)value)[index] = element;
-                    _editScene.Current.References.RemovePathsForMember(ownerId, slot);
-                    changed();
-                }
+                nullHeader.IsVisible = false;
+                header.IsVisible = true;
+                body.IsVisible = !_collapsedMembers.TryGetValue(automationName, out var collapsed) || !collapsed;
                 if (mapping)
                 {
-                    var keyBox = new TextBox { Text = key };
-                    keyBox.SetValue(AutomationProperties.NameProperty, $"{automationName}.Key[{index}]");
-                    keyBox.TextChanged += (_, _) =>
-                    {
-                        if (IsPlaying || keyBox.Text == key) return;
-                        var dictionary = (System.Collections.IDictionary)value;
-                        if (string.IsNullOrEmpty(keyBox.Text) || dictionary.Contains(keyBox.Text))
-                        {
-                            MarkInvalid(keyBox, "Enter a unique non-empty key");
-                            return;
-                        }
-                        var nextKey = keyBox.Text;
-                        var preserved = dictionary[key];
-                        dictionary.Remove(key);
-                        dictionary.Add(nextKey, preserved);
-                        _editScene.Current.References.MovePath(ownerId, slot, SceneReferenceStore.DictionaryPath(path, nextKey));
-                        MarkInvalid(keyBox, null);
-                        changed();
-                    };
-                    root.Children.Add(keyBox);
+                    var dictionary = (System.Collections.IDictionary)value;
+                    var keys = dictionary.Keys.Cast<string>().OrderBy(key => key, StringComparer.Ordinal).ToList();
+                    count.Text = $"{keys.Count} entries";
+                    for (var i = 0; i < keys.Count; i++)
+                        body.Children.Add(BuildNestedDictionaryRow(owner, member, ownerId, path, automationName, elementType, keys[i], i, changed));
                 }
-                root.Children.Add(SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
-                    ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name, showClear: false)
-                    : BuildObjectBox(get, set, elementType, name, ownerId, slot));
-                var remove = BuildRemoveButton($"{automationName}.Remove[{index}]");
-                remove.Click += (_, _) =>
+                else
                 {
-                    if (IsPlaying) return;
-                    _editScene.Current.References.RemovePathsForMember(ownerId, slot);
-                    if (mapping) ((System.Collections.IDictionary)value).Remove(key);
-                    else
-                    {
-                        for (var j = index + 1; j < count; j++)
-                            _editScene.Current.References.MovePath(ownerId, $"{path}[{j}]", $"{path}[{j - 1}]");
-                        if (value is Array array)
-                        {
-                            var next = Array.CreateInstance(elementType, count - 1);
-                            Array.Copy(array, 0, next, 0, index);
-                            Array.Copy(array, index + 1, next, index, count - index - 1);
-                            assign(next);
-                        }
-                        else ((System.Collections.IList)value).RemoveAt(index);
-                    }
-                    changed();
-                };
-                root.Children.Add(remove);
+                    var list = (System.Collections.IList)value;
+                    count.Text = $"{list.Count} items";
+                    for (var i = 0; i < list.Count; i++)
+                        body.Children.Add(BuildNestedSequenceRow(owner, member, ownerId, path, automationName, elementType, i, changed));
+                }
             }
+            UpdateErrorBadge();
+            QueuePendingUserCodeReload();
         }
+        add.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            var value = GetMemberValue(owner, member);
+            if (value is null) return;
+            if (mapping && value is System.Collections.IDictionary dictionary)
+                dictionary.Add(UniqueDictionaryKey(dictionary), DefaultElementValue(elementType));
+            else if (value is Array array)
+            {
+                var next = Array.CreateInstance(elementType, array.Length + 1);
+                Array.Copy(array, next, array.Length);
+                next.SetValue(DefaultElementValue(elementType), array.Length);
+                assign(next);
+            }
+            else if (value is System.Collections.IList list)
+                list.Add(DefaultElementValue(elementType));
+            changed();
+        };
+        setNull.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            assign(null);
+            _editScene.Current.References.RemovePathsForMember(ownerId, path);
+            changed();
+        };
+        clear.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            var value = GetMemberValue(owner, member);
+            if (value is null) return;
+            if (value is Array)
+                assign(Array.CreateInstance(elementType, 0));
+            else if (value is System.Collections.IDictionary dictionary)
+                dictionary.Clear();
+            else if (value is System.Collections.IList list)
+                list.Clear();
+            _editScene.Current.References.RemovePathsForMember(ownerId, path);
+            changed();
+        };
+        create.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            assign(type.IsArray ? Array.CreateInstance(elementType, 0) : Activator.CreateInstance(type)!);
+            changed();
+        };
         refresh();
         return root;
+    }
+
+    /// <summary>Single nested list row: index label, stretched editor, and remove button on one line.</summary>
+    private Grid BuildNestedSequenceRow(object owner, MemberInfo member, Guid ownerId, string path, string automationName, Type elementType, int index, Action refresh)
+    {
+        var row = new Grid { ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        var label = new TextBlock { Text = $"[{index}]", Classes = { "memberType" }, Width = 36, VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(label, 0);
+        var slot = $"{path}[{index}]";
+        var name = $"{automationName}[{index}]";
+        object? get() => GetMemberValue(owner, member) is System.Collections.IList list && index >= 0 && index < list.Count ? list[index] : null;
+        void set(object? element)
+        {
+            if (IsPlaying) return;
+            if (GetMemberValue(owner, member) is not System.Collections.IList list || index < 0 || index >= list.Count) return;
+            list[index] = element;
+            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            refresh();
+        }
+        var editor = SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
+            ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name, showClear: false)
+            : BuildObjectBox(get, set, elementType, name, ownerId, slot);
+        AttachEditorDropHandlers(row, editor);
+        editor.HorizontalAlignment = HorizontalAlignment.Stretch;
+        editor.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(editor, 1);
+        var remove = BuildRemoveButton($"{automationName}.Remove[{index}]");
+        Grid.SetColumn(remove, 2);
+        remove.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            var value = GetMemberValue(owner, member);
+            if (value is not System.Collections.IList list || index < 0 || index >= list.Count) return;
+            var total = list.Count;
+            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            for (var j = index + 1; j < total; j++)
+                _editScene.Current.References.MovePath(ownerId, $"{path}[{j}]", $"{path}[{j - 1}]");
+            if (value is Array array)
+            {
+                var next = Array.CreateInstance(elementType, total - 1);
+                Array.Copy(array, 0, next, 0, index);
+                Array.Copy(array, index + 1, next, index, total - index - 1);
+                if (member is FieldInfo field) field.SetValue(owner, next);
+                else ((PropertyInfo)member).SetValue(owner, next);
+            }
+            else
+                list.RemoveAt(index);
+            refresh();
+        };
+        row.Children.Add(label);
+        row.Children.Add(editor);
+        row.Children.Add(remove);
+        return row;
+    }
+
+    /// <summary>Single nested dictionary row: key box, stretched value editor, and remove button on one line.</summary>
+    private Grid BuildNestedDictionaryRow(object owner, MemberInfo member, Guid ownerId, string path, string automationName, Type elementType, string key, int rowIndex, Action refresh)
+    {
+        var row = new Grid { ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        var slot = SceneReferenceStore.DictionaryPath(path, key);
+        var name = $"{automationName}.Value[{rowIndex}]";
+        var keyBox = new TextBox { Text = key, MinWidth = 40, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        keyBox.Classes.Add("inspectorField");
+        keyBox.SetValue(AutomationProperties.NameProperty, $"{automationName}.Key[{rowIndex}]");
+        ToolTip.SetTip(keyBox, "Dictionary key — must be unique and non-empty");
+        keyBox.TextChanged += (_, _) =>
+        {
+            if (IsPlaying) return;
+            var next = keyBox.Text ?? "";
+            if (GetMemberValue(owner, member) is not System.Collections.IDictionary current) return;
+            if (next.Length == 0 || (next != key && current.Contains(next)))
+            {
+                MarkInvalid(keyBox, "Enter a unique non-empty key");
+                return;
+            }
+            if (next == key)
+            {
+                MarkInvalid(keyBox, null, "Dictionary key — must be unique and non-empty");
+                return;
+            }
+            var preserved = current[key];
+            current.Remove(key);
+            current.Add(next, preserved);
+            _editScene.Current.References.MovePath(ownerId, slot, SceneReferenceStore.DictionaryPath(path, next));
+            MarkInvalid(keyBox, null, "Dictionary key — must be unique and non-empty");
+            refresh();
+        };
+        keyBox.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            keyBox.Text = key;
+            e.Handled = true;
+        };
+        Grid.SetColumn(keyBox, 0);
+        row.Children.Add(keyBox);
+        object? get() => GetMemberValue(owner, member) is System.Collections.IDictionary current && current.Contains(key) ? current[key] : null;
+        void set(object? element)
+        {
+            if (IsPlaying) return;
+            if (GetMemberValue(owner, member) is not System.Collections.IDictionary current || !current.Contains(key)) return;
+            current[key] = element;
+            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            refresh();
+        }
+        var valueEditor = SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
+            ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name, showClear: false)
+            : BuildObjectBox(get, set, elementType, name, ownerId, slot);
+        AttachEditorDropHandlers(row, valueEditor);
+        valueEditor.HorizontalAlignment = HorizontalAlignment.Stretch;
+        valueEditor.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(valueEditor, 1);
+        row.Children.Add(valueEditor);
+        var remove = BuildRemoveButton($"{automationName}.Remove[{rowIndex}]");
+        Grid.SetColumn(remove, 2);
+        remove.Click += (_, _) =>
+        {
+            if (IsPlaying) return;
+            if (GetMemberValue(owner, member) is System.Collections.IDictionary current)
+                current.Remove(key);
+            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            refresh();
+        };
+        row.Children.Add(remove);
+        return row;
     }
 }
