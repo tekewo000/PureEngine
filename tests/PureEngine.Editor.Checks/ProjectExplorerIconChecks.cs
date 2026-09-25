@@ -24,10 +24,20 @@ internal static class ProjectExplorerIconChecks
             "C# entries must select the C# icon instead of the generic file icon.");
 
         var plain = new ProjectExplorerEntry(ProjectExplorerKind.File, "notes.txt", "", "notes.txt", "notes.txt", "notes.txt", null, false);
-        Check(plain.IsPlainFile && !plain.IsFolder && !plain.IsScene && !plain.IsPrefab && !plain.IsCSharpFile,
+        Check(plain.IsPlainFile && !plain.IsFolder && !plain.IsScene && !plain.IsDataAsset && !plain.IsPrefab && !plain.IsImageFile && !plain.IsCSharpFile,
             "Other files must keep the generic file icon.");
 
-        Console.WriteLine("PASS: project explorer icon selection for folders, scenes, prefabs, C# files, and plain files.");
+        var dataAsset = new ProjectExplorerEntry(ProjectExplorerKind.DataAsset, "Sword.pure.asset.yaml", "Data Asset", "Items/Sword.pure.asset.yaml",
+            "Items/Sword.pure.asset.yaml", "Sword.pure.asset.yaml", null, false);
+        Check(dataAsset.IsDataAsset && !dataAsset.IsPlainFile && !dataAsset.IsImageFile && !dataAsset.IsCSharpFile,
+            "Data asset entries must select the data asset icon instead of the generic file icon.");
+
+        var image = new ProjectExplorerEntry(ProjectExplorerKind.File, "hero.png", "", "Assets/hero.png",
+            "Assets/hero.png", "C:/game/Assets/hero.png", null, false);
+        Check(image.IsImageFile && !image.IsPlainFile && !image.IsCSharpFile && !image.IsDataAsset,
+            "Image entries must select the image icon instead of the generic file icon.");
+
+        Console.WriteLine("PASS: project explorer icon selection for folders, scenes, prefabs, C# files, data assets, images, and plain files.");
     }
 
     private static void Check(bool condition, string message)
