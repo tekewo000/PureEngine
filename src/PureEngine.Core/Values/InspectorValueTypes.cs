@@ -86,8 +86,9 @@ public static class InspectorValueTypes
     }
 
     /// <summary>Checks the custom class or struct shape. Callers perform full member validation.</summary>
-    private static bool IsCustomObjectShape(Type type)
+    public static bool IsCustomObjectShape(Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
         if (type == typeof(object) || type == typeof(string))
             return false;
         if ((!type.IsClass && !type.IsValueType) || type.IsAbstract || type.IsEnum || type.IsByRefLike)

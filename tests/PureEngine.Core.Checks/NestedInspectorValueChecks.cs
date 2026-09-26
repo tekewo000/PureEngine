@@ -68,6 +68,50 @@ static class NestedInspectorValueChecks
         Check(!InspectorValueTypes.IsSupportedType(typeof(Dictionary<int, int>))
             && !InspectorValueTypes.IsSupportedType(typeof(DateTime)),
             "Unsupported dictionary keys and framework structs must remain unsupported.");
+        CheckDataAssets();
+    }
+
+    private static void CheckDataAssets()
+    {
+        var registry = new ComponentRegistry();
+        registry.Register<ValueAsset>("checks.nested-value-asset");
+        registry.Register<ExternalAsset>("checks.nested-external-asset");
+        registry.Register<ExternalSceneAsset>("checks.nested-scene-asset");
+        var serializer = new DataAssetSerializer(registry);
+        var source = new ValueAsset
+        {
+            Values = new() { ["grid"] = [new ValueProbe?[,] { { new() { Name = "asset", Numbers = [7, 9] }, null } }] },
+        };
+        var id = Guid.NewGuid();
+        var yaml = serializer.Serialize(source, id);
+        var (instance, restoredId) = serializer.Deserialize(yaml, out var changed);
+        var copy = (ValueAsset)instance;
+        Check(restoredId == id && !changed && serializer.Serialize(copy, id) == yaml,
+            "Nested value assets must preserve identity and stable YAML.");
+        Check(copy.Values["grid"][0][0, 0]!.Value.Numbers.SequenceEqual([7, 9])
+            && copy.Values["grid"][0][0, 1] is null && copy.Empty.GetLength(2) == 4,
+            "Data assets must preserve nullable structs, nested containers, and empty rectangular shapes.");
+        var root = Path.Combine(Path.GetTempPath(), $"NestedValueAssets-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Values.pure.asset.yaml"), yaml);
+            var store = DataAssetStore.ScanFolder(root, registry, out var diagnostics);
+            Check(diagnostics.Count == 0, "Nested value assets must load without diagnostics.");
+            var clone = store.Clone(registry);
+            store.Get<ValueAsset>(id).Values["grid"][0][0, 0]!.Value.Numbers.Add(11);
+            Check(clone.Get<ValueAsset>(id).Values["grid"][0][0, 0]!.Value.Numbers.SequenceEqual([7, 9]),
+                "DataAssetStore.Clone must deep-copy references inside structs and nested containers.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+        Check(!DataAssetDescriptor.TryCreate(typeof(ExternalAsset), registry, out _, out _)
+            && !DataAssetDescriptor.TryCreate(typeof(ExternalSceneAsset), registry, out _, out _),
+            "Data assets must reject nested external asset and scene references even when currently null.");
+        Reject(() => serializer.Serialize(new ExternalAsset(), Guid.NewGuid()));
+        Reject(() => serializer.Serialize(new ExternalSceneAsset(), Guid.NewGuid()));
     }
 
     private static Dictionary<string, object?> Shape(int[] dimensions, object?[] items) =>
@@ -95,5 +139,34 @@ static class NestedInspectorValueChecks
     public sealed class RecursiveProbe
     {
         [Inspector] public List<RecursiveProbe> Children { get; set; } = [];
+    }
+
+    [DataAsset]
+    public sealed class ValueAsset
+    {
+        [Inspector] public Dictionary<string, List<ValueProbe?[,]>> Values { get; set; } = [];
+        [Inspector] public int[,,] Empty { get; set; } = new int[2, 0, 4];
+    }
+
+    public struct AssetReferenceValue
+    {
+        [Inspector] public ValueAsset? Asset { get; set; }
+    }
+
+    public struct SceneReferenceValue
+    {
+        [Inspector] public SceneObject? Target { get; set; }
+    }
+
+    [DataAsset]
+    public sealed class ExternalAsset
+    {
+        [Inspector] public List<Dictionary<string, AssetReferenceValue?[,]>> Values { get; set; } = [];
+    }
+
+    [DataAsset]
+    public sealed class ExternalSceneAsset
+    {
+        [Inspector] public Dictionary<string, List<SceneReferenceValue?[,]>> Values { get; set; } = [];
     }
 }
