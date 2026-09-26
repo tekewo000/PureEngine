@@ -167,6 +167,20 @@ public sealed unsafe class VulkanRenderer : IDisposable
         return _shared!.Export();
     }
 
+    /// <summary>Reports whether the previous frame completed without blocking. The UI thread polls this to skip stale frames.</summary>
+    public bool IsFrameReady()
+    {
+        EnsureUsable();
+        var fence = _fence;
+        var result = _vk.WaitForFences(_device, 1, in fence, true, 0);
+        return result switch
+        {
+            Result.Success => true,
+            Result.Timeout => false,
+            _ => throw new InvalidOperationException($"Vulkan: {result}"),
+        };
+    }
+
     public void Render(DrawList list, Vector2 logicalSize)
     {
         EnsureUsable();
@@ -174,55 +188,77 @@ public sealed unsafe class VulkanRenderer : IDisposable
         try
         {
             Wait();
-            Upload(_vertexMemory, MemoryMarshal.AsBytes(list.Vertices));
-            Begin();
-            if (!ReferenceEquals(_atlasOwner, list) || _atlasRevision != list.Revision)
-            {
-                // ponytail: upload the 16 MiB atlas on changes; use dirty rectangles if changing text is frequent.
-                Upload(_stagingMemory, new ReadOnlySpan<byte>((void*)list.Pixels, DrawList.AtlasSize * DrawList.AtlasSize * 4));
-                Barrier(_atlas, _atlasRevision == 0 ? ImageLayout.Undefined : ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
-                    _atlasRevision == 0 ? 0 : AccessFlags.ShaderReadBit, AccessFlags.TransferWriteBit);
-                var copy = new BufferImageCopy { ImageSubresource = new(ImageAspectFlags.ColorBit, 0, 0, 1), ImageExtent = new(DrawList.AtlasSize, DrawList.AtlasSize, 1) };
-                _vk.CmdCopyBufferToImage(_command, _staging, _atlas, ImageLayout.TransferDstOptimal, 1, in copy);
-                Barrier(_atlas, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, AccessFlags.TransferWriteBit, AccessFlags.ShaderReadBit);
-                _atlasRevision = list.Revision;
-                _atlasOwner = list;
-            }
-            Barrier(_image, _presented ? ImageLayout.General : ImageLayout.Undefined, ImageLayout.ColorAttachmentOptimal,
-                0, AccessFlags.ColorAttachmentWriteBit, Vk.QueueFamilyExternal, _family);
-            var clear = new ClearValue { Color = new ClearColorValue(.035f, .045f, .065f, 1) };
-            var begin = new RenderPassBeginInfo { SType = StructureType.RenderPassBeginInfo, RenderPass = _pass, Framebuffer = _framebuffer,
-                RenderArea = new(new(0, 0), new((uint)Width, (uint)Height)), ClearValueCount = 1, PClearValues = &clear };
-            _vk.CmdBeginRenderPass(_command, in begin, SubpassContents.Inline);
-            _vk.CmdBindPipeline(_command, PipelineBindPoint.Graphics, _pipeline);
-            var viewport = new Viewport(0, 0, Width, Height, 0, 1);
-            var scissor = new Rect2D(new(0, 0), new((uint)Width, (uint)Height));
-            _vk.CmdSetViewport(_command, 0, 1, in viewport);
-            _vk.CmdSetScissor(_command, 0, 1, in scissor);
-            var vertices = _vertices;
-            ulong offset = 0;
-            _vk.CmdBindVertexBuffers(_command, 0, 1, &vertices, &offset);
-            var set = _set;
-            _vk.CmdBindDescriptorSets(_command, PipelineBindPoint.Graphics, _layout, 0, 1, &set, 0, null);
-            _vk.CmdPushConstants(_command, _layout, ShaderStageFlags.VertexBit, 0, 8, &logicalSize);
-            _vk.CmdDraw(_command, (uint)list.Vertices.Length, 1, 0, 0);
-            _vk.CmdEndRenderPass(_command);
-            Barrier(_image, ImageLayout.ColorAttachmentOptimal, ImageLayout.General, AccessFlags.ColorAttachmentWriteBit, 0, _family, Vk.QueueFamilyExternal);
-            Check(_vk.EndCommandBuffer(_command));
-            var cmd = _command;
-            var memory = _memory;
-            ulong acquireKey = 0, releaseKey = 1;
-            uint timeout = 5000;
-            var mutex = new Win32KeyedMutexAcquireReleaseInfoKHR { SType = StructureType.Win32KeyedMutexAcquireReleaseInfoKhr,
-                AcquireCount = 1, PAcquireSyncs = &memory, PAcquireKeys = &acquireKey, PAcquireTimeouts = &timeout,
-                ReleaseCount = 1, PReleaseSyncs = &memory, PReleaseKeys = &releaseKey };
-            var submit = new SubmitInfo { SType = StructureType.SubmitInfo, PNext = &mutex, CommandBufferCount = 1, PCommandBuffers = &cmd };
-            Check(_vk.ResetFences(_device, 1, in _fence));
-            Check(_vk.QueueSubmit(_queue, 1, in submit, _fence));
+            SubmitFrame(list, logicalSize);
             Wait();
             _presented = true;
         }
         catch { _faulted = true; throw; }
+    }
+
+    /// <summary>Submits the latest frame without blocking the caller. Returns false when the previous frame is still in flight.</summary>
+    /// <remarks>Callers retry on the next tick with the newest state instead of queueing stale frames. Presentation still syncs via the keyed mutex.</remarks>
+    public bool TryRender(DrawList list, Vector2 logicalSize)
+    {
+        EnsureUsable();
+        if (Width == 0 || !float.IsFinite(logicalSize.X + logicalSize.Y) || logicalSize.X <= 0 || logicalSize.Y <= 0) throw new ArgumentException("Invalid target dimensions.", nameof(logicalSize));
+        try
+        {
+            if (!IsFrameReady())
+                return false;
+            SubmitFrame(list, logicalSize);
+            _presented = true;
+            return true;
+        }
+        catch { _faulted = true; throw; }
+    }
+
+    private void SubmitFrame(DrawList list, Vector2 logicalSize)
+    {
+        Upload(_vertexMemory, MemoryMarshal.AsBytes(list.Vertices));
+        Begin();
+        if (!ReferenceEquals(_atlasOwner, list) || _atlasRevision != list.Revision)
+        {
+            // ponytail: upload the 16 MiB atlas on changes; use dirty rectangles if changing text is frequent.
+            Upload(_stagingMemory, new ReadOnlySpan<byte>((void*)list.Pixels, DrawList.AtlasSize * DrawList.AtlasSize * 4));
+            Barrier(_atlas, _atlasRevision == 0 ? ImageLayout.Undefined : ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
+                _atlasRevision == 0 ? 0 : AccessFlags.ShaderReadBit, AccessFlags.TransferWriteBit);
+            var copy = new BufferImageCopy { ImageSubresource = new(ImageAspectFlags.ColorBit, 0, 0, 1), ImageExtent = new(DrawList.AtlasSize, DrawList.AtlasSize, 1) };
+            _vk.CmdCopyBufferToImage(_command, _staging, _atlas, ImageLayout.TransferDstOptimal, 1, in copy);
+            Barrier(_atlas, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, AccessFlags.TransferWriteBit, AccessFlags.ShaderReadBit);
+            _atlasRevision = list.Revision;
+            _atlasOwner = list;
+        }
+        Barrier(_image, _presented ? ImageLayout.General : ImageLayout.Undefined, ImageLayout.ColorAttachmentOptimal,
+            0, AccessFlags.ColorAttachmentWriteBit, Vk.QueueFamilyExternal, _family);
+        var clear = new ClearValue { Color = new ClearColorValue(.035f, .045f, .065f, 1) };
+        var begin = new RenderPassBeginInfo { SType = StructureType.RenderPassBeginInfo, RenderPass = _pass, Framebuffer = _framebuffer,
+            RenderArea = new(new(0, 0), new((uint)Width, (uint)Height)), ClearValueCount = 1, PClearValues = &clear };
+        _vk.CmdBeginRenderPass(_command, in begin, SubpassContents.Inline);
+        _vk.CmdBindPipeline(_command, PipelineBindPoint.Graphics, _pipeline);
+        var viewport = new Viewport(0, 0, Width, Height, 0, 1);
+        var scissor = new Rect2D(new(0, 0), new((uint)Width, (uint)Height));
+        _vk.CmdSetViewport(_command, 0, 1, in viewport);
+        _vk.CmdSetScissor(_command, 0, 1, in scissor);
+        var vertices = _vertices;
+        ulong offset = 0;
+        _vk.CmdBindVertexBuffers(_command, 0, 1, &vertices, &offset);
+        var set = _set;
+        _vk.CmdBindDescriptorSets(_command, PipelineBindPoint.Graphics, _layout, 0, 1, &set, 0, null);
+        _vk.CmdPushConstants(_command, _layout, ShaderStageFlags.VertexBit, 0, 8, &logicalSize);
+        _vk.CmdDraw(_command, (uint)list.Vertices.Length, 1, 0, 0);
+        _vk.CmdEndRenderPass(_command);
+        Barrier(_image, ImageLayout.ColorAttachmentOptimal, ImageLayout.General, AccessFlags.ColorAttachmentWriteBit, 0, _family, Vk.QueueFamilyExternal);
+        Check(_vk.EndCommandBuffer(_command));
+        var cmd = _command;
+        var memory = _memory;
+        ulong acquireKey = 0, releaseKey = 1;
+        uint timeout = 5000;
+        var mutex = new Win32KeyedMutexAcquireReleaseInfoKHR { SType = StructureType.Win32KeyedMutexAcquireReleaseInfoKhr,
+            AcquireCount = 1, PAcquireSyncs = &memory, PAcquireKeys = &acquireKey, PAcquireTimeouts = &timeout,
+            ReleaseCount = 1, PReleaseSyncs = &memory, PReleaseKeys = &releaseKey };
+        var submit = new SubmitInfo { SType = StructureType.SubmitInfo, PNext = &mutex, CommandBufferCount = 1, PCommandBuffers = &cmd };
+        Check(_vk.ResetFences(_device, 1, in _fence));
+        Check(_vk.QueueSubmit(_queue, 1, in submit, _fence));
     }
 
     private void Upload(DeviceMemory memory, ReadOnlySpan<byte> bytes)

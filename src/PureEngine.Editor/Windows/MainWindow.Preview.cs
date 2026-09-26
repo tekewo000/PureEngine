@@ -40,14 +40,18 @@ public partial class MainWindow
             return;
         }
         var view = SceneViewMath.ViewMatrix(_scenePan, _sceneZoom);
+        // Layouts ignore pan and zoom; compute once per frame and reuse for drawing and selection.
+        List<EditSceneRenderer.Diagnostic> layoutDiagnostics = [];
+        var layouts = EditSceneRenderer.CollectLayouts(Documents.Current.Current, viewportSize, layoutDiagnostics);
         draw.Clear();
         SceneViewOverlay.DrawGrid(draw, viewportSize, _scenePan, _sceneZoom);
-        var diagnostics = EditSceneRenderer.Append(draw, Documents.Current.Current, _previewImages, viewportSize, view);
+        var diagnostics = EditSceneRenderer.AppendWithLayouts(draw, layouts, _previewImages, viewportSize, view);
         _sceneDrawFailures.Clear();
+        foreach (var diagnostic in layoutDiagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);
         foreach (var diagnostic in diagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);
         if (GetSelectedSceneObject() is not SceneObject selected)
             return;
-        if (!TrySceneFrame(selected, viewportSize, out var corners, out var pivot, out var xAxis, out var yAxis, out var gizmoValid))
+        if (!TrySceneFrameWithLayouts(selected, layouts, viewportSize, out var corners, out var pivot, out var xAxis, out var yAxis, out var gizmoValid))
             return;
         var clip = new System.Numerics.Vector4(0, 0, viewportSize.X, viewportSize.Y);
         SceneViewOverlay.DrawSelection(draw, corners, pivot, clip);
