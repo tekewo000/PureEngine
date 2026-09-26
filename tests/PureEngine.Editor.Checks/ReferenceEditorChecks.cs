@@ -188,6 +188,7 @@ static class ReferenceEditorChecks
         var keyBox = editor.GetVisualDescendants().OfType<TextBox>().Single(box =>
             Equals(box.GetValue(AutomationProperties.NameProperty), $"{nameof(TestRefHolder)}.Config.Map.Key[0]"));
         keyBox.Text = "renamed";
+        keyBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
         Dispatcher.UIThread.RunJobs();
         Check(scene.References.TryGetMissing(holderComponentId, "Config.Map[renamed]", out var renamedMissing) && renamedMissing == targetButtonId,
             "Renaming a nested dictionary key must move its retained ID.");

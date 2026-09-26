@@ -128,6 +128,7 @@ public sealed class InspectorViewModel(EditorDocuments documents) : EditorObserv
     public void MarkEdited(object? owner)
     {
         if (IsReadOnly) return;
+        if (owner is InspectorValueBinding binding) owner = binding.Owner;
         var kind = documents.MarkChanged(owner);
         DocumentEdited?.Invoke(kind);
     }

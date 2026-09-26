@@ -413,6 +413,16 @@ static class UserCodeChecks
                 {
                     [Inspector] public Mode Level = Mode.Hard;
                 }
+                public struct ValueStats
+                {
+                    [Inspector] public Mode Level { get; set; }
+                }
+                [Inspector] public ValueStats StructValue = new() { Level = Mode.Hard };
+                [Inspector] public ValueStats? OptionalStruct = new ValueStats { Level = Mode.Hard };
+                [Inspector] public ValueStats[,] Matrix = new ValueStats[0, 2];
+                [Inspector] public List<Dictionary<string, ValueStats[]>> Nested = [
+                    new() { ["key"] = [new() { Level = Mode.Hard }] }
+                ];
                 [Inspector] public Stats Custom = new();
                 [Inspector] public Stats[] Customs = [new()];
                 [Inspector] public List<Stats> CustomList = [new()];
@@ -443,7 +453,7 @@ static class UserCodeChecks
         {
             changed,
             changed.Replace("Hard = 2", "Hard = 2, Expert = 3"),
-            changed.Replace("[Inspector] public Mode Level", "[Inspector, FormerlySerializedAs(\"Level\")] public Mode Rank"),
+            changed.Replace("[Inspector] public Mode Level = Mode.Easy", "[Inspector, FormerlySerializedAs(\"Level\")] public Mode Rank = Mode.Easy"),
         })
         {
             File.WriteAllText(file, source);
@@ -468,6 +478,7 @@ static class UserCodeChecks
             changed.Replace("public Mode Value = Mode.Easy", "public int Value = 1"),
             changed.Replace("public Mode Level = Mode.Easy", "public int Level = 1"),
             changed.Replace("Stats", "OtherStats"),
+            changed.Replace("ValueStats[,] Matrix = new ValueStats[0, 2]", "ValueStats[,,] Matrix = new ValueStats[0, 2, 1]"),
         })
         {
             File.WriteAllText(file, source);
@@ -485,7 +496,7 @@ static class UserCodeChecks
             catch (InvalidDataException) { }
             Check(serializer.Serialize(scene) == expected, "Failed enum migration must preserve the original scene.");
         }
-        Console.WriteLine("PASS: recompiled Inspector enums and collections preserve values; incompatible definitions preserve the old scene.");
+        Console.WriteLine("PASS: real recompilation preserves enums, structs, nullable and nested shaped collections; incompatible definitions preserve the old scene.");
     }
 
     private static void CheckIdentitySafety(string parent)

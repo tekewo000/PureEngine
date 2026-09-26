@@ -124,7 +124,7 @@ static class SceneReferenceChecks
         Reject(() => serializer.Clone(legacyInline), "Clone must not silently discard unresolved legacy data.");
         Check(!SceneReferenceTypes.IsSupportedInspectorType(typeof(InvalidConfig), registry), "A reference must not mask an unsupported sibling value.");
         Check(!SceneReferenceTypes.IsSupportedInspectorType(typeof(RecursiveConfig), registry), "Embedded recursion must be rejected even when a sibling is a reference.");
-        Check(!SceneReferenceTypes.IsSupportedInspectorType(typeof(List<List<RefTarget>>), registry), "Nested containers must remain unsupported.");
+        Check(SceneReferenceTypes.IsSupportedInspectorType(typeof(List<List<RefTarget>>), registry), "Nested reference containers must be supported.");
 
         scene.Remove(targetObject);
         Check(holder.Single is null && holder.Button is null && holder.Owner is null, "Deletion must null live references.");

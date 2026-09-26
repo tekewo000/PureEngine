@@ -251,8 +251,10 @@ static class InspectorValueChecks
         var structRegistry = new ComponentRegistry();
         structRegistry.Register<StructProbe>("checks.struct");
         var structScene = new Scene();
-        structScene.AddEmpty().Attach(new StructProbe());
-        Reject(() => new SceneSerializer(structRegistry).Serialize(structScene), "Struct member saved.");
+        structScene.AddEmpty().Attach(new StructProbe { Point = new PointStats { X = 7 } });
+        var structSerializer = new SceneSerializer(structRegistry);
+        Check(structSerializer.Deserialize(structSerializer.Serialize(structScene))
+            .Objects[0].GetComponent<StructProbe>()!.Point.X == 7, "Custom struct members must round-trip.");
         var noCtorRegistry = new ComponentRegistry();
         noCtorRegistry.Register<NoCtorProbe>("checks.noctor");
         var noCtorScene = new Scene();
@@ -288,8 +290,12 @@ static class InspectorValueChecks
         var nestedRegistry = new ComponentRegistry();
         nestedRegistry.Register<NestedListProbe>("checks.nested");
         var nestedScene = new Scene();
-        nestedScene.AddEmpty().Attach(new NestedListProbe());
-        Reject(() => new SceneSerializer(nestedRegistry).Serialize(nestedScene), "Nested collections saved.");
+        nestedScene.AddEmpty().Attach(new NestedListProbe { Nested = [[1, 2], []] });
+        var nestedSerializer = new SceneSerializer(nestedRegistry);
+        var nestedListCopy = nestedSerializer.Deserialize(nestedSerializer.Serialize(nestedScene))
+            .Objects[0].GetComponent<NestedListProbe>()!;
+        Check(nestedListCopy.Nested[0].SequenceEqual([1, 2]) && nestedListCopy.Nested[1].Count == 0,
+            "Nested collections must round-trip.");
         var intKeyRegistry = new ComponentRegistry();
         intKeyRegistry.Register<IntKeyProbe>("checks.intkey");
         var intKeyScene = new Scene();
@@ -423,9 +429,7 @@ static class InspectorValueChecks
 
     public struct PointStats
     {
-#pragma warning disable CS0649 // Never assigned: intentional negative case for struct rejection.
         [Inspector] public int X;
-#pragma warning restore CS0649
     }
 
     public sealed class StructProbe

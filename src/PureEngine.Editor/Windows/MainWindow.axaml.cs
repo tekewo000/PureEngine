@@ -708,6 +708,14 @@ public partial class MainWindow : Window
         var memberType = GetMemberType(member);
         automationName ??= $"{component.GetType().Name}.{member.Name}";
 
+        if (component is not InspectorValueBinding
+            && !ShouldShowReferenceEditorFor(memberType, component)
+            && (IsCompositeValue(memberType) || SceneReferenceTypes.ContainsReference(memberType, Components.Registry))
+            && (InspectorValueTypes.IsSupportedType(memberType)
+                || SceneReferenceTypes.IsSupportedInspectorType(memberType, Components.Registry)))
+            return BuildBoundValueEditor(InspectorValueBinding.ForMember(component, member), automationName,
+                GetOwnerComponentId(component), member.Name);
+
         if (ShouldShowReferenceEditorFor(memberType, component))
             return BuildMemberReferenceEditor(component, member, automationName);
         if ((memberType.IsArray || memberType.IsGenericType)
@@ -897,7 +905,7 @@ public partial class MainWindow : Window
         type == typeof(PureEngine.Core.Color) ? nameof(PureEngine.Core.Color) :
         type == typeof(PureEngine.Core.Transform) ? nameof(PureEngine.Core.Transform) :
         Nullable.GetUnderlyingType(type) is { } underlying ? $"{FriendlyTypeName(underlying)}?" :
-        type.IsArray ? $"{FriendlyTypeName(type.GetElementType()!)}[]" :
+        type.IsArray ? $"{FriendlyTypeName(type.GetElementType()!)}[{new string(',', type.GetArrayRank() - 1)}]" :
         type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>) ? $"List<{FriendlyTypeName(type.GetGenericArguments()[0])}>" :
         type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>) ? $"Dictionary<{FriendlyTypeName(type.GetGenericArguments()[0])}, {FriendlyTypeName(type.GetGenericArguments()[1])}>" :
         type.IsEnum ? type.Name :

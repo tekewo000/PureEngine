@@ -286,7 +286,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 - 親子関係・兄弟順・Sprite参照・描画順（`Order`）・Buttonの`Interactable`・Textの内容と色・サイズの保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
-- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。自作クラスは単体・配列・リスト要素・辞書値・入れ子で対応する。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
+- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節を正本とする。自作struct／Nullable、対応コンテナの任意入れ子、ゼロ下限の多次元配列を含む。非string辞書キー、非ゼロ下限配列、任意ポリモーフィズム、structのComponentアタッチ、サービス参照は対象外。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
 - ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
@@ -749,6 +749,7 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 
 ### 自作クラスのInspector対応（2026-09-23）
 
+- 以下は導入時点の記録。struct・コンテナ入れ子の制限は下記の2026-09-26対応で更新した。
 - `public AClass Foo { get; set; }` のような自作クラスをInspector値として扱う。条件は参照型のclass（`string`・配列・`List`・`Dictionary`・`Nullable`・enum・`Transform`・`Sprite`を除く）、抽象・ジェネリック・struct・`object`自体を除き、publicな引数なしコンストラクタを持ち、すべての `[Inspector]` メンバーが対応型であること。再帰（自分を直接・間接に含む）は未対応。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する。
 - 単体・`T[]`・`List<T>`・`Dictionary<string, TValue>`・入れ子の自作クラスで同じ変換を使う。YAMLではメンバー名のマッピング、nullは `null`。欠けた項目はクラスの初期値を維持し、未知の項目は読み飛ばす（ベクトル・Transform・Sprite内部は従来どおり厳格）。`Clone` では深く複製する。対応型の正本は[設計書](EngineArchitecture.md)のInspector節とYAML節。
 - Editorは入れ子カード（Null表示＋Create／Set Null＋折りたたみ＋`親.子`のAutomation名）で編集する。単体・配列／リスト要素・辞書値に対応し、無効表示・保存拒否・Esc復元・未保存化は既存の仕組みに合わせる。
@@ -756,3 +757,14 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 - 追加分（Editor・InspectorValueEditorChecks）：入れ子エディタのUnsupported表示なし、Create→入れ子編集→Set Null、二重入れ子・折りたたみ、リスト・辞書のAdd／Removeと値編集、無効表示・Esc復元・未保存化をHeadlessで確認。
 - PR修正：自作クラスの再コンパイル後の型互換性判定と、入れ子の `FormerlySerializedAs` の名前解決を追加。単体・配列・List・Dictionaryの値保持、入れ子の旧名復元、新旧名の重複拒否、非互換な内部メンバー型／クラス名変更時の元Scene保持を回帰チェックで確認した。仕様は[設計書](EngineArchitecture.md)のInspector節を参照。
 - ローカルの `./tools/code-quality.ps1 -Check`（提案レベル解析・警告をエラー扱いにしたビルド・Core／Editorチェック全件）を通過。以前中断した `ConsoleChecks.CloseReopen` も今回の実行では通過。実画面・実GPUは未確認。CIはPRのChecksで別途確認する。
+
+### struct・コンテナ合成・多次元配列（2026-09-26）
+
+- 対応範囲と保存形式の正本は[設計書のInspector節](EngineArchitecture.md#inspector)。自作struct／Nullable、一次元配列・List・stringキーDictionaryの任意入れ子、ゼロ下限の多次元配列を実装した。既存class埋め込み互換とComponent／DataAsset参照の意味は維持し、新しいclass埋め込み指定は追加していない。
+- `InspectorArrayShape` で形状・行優先座標・検証・確保を共有。一次元の従来形式は維持し、多次元は空次元を含む形状を保存する。Scene参照Codec・削除時のnull化・型移行も同じ再帰規則で処理する。
+- Editorは文書所有者付きのlive value bindingで、深いstructのboxed copyを全親へ書き戻す。32要素のページ表示、子コンテナの遅延展開、配列座標とResize、外側の行削除・キー変更時の子Missing情報の追従に対応。Inspectorの配列拡大操作上限は設計書を参照。
+- Core回帰：`NestedInspectorValueChecks` でstruct・Nullable・混在入れ子・形状・空次元・DataAsset保存／Cloneと外部参照制約を確認。`SceneComposableReferenceChecks` でScene保存／Clone、参照削除Missing、Nullable struct書戻し、Prefab配置時のID接続、Play分離、rank変更拒否を確認。
+- Editor Headless回帰：`ComposableInspectorChecks` で深い兄弟欄の書戻し、Nullable、混在入れ子、座標編集・Resize・不正形状時の元データ維持・ページ編集、struct内の参照選択／解除、外側の削除・改名によるMissing追従を確認。`UserCodeChecks` で実際の別アセンブリ再コンパイル後のstruct／Nullable／入れ子／空多次元配列の保持と非互換rank変更時の元Scene保持を確認。
+- 独立レビューで指摘された辞書キーの入力中の再構築を修正。実際のHeadless文字入力を一文字ずつ送り、フォーカス保持、Enter／フォーカス移動での確定、Esc、空・重複キー拒否、古い欄への遅延イベント無視を確認。DataAssetの多次元structセル編集も、Sceneを汚さず所有アセットだけを未保存にし、保存値へ到達することを確認。
+- 参照削除は二段階にし、共有された埋め込みclass・List・辞書・多次元配列のすべての所有パスを記録してからnull化する。同じstruct内の複数参照と親への書戻し順序、同一／別Componentからの共有、MissingのClone・保存再読込を回帰確認した。
+- 検証：最終統合コード `d40eefc` で `./tools/code-quality.ps1 -Check` が成功（提案レベル解析、警告をエラー扱いにしたビルド、Core／Editor全チェック）。独立レビューの入力操作・共有参照に関する指摘を修正した。実画面・実GPUでの目視確認は行っていない。CI結果はPRのChecksで別途確認する。
