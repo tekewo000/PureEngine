@@ -1,7 +1,7 @@
 namespace PureEngine.Editor.Samples;
 
 /// <summary>
-/// Battle state shared by a single game run. Basic example of scoped registration.
+/// Battle state shared by a single game run in the editor or packaged player.
 /// DI handles creation and cleanup (scope exit). Never dispose from a component.
 /// </summary>
 public sealed class BattleSession : IDisposable

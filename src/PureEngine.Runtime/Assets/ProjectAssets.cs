@@ -194,8 +194,8 @@ public sealed class ProjectAssets
     private static void ValidateAssetPath(string projectRoot, string path)
     {
         var assets = Path.Combine(projectRoot, "Assets");
-        ProjectFile.ValidateProjectPath(projectRoot, assets);
-        ProjectFile.ValidateProjectPath(assets, path);
+        Runtime.ContentPaths.Validate(projectRoot, assets);
+        Runtime.ContentPaths.Validate(assets, path);
     }
 
     public static bool IsSupportedImage(string path) =>
