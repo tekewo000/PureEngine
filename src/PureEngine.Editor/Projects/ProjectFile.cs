@@ -85,31 +85,44 @@ public sealed class ProjectFile
         return Path.GetRelativePath(RootDirectory, fullPath).Replace('\\', '/');
     }
 
+    /// <summary>Scene file extension. Shown in the Explorer alongside C#, images, data assets, prefabs, and localization.</summary>
+    public static bool IsSceneFileName(string fileName) =>
+        fileName.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
+
     public void ValidateScenePath(string path)
     {
         path = Path.GetFullPath(path);
         if (!path.StartsWith(ScenesDirectory + Path.DirectorySeparatorChar, PathComparison)
-            || !path.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
+            || !IsSceneFileName(path))
             throw new InvalidDataException("Save inside the project's Scenes folder as .pure.scene.yaml.");
         ValidateProjectPath(RootDirectory, path);
     }
 
     public IReadOnlyList<string> ListScenes() => Directory.EnumerateFiles(ScenesDirectory, "*", new EnumerationOptions
         { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false })
-        .Where(path => path.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
+        .Where(IsSceneFileName)
         .Select(GetSceneRelativePath).Order(StringComparer.Ordinal).ToArray();
 
-    /// <summary>Relative folder list from directly under the project root. "" represents the root itself. Used for the Explorer tree.</summary>
+    /// <summary>Visible folder list from directly under the project root. "" represents the root itself. Used for the Explorer tree.
+    /// Hides dot-folders, bin/obj output, and caches so only content folders appear.</summary>
     public IReadOnlyList<string> ListDirectories()
     {
         if (!Directory.Exists(RootDirectory)) return [];
         return Directory.EnumerateDirectories(RootDirectory, "*", new EnumerationOptions
             { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false })
             .Select(path => Path.GetRelativePath(RootDirectory, path).Replace('\\', '/'))
+            .Where(path => !IsHiddenDirectory(path))
             .Order(StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>File names directly under the specified folder (non-recursive). Used for the Explorer right pane.</summary>
+    /// <summary>Hidden folders never appear in the Explorer tree: dot-folders, build output, and caches at any depth.</summary>
+    private static bool IsHiddenDirectory(string relativePath) =>
+        relativePath.Split('/').Any(part => part.StartsWith('.')
+            || part.Equals("bin", StringComparison.OrdinalIgnoreCase)
+            || part.Equals("obj", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Visible file names directly under the specified folder (non-recursive). Used for the Explorer right pane.
+    /// Only editor-handled types are shown; project metadata, generated workspaces, asset registrations, and general files stay hidden.</summary>
     public IReadOnlyList<string> ListFiles(string relativeDirectory)
     {
         var directory = ResolveDirectoryPath(relativeDirectory);
@@ -117,8 +130,19 @@ public sealed class ProjectFile
         return Directory.EnumerateFiles(directory, "*", new EnumerationOptions
             { RecurseSubdirectories = false, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false })
             .Select(path => Path.GetFileName(path)!)
+            .Where(IsVisibleProjectFile)
             .Order(StringComparer.Ordinal).ToArray();
     }
+
+    /// <summary>Whether the file appears in the Project Explorer. Only editor-handled types
+    /// (scenes, C#, images, data assets, prefabs, localization) are shown.</summary>
+    public static bool IsVisibleProjectFile(string fileName) =>
+        IsSceneFileName(fileName)
+        || IsDataAssetFileName(fileName)
+        || IsPrefabFileName(fileName)
+        || IsLocalizationFileName(fileName)
+        || fileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        || ProjectAssets.IsSupportedImage(fileName);
 
     /// <summary>Resolves a relative folder path to a physical path and rejects escapes outside the root.</summary>
     public string ResolveDirectoryPath(string relativeDirectory)

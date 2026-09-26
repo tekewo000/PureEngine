@@ -37,7 +37,12 @@ internal static class ProjectExplorerIconChecks
         Check(image.IsImageFile && !image.IsPlainFile && !image.IsCSharpFile && !image.IsDataAsset,
             "Image entries must select the image icon instead of the generic file icon.");
 
-        Console.WriteLine("PASS: project explorer icon selection for folders, scenes, prefabs, C# files, data assets, images, and plain files.");
+        var localization = new ProjectExplorerEntry(ProjectExplorerKind.File, "Localization.pure.loc.yaml", "", "Localization.pure.loc.yaml",
+            "Localization.pure.loc.yaml", "C:/game/Localization.pure.loc.yaml", null, false);
+        Check(localization.IsPlainFile && !localization.IsImageFile && !localization.IsCSharpFile && !localization.IsDataAsset,
+            "Localization entries must keep the generic file icon.");
+
+        Console.WriteLine("PASS: project explorer icon selection for folders, scenes, prefabs, C# files, data assets, images, localization, and plain files.");
     }
 
     private static void Check(bool condition, string message)

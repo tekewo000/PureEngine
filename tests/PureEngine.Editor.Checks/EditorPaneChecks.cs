@@ -100,6 +100,27 @@ static class EditorPaneChecks
         model.RefreshFiles(session.Project, session.Components, session.Project.StartupScenePath);
         Check(model.SelectedEntry is null && model.FileCountText == "Empty folder",
             "Changing folders must clear an unavailable selection and update the empty state.");
+        // The Explorer shows only editor-handled types; metadata, caches, and general files stay hidden.
+        File.WriteAllText(Path.Combine(session.Project.RootDirectory, "notes.txt"), "not shown");
+        File.WriteAllText(Path.Combine(session.Project.RootDirectory, "Side.cs"), "public sealed class Side {}");
+        File.WriteAllBytes(Path.Combine(session.Project.RootDirectory, "Cover.png"), [1, 2, 3]);
+        File.WriteAllText(Path.Combine(session.Project.RootDirectory, "Localization.pure.loc.yaml"), "version: 1\n");
+        Directory.CreateDirectory(Path.Combine(session.Project.RootDirectory, "bin"));
+        Directory.CreateDirectory(Path.Combine(session.Project.RootDirectory, ".pureengine"));
+        model.Folder = "";
+        model.RefreshDirectories(session.Project);
+        model.RefreshFiles(session.Project, session.Components, session.Project.StartupScenePath);
+        Check(model.Directories.Contains("Scenes") && model.Directories.All(directory =>
+            !directory.Split('/').Any(part => part.StartsWith('.')
+                || part.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("obj", StringComparison.OrdinalIgnoreCase))),
+            "Explorer folders must hide caches and hidden directories while keeping content folders.");
+        var visible = model.Files.Select(entry => entry.DisplayName).ToArray();
+        Check(visible.Contains("Side.cs") && visible.Contains("Cover.png") && visible.Contains("Localization.pure.loc.yaml"),
+            "Explorer files must show C#, images, and localization.");
+        Check(!visible.Contains("Project.pure.project.yaml") && !visible.Contains("PureEngine.Game.csproj")
+            && !visible.Contains("PureEngine.Game.slnx") && !visible.Contains("global.json") && !visible.Contains("notes.txt"),
+            "Explorer files must hide project metadata, generated workspaces, and general files.");
     }
 
     private static void Check(bool condition, string message)
