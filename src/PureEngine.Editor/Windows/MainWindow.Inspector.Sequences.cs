@@ -595,7 +595,7 @@ public partial class MainWindow
             ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
-            var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+            var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
             ToolTip.SetTip(clear, "Set to null.");
             root.Children.Add(nullRow);
             root.Children.Add(body);
@@ -693,7 +693,7 @@ public partial class MainWindow
             ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
-            var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+            var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
             ToolTip.SetTip(clear, "Set to null.");
             root.Children.Add(nullRow);
             root.Children.Add(body);

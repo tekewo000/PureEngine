@@ -191,8 +191,8 @@ static class InspectorValueEditorChecks
             "Bulk Clear must use the shared Delete icon.");
         Check(swatchesClear.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
         var swatchesNull = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Null");
-        Check(swatchesNull.Content is PathIcon swatchesNullIcon && ReferenceEquals(swatchesNullIcon.Data, Application.Current?.FindResource("Icon.Dismiss")),
-            "Set Null must use the shared Dismiss icon.");
+        Check(swatchesNull.Content is PathIcon swatchesNullIcon && ReferenceEquals(swatchesNullIcon.Data, Application.Current?.FindResource("Icon.BorderNone")),
+            "Set Null must use the shared BorderNone icon.");
         Check(swatchesNull.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
         var swatchesCreate = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Create");
         Check(swatchesCreate.Content is PathIcon swatchesCreateIcon && ReferenceEquals(swatchesCreateIcon.Data, Application.Current?.FindResource("Icon.Compose")),
@@ -221,8 +221,8 @@ static class InspectorValueEditorChecks
         // List Add/Remove updates the scene.
         var addScores = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Add");
         var scoresNull = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Null");
-        Check(scoresNull.Content is PathIcon scoresNullIcon && ReferenceEquals(scoresNullIcon.Data, Application.Current?.FindResource("Icon.Dismiss")),
-            "Set Null must use the shared Dismiss icon.");
+        Check(scoresNull.Content is PathIcon scoresNullIcon && ReferenceEquals(scoresNullIcon.Data, Application.Current?.FindResource("Icon.BorderNone")),
+            "Set Null must use the shared BorderNone icon.");
         Check(scoresNull.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
         Click(addScores);
         Check(probe.Scores.Count == 3, $"List Add must grow the scene list, got {probe.Scores.Count}.");
