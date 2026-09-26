@@ -1,6 +1,5 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
-using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -122,7 +121,7 @@ public partial class MainWindow
         if (_pendingCompilation is not { Result: { } compiled } attempt || _compileTracker is null
             || _reloadCoordinator.IsReloading
             || EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null) return;
-        if (_prefabScene is not null && compiled.Success)
+        if (_documents.Prefab is not null && compiled.Success)
         {
             SetFileStatus("C# changes are ready. Close Prefab Editor to apply them.");
             return;
@@ -135,28 +134,7 @@ public partial class MainWindow
             return;
         }
         var selectedId = GetSelectedSceneObject()?.Id;
-        DataAssetEditState? candidateAsset = null;
-        List<DataAssetTableRow>? candidateTable = null;
-        Action<IServiceCollection>? assetConfigure = null;
-        try
-        {
-            if (compiled.Success)
-            {
-                var registry = _components.CreateCandidateRegistry(compiled);
-                candidateAsset = PrepareDataAssetReload(registry);
-                candidateTable = PrepareDataAssetTableReload(registry);
-                var reloadedAssets = BuildProjectAssetStore(registry);
-                if (reloadedAssets is not null) assetConfigure = services => services.AddSingleton(reloadedAssets);
-            }
-        }
-        catch (Exception error)
-        {
-            UserCodeCompileTracker.Release(compiled);
-            Log.Engine.Error("Cannot apply C# changes. Keeping the previous scene and data asset.", error);
-            SetFileStatus(error.GetBaseException().Message, true);
-            return;
-        }
-        var outcome = _reloadCoordinator.Apply(_editScene, _components, compiled, assetConfigure);
+        var outcome = _reloadCoordinator.Apply(_documents, _components, compiled, _project);
         foreach (var diagnostic in outcome.Diagnostics)
         {
             var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
@@ -169,8 +147,7 @@ public partial class MainWindow
             _dragTypes = null;
             _assetPress = null;
             _pressedPrefab = null;
-            _assetEdit = candidateAsset;
-            AdoptDataAssetTableReload(candidateTable);
+            RefreshTableAfterReload();
             RefreshDataAssetTableTypes(rescanRows: false);
             RefreshAssetOwned();
             RefreshHierarchy(selectedId);

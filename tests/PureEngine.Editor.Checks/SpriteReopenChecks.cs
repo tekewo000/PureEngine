@@ -49,7 +49,7 @@ internal static class SpriteReopenChecks
         session.Components.Registry.Register<SpriteNameProbe>("checks.sprite-name");
         session.Scene.Objects.Single().Attach(new SpriteNameProbe());
         var editor = new MainWindow(session);
-        var store = (EditSceneStore)typeof(MainWindow).GetField("_editScene", BindingFlags.Instance | BindingFlags.NonPublic)!
+        var store = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(editor)!;
         var heldImage = imported.FullPath + ".held";
         try

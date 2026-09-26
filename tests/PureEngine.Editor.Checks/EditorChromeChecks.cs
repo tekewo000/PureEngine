@@ -25,7 +25,7 @@ static class EditorChromeChecks
         var editor = new MainWindow();
         editor.Show();
         Dispatcher.UIThread.RunJobs();
-        var store = (EditSceneStore)typeof(MainWindow).GetField("_editScene", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor)!;
+        var store = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor)!;
         try
         {
             var sceneTab = editor.FindControl<TabItem>("SceneViewTab")!;

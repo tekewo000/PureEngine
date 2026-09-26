@@ -28,7 +28,7 @@ static class PrefabEditorChecks
         Dispatcher.UIThread.RunJobs();
         try
         {
-            var store = (EditSceneStore)typeof(MainWindow).GetField("_sceneDocument", Instance)!.GetValue(editor)!;
+            var store = (EditSceneStore)typeof(MainWindow).GetProperty("SceneDocument", Instance)!.GetValue(editor)!;
             var tower = store.Current.AddEmpty();
             tower.Rename("Tower");
             var cannon = store.Current.AddEmpty();
@@ -605,7 +605,7 @@ static class PrefabEditorChecks
             catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException
                 { Message: "Inspector activation failure." }) { }
             Check(activated && ReferenceEquals(ActiveStore(editor), main)
-                && typeof(MainWindow).GetField("_prefabScene", Instance)!.GetValue(editor) is null
+                && typeof(MainWindow).GetProperty("PrefabDocument", Instance)!.GetValue(editor) is null
                 && !editor.FindControl<TabItem>("PrefabEditorTab")!.IsVisible
                 && PrefabActivationFailurePart.Disposals == disposals + 1
                 && File.ReadAllBytes(path).SequenceEqual(bytes),

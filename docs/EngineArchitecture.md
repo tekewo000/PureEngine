@@ -732,6 +732,8 @@ global.jsonはEngineビルド時に埋め込んだSDK設定を不足時のみコ
 
 ## Editorの所有と実行接続（A1〜A5統合済み）
 
+EditorのMVVM移行を進行中。`EditorDocuments` が編集文書を所有し、`UserCodeReloadCoordinator` がScene・単体DataAsset・表編集の候補移行を接続する。ペインとMainWindowの移行状況、完了条件、検証は [EditorMvvmMigration.md](EditorMvvmMigration.md) に記録する。
+
 依存方向はEditor → Runtime → Core。ProjectComponentsがプロジェクト単位の型登録・ソース対応・採用中コードを持つ。ComponentAssetsは状態を持たない共通処理のみを提供する。ProjectSessionは起動Scene・編集用サービス・ProjectComponentsを所有し、MainWindowへ引き渡す。
 
 編集状態と編集用サービスはEditSceneStore、保存・Play・再読み込みの可否判定はEditorOperationGate、コード採用と旧資源の解放はUserCodeReloadCoordinatorが担当する。再読み込みは候補Registry・サービス・移行先Sceneを準備してから採用し、旧Component → 旧サービス → 旧コードの順に解放する。終了時もこの所有順に従う。

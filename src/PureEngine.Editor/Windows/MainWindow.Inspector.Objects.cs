@@ -129,7 +129,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             setter(null);
             if (ownerId is { } id && baseStorePath is not null)
-                _editScene.Current.References.RemovePathsForMember(id, baseStorePath);
+                _documents.Current.Current.References.RemovePathsForMember(id, baseStorePath);
             refresh();
         };
         ToolTip.SetTip(root, $"{objectType.Name} — Create to edit, Set Null to clear");

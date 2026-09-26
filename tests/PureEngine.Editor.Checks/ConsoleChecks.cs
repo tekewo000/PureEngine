@@ -18,7 +18,7 @@ static class ConsoleChecks
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", AnyInstance)!.GetValue(window)!;
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;

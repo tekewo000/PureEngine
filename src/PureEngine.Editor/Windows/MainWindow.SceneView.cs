@@ -69,7 +69,7 @@ public partial class MainWindow
     }
 
     private IReadOnlyList<SceneViewMath.LayoutEntry> SceneLayouts(Vector2 viewportSize) =>
-        SceneViewMath.EnumerateLayouts(_editScene.Current, viewportSize);
+        SceneViewMath.EnumerateLayouts(_documents.Current.Current, viewportSize);
 
     private bool IsDrawableImage(SceneObject item)
     {
@@ -114,7 +114,7 @@ public partial class MainWindow
         // Keeps the legacy behavior for collapsed layouts with UiElement: shows neither frame nor gizmo.
         if (target.GetComponent<UiElement>() is not null)
             return false;
-        if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, target, viewportSize, out _, out var parentWorld, out var world))
+        if (!SceneViewMath.TryGetTransformFrame(_documents.Current.Current, target, viewportSize, out _, out var parentWorld, out var world))
             return false;
         if (!SceneViewMath.TryGetParentAxes(parentWorld, out xAxis, out yAxis))
             return false;
@@ -169,7 +169,7 @@ public partial class MainWindow
         if (IsPlaying || IsSceneDragging || kind is not (SceneViewMath.GizmoKind.X or SceneViewMath.GizmoKind.Y or SceneViewMath.GizmoKind.XY)
             || !IsDrawableSceneViewport(out var viewportSize)
             || !float.IsFinite(viewPoint.X) || !float.IsFinite(viewPoint.Y)
-            || !_editScene.Current.Objects.Contains(target)) return false;
+            || !_documents.Current.Current.Objects.Contains(target)) return false;
         if (target.GetComponent<Transform>() is not { } transform) return false;
         var element = target.GetComponent<UiElement>();
         if (element is not null)
@@ -184,7 +184,7 @@ public partial class MainWindow
         else
         {
             // Transform-only group parents can also move as origins. Relaxes the rectangle requirement and watches only the parent chain plus local rotation and scale.
-            if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, target, viewportSize, out var parentSize, out var parentWorld, out _))
+            if (!SceneViewMath.TryGetTransformFrame(_documents.Current.Current, target, viewportSize, out var parentSize, out var parentWorld, out _))
                 return false;
             if (!SceneViewMath.TryGetParentAxes(parentWorld, out _, out _)) return false;
             _dragParentWorld = parentWorld;
@@ -192,7 +192,7 @@ public partial class MainWindow
             _dragGeometry = (Vector2.Zero, Vector2.Zero, Vector2.Zero, Vector2.Zero, transform.LocalRotation, transform.LocalScale);
         }
         _sceneMoveKind = kind;
-        _dragScene = _editScene.Current;
+        _dragScene = _documents.Current.Current;
         _dragTarget = target;
         _dragTransform = transform;
         _dragElement = element;
@@ -207,7 +207,7 @@ public partial class MainWindow
     {
         if (_sceneMoveKind is SceneViewMath.GizmoKind.None) return false;
         if (_dragScene is null || _dragTarget is null || _dragTransform is null
-            || !ReferenceEquals(_dragScene, _editScene.Current) || !_editScene.Current.Objects.Contains(_dragTarget)
+            || !ReferenceEquals(_dragScene, _documents.Current.Current) || !_documents.Current.Current.Objects.Contains(_dragTarget)
             || !ReferenceEquals(_dragTarget.GetComponent<Transform>(), _dragTransform))
         {
             AbortSceneDrag();
@@ -239,7 +239,7 @@ public partial class MainWindow
                 CancelSceneViewDrag();
                 return false;
             }
-            if (!SceneViewMath.TryGetTransformFrame(_editScene.Current, _dragTarget, viewportSize, out var parentSize, out var parentWorld, out _)
+            if (!SceneViewMath.TryGetTransformFrame(_documents.Current.Current, _dragTarget, viewportSize, out var parentSize, out var parentWorld, out _)
                 || parentSize != _dragParentSize || parentWorld != _dragParentWorld)
             {
                 CancelSceneViewDrag();
@@ -383,8 +383,8 @@ public partial class MainWindow
         var start = _dragStartLocal;
         var scene = _dragScene;
         AbortSceneDrag();
-        if (target is null || transform is null || !ReferenceEquals(scene, _editScene.Current)
-            || !_editScene.Current.Objects.Contains(target) || !ReferenceEquals(target.GetComponent<Transform>(), transform)) return;
+        if (target is null || transform is null || !ReferenceEquals(scene, _documents.Current.Current)
+            || !_documents.Current.Current.Objects.Contains(target) || !ReferenceEquals(target.GetComponent<Transform>(), transform)) return;
         transform.LocalPosition = start;
         SyncInspectorToDragTarget(target, transform);
     }

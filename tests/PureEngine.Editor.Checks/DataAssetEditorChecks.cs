@@ -141,7 +141,7 @@ static class DataAssetEditorChecks
             Check(!ReferenceEquals(session.Components.DataAssetTypes.Single(), type)
                 && Box(editor, "SwordData.Attack").Text == "25", "Compatible reload must rebind and preserve the asset.");
 
-            var state = (EditSceneStore)typeof(MainWindow).GetField("_editScene",
+            var state = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
             var readerType = session.Components.UserTypes.Single(candidate => candidate.Name == "AssetReader");
             var editServices = (PureEngine.Runtime.GameSession)typeof(MainWindow).GetProperty("EditSession",

@@ -42,7 +42,7 @@ public partial class MainWindow
         var view = SceneViewMath.ViewMatrix(_scenePan, _sceneZoom);
         draw.Clear();
         SceneViewOverlay.DrawGrid(draw, viewportSize, _scenePan, _sceneZoom);
-        var diagnostics = EditSceneRenderer.Append(draw, _editScene.Current, _previewImages, viewportSize, view);
+        var diagnostics = EditSceneRenderer.Append(draw, _documents.Current.Current, _previewImages, viewportSize, view);
         _sceneDrawFailures.Clear();
         foreach (var diagnostic in diagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);
         if (GetSelectedSceneObject() is not SceneObject selected)

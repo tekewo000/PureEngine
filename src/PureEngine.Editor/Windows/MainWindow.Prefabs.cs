@@ -65,7 +65,7 @@ public partial class MainWindow
         _project.ValidatePrefabPath(path);
         if (File.Exists(path) || Directory.Exists(path))
             throw new IOException("A folder or file with the same name already exists.");
-        var prefabId = PrefabFile.Create(path, _editScene.Current, root, _components.Registry);
+        var prefabId = PrefabFile.Create(path, _documents.Current.Current, root, _components.Registry);
         root.PrefabId = prefabId;
         MarkSceneChanged();
         RefreshHierarchy();
@@ -106,14 +106,14 @@ public partial class MainWindow
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (_project is null) throw new InvalidOperationException("Open a project first.");
         if (RejectWhenPlaying("Place Prefab")) throw new InvalidOperationException("Cannot place prefabs while playing.");
-        if (IsPrefabEditing) parent ??= _prefabScene!.Current.RootObjects.Single();
+        if (IsPrefabEditing) parent ??= _documents.Prefab!.Current.RootObjects.Single();
         _project.ValidatePrefabPath(path);
         var document = PrefabFile.Load(path);
         SceneObject placed;
         try
         {
             placed = new PrefabSerializer(_components.Registry).Instantiate(
-                _editScene.Current, document, out _, parent, EditSession.Factory);
+                _documents.Current.Current, document, out _, parent, EditSession.Factory);
         }
         catch (Exception error)
         {

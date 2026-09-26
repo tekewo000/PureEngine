@@ -9,7 +9,8 @@ static class IntegratedArchitectureChecks
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private static T Field<T>(MainWindow editor, string name) =>
-        (T)typeof(MainWindow).GetField(name, Private)!.GetValue(editor)!;
+        (T)(typeof(MainWindow).GetField(name, Private) is { } field
+            ? field.GetValue(editor) : typeof(MainWindow).GetProperty(name, Private)!.GetValue(editor))!;
     private static object? Call(MainWindow editor, string name, params object[] args) =>
         typeof(MainWindow).GetMethod(name, Private)!.Invoke(editor, args);
     private static void Check(bool condition, string message)
@@ -54,7 +55,7 @@ static class IntegratedArchitectureChecks
         var rules = component.GetType().GetField("Rules")!.GetValue(component)!;
         return (int)rules.GetType().GetProperty("Version")!.GetValue(rules)!;
     }
-    private static object Player(MainWindow editor) => Field<EditSceneStore>(editor, "_editScene").Current.Objects.Single().Components.Single();
+    private static object Player(MainWindow editor) => Field<EditSceneStore>(editor, "EditSceneStore").Current.Objects.Single().Components.Single();
     private static TreeView SceneObjects(MainWindow editor) => editor.FindControl<TreeView>("SceneObjects")!;
     private static void Select(MainWindow editor, SceneObject item) =>
         Call(editor, "SelectSceneObjectForTest", [item]);
@@ -98,7 +99,7 @@ static class IntegratedArchitectureChecks
             return gates[Interlocked.Increment(ref calls) - 1].Task;
         });
         typeof(MainWindow).GetField("_compileTracker", Private)!.SetValue(editor, tracker);
-        var store = Field<EditSceneStore>(editor, "_editScene");
+        var store = Field<EditSceneStore>(editor, "EditSceneStore");
         Task Reload() => (Task)Call(editor, "ReloadUserCode")!;
         try
         {

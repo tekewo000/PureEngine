@@ -34,7 +34,7 @@ public partial class MainWindow
     private bool ShouldShowReferenceEditorFor(Type declaredType, object? owner)
     {
         if (!SceneReferenceTypes.IsSingleReference(declaredType, _components.Registry)) return false;
-        if (owner is not null && (_assetOwned.Contains(owner) || _tableOwned.Contains(owner))
+        if (owner is not null && (_documents.AssetOwned.Contains(owner) || _documents.Table.Owned.Contains(owner))
             && declaredType != typeof(SceneObject)
             && !DataAssetStore.IsAssetType(declaredType)
             && SceneReferenceTypes.IsComponentReference(declaredType, _components.Registry)) return false;
@@ -47,7 +47,7 @@ public partial class MainWindow
         if (DataAssetStore.IsAssetType(declaredType))
         {
             RefreshReferenceAssets();
-            var assets = _editScene.Current.DataAssets;
+            var assets = _documents.Current.Current.DataAssets;
             foreach (var id in assets.Ids)
                 if (assets.TryGet<object>(id, out var asset) && declaredType.IsInstanceOfType(asset))
                 {
@@ -58,11 +58,11 @@ public partial class MainWindow
         }
         if (declaredType == typeof(SceneObject))
         {
-            foreach (var item in _editScene.Current.Objects)
+            foreach (var item in _documents.Current.Current.Objects)
                 found.Add((item, null, item.Id, item.Name, $"{item.Name} ({item.Id:D})"));
             return found;
         }
-        foreach (var item in _editScene.Current.Objects)
+        foreach (var item in _documents.Current.Current.Objects)
         {
             foreach (var component in item.Components)
             {
@@ -89,7 +89,7 @@ public partial class MainWindow
             error = "Drop a project data asset file, not a scene object.";
             return false;
         }
-        var scene = _editScene.Current;
+        var scene = _documents.Current.Current;
         SceneObject? draggedObject = null;
         foreach (var item in scene.Objects)
         {
@@ -351,7 +351,7 @@ public partial class MainWindow
             return false;
         try
         {
-            assign(_editScene.Current.Prefabs.Assign(document, declaredType, _components.Registry, EditSession.Factory, _editScene.Current.DataAssets));
+            assign(_documents.Current.Current.Prefabs.Assign(document, declaredType, _components.Registry, EditSession.Factory, _documents.Current.Current.DataAssets));
         }
         catch (Exception exception)
         {
@@ -380,8 +380,8 @@ public partial class MainWindow
             case PropertyInfo property: property.SetValue(ownerComponent, newValue); break;
             default: throw new NotSupportedException($"Unsupported member: {member.Name}");
         }
-        _editScene.Current.References.ClearMissing(ownerId.Value, storePath);
-        _editScene.Current.References.ClearLegacy(ownerId.Value, storePath);
+        _documents.Current.Current.References.ClearMissing(ownerId.Value, storePath);
+        _documents.Current.Current.References.ClearLegacy(ownerId.Value, storePath);
         MarkSceneChanged();
         refresh();
         QueuePendingUserCodeReload();
@@ -397,8 +397,8 @@ public partial class MainWindow
         if (IsPlaying)
             return;
         assign(newValue);
-        _editScene.Current.References.ClearMissing(ownerId, storePath);
-        _editScene.Current.References.ClearLegacy(ownerId, storePath);
+        _documents.Current.Current.References.ClearMissing(ownerId, storePath);
+        _documents.Current.Current.References.ClearLegacy(ownerId, storePath);
         MarkSceneChanged();
         refresh();
         QueuePendingUserCodeReload();
@@ -440,8 +440,8 @@ public partial class MainWindow
         void assign(object? value)
         {
             if (IsPlaying || (ReferenceEquals(getter(), value)
-                && !_editScene.Current.References.TryGetMissing(ownerId, storePath, out _)
-                && !_editScene.Current.References.TryGetLegacy(ownerId, storePath, out _)))
+                && !_documents.Current.Current.References.TryGetMissing(ownerId, storePath, out _)
+                && !_documents.Current.Current.References.TryGetLegacy(ownerId, storePath, out _)))
                 return;
             setter(value);
             refreshOptions();
@@ -471,7 +471,7 @@ public partial class MainWindow
                     selected = new ReferenceOption(current, display, $"{display} ({prefab.TargetId:D})");
                     options.Add(selected);
                 }
-                else if (DataAssetStore.IsAssetType(declaredType) && _editScene.Current.DataAssets.TryGetId(current, out var assetId))
+                else if (DataAssetStore.IsAssetType(declaredType) && _documents.Current.Current.DataAssets.TryGetId(current, out var assetId))
                 {
                     selected = new ReferenceOption(current, $"Missing: {ShortId(assetId)}", $"Missing: {assetId:D}");
                     options.Add(selected);
@@ -483,13 +483,13 @@ public partial class MainWindow
                     options.Add(selected);
                 }
             }
-            else if (_editScene.Current.References.TryGetMissing(ownerId, storePath, out var missing))
+            else if (_documents.Current.Current.References.TryGetMissing(ownerId, storePath, out var missing))
             {
                 selected = new ReferenceOption(null, $"Missing: {ShortId(missing)}", $"Missing: {missing:D}");
                 options.Add(selected);
                 note = $"Missing {missing:D}. ID is kept.";
             }
-            else if (_editScene.Current.References.TryGetLegacy(ownerId, storePath, out _))
+            else if (_documents.Current.Current.References.TryGetLegacy(ownerId, storePath, out _))
             {
                 note = "Old inline value is kept. Reassign or clear to save.";
             }
@@ -557,8 +557,8 @@ public partial class MainWindow
                     case PropertyInfo property: property.SetValue(container, value); break;
                     default: throw new NotSupportedException($"Unsupported member: {member.Name}");
                 }
-                _editScene.Current.References.ClearMissing(ownerId, storePath);
-                _editScene.Current.References.ClearLegacy(ownerId, storePath);
+                _documents.Current.Current.References.ClearMissing(ownerId, storePath);
+                _documents.Current.Current.References.ClearLegacy(ownerId, storePath);
                 MarkSceneChanged();
                 refresh();
                 QueuePendingUserCodeReload();
@@ -598,8 +598,8 @@ public partial class MainWindow
                 if (GetMemberValue(component, member) is not System.Collections.IDictionary dictionary || !dictionary.Contains(key))
                     return;
                 dictionary[key] = value;
-                _editScene.Current.References.ClearMissing(ownerId.Value, storePath);
-                _editScene.Current.References.ClearLegacy(ownerId.Value, storePath);
+                _documents.Current.Current.References.ClearMissing(ownerId.Value, storePath);
+                _documents.Current.Current.References.ClearLegacy(ownerId.Value, storePath);
                 MarkSceneChanged();
                 RefreshComponents();
                 QueuePendingUserCodeReload();
@@ -723,7 +723,7 @@ public partial class MainWindow
         {
             if (IsPlaying) return;
             assign(null);
-            _editScene.Current.References.RemovePathsForMember(ownerId, path);
+            _documents.Current.Current.References.RemovePathsForMember(ownerId, path);
             changed();
         };
         clear.Click += (_, _) =>
@@ -737,7 +737,7 @@ public partial class MainWindow
                 dictionary.Clear();
             else if (value is System.Collections.IList list)
                 list.Clear();
-            _editScene.Current.References.RemovePathsForMember(ownerId, path);
+            _documents.Current.Current.References.RemovePathsForMember(ownerId, path);
             changed();
         };
         create.Click += (_, _) =>
@@ -767,7 +767,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             if (GetMemberValue(owner, member) is not System.Collections.IList list || index < 0 || index >= list.Count) return;
             list[index] = element;
-            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            _documents.Current.Current.References.RemovePathsForMember(ownerId, slot);
             refresh();
         }
         var editor = SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
@@ -785,9 +785,9 @@ public partial class MainWindow
             var value = GetMemberValue(owner, member);
             if (value is not System.Collections.IList list || index < 0 || index >= list.Count) return;
             var total = list.Count;
-            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            _documents.Current.Current.References.RemovePathsForMember(ownerId, slot);
             for (var j = index + 1; j < total; j++)
-                _editScene.Current.References.MovePath(ownerId, $"{path}[{j}]", $"{path}[{j - 1}]");
+                _documents.Current.Current.References.MovePath(ownerId, $"{path}[{j}]", $"{path}[{j - 1}]");
             if (value is Array array)
             {
                 var next = Array.CreateInstance(elementType, total - 1);
@@ -837,7 +837,7 @@ public partial class MainWindow
             var preserved = current[key];
             current.Remove(key);
             current.Add(next, preserved);
-            _editScene.Current.References.MovePath(ownerId, slot, SceneReferenceStore.DictionaryPath(path, next));
+            _documents.Current.Current.References.MovePath(ownerId, slot, SceneReferenceStore.DictionaryPath(path, next));
             MarkInvalid(keyBox, null, "Dictionary key — must be unique and non-empty");
             refresh();
         };
@@ -855,7 +855,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             if (GetMemberValue(owner, member) is not System.Collections.IDictionary current || !current.Contains(key)) return;
             current[key] = element;
-            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            _documents.Current.Current.References.RemovePathsForMember(ownerId, slot);
             refresh();
         }
         var valueEditor = SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
@@ -873,7 +873,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             if (GetMemberValue(owner, member) is System.Collections.IDictionary current)
                 current.Remove(key);
-            _editScene.Current.References.RemovePathsForMember(ownerId, slot);
+            _documents.Current.Current.References.RemovePathsForMember(ownerId, slot);
             refresh();
         };
         row.Children.Add(remove);

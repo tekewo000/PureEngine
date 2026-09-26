@@ -102,7 +102,7 @@ public partial class MainWindow
     /// <summary>Builds Stuffs nodes with prefab icons. Prefab editor roots show the prefab icon even for files saved before origin markers.</summary>
     private ObservableCollection<HierarchyNode> BuildHierarchyRoots()
     {
-        var roots = StuffsHierarchy.Build(_editScene.Current);
+        var roots = StuffsHierarchy.Build(_documents.Current.Current);
         if (IsPrefabEditing)
             foreach (var root in roots)
                 root.IsPrefab = true;
@@ -162,7 +162,7 @@ public partial class MainWindow
 
     private SceneObject? FindObject(Guid id)
     {
-        foreach (var item in _editScene.Current.Objects)
+        foreach (var item in _documents.Current.Current.Objects)
             if (item.Id == id) return item;
         return null;
     }
@@ -179,7 +179,7 @@ public partial class MainWindow
     {
         List<SceneObject> selected = [];
         foreach (var item in items)
-            if (item is not null && _editScene.Current.Objects.Contains(item) && !selected.Contains(item))
+            if (item is not null && _documents.Current.Current.Objects.Contains(item) && !selected.Contains(item))
                 selected.Add(item);
         foreach (var item in selected)
             ExpandAncestors(item);
@@ -210,7 +210,7 @@ public partial class MainWindow
 
     private IEnumerable<SceneObject> EnumerateInDisplayOrder()
     {
-        foreach (var root in _editScene.Current.RootObjects)
+        foreach (var root in _documents.Current.Current.RootObjects)
             foreach (var item in EnumerateSubtreeInOrder(root))
                 yield return item;
     }
@@ -449,7 +449,7 @@ public partial class MainWindow
         if (!CanDropInEditingDocument(draggedId, targetId, position)) return;
         try
         {
-            HierarchyDrop.Execute(_editScene.Current, draggedId, targetId, position);
+            HierarchyDrop.Execute(_documents.Current.Current, draggedId, targetId, position);
         }
         catch (Exception error)
         {
@@ -471,7 +471,7 @@ public partial class MainWindow
 
     private bool CanDropInEditingDocument(Guid draggedId, Guid? targetId, HierarchyDropPosition position)
     {
-        if (!HierarchyDrop.CanDrop(_editScene.Current, draggedId, targetId)) return false;
+        if (!HierarchyDrop.CanDrop(_documents.Current.Current, draggedId, targetId)) return false;
         if (!IsPrefabEditing) return true;
         return FindObject(draggedId) is { Parent: not null }
             && targetId is { } id && FindObject(id) is { } target

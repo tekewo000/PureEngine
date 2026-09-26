@@ -36,7 +36,7 @@ internal static class StuffsMultiChecks
     private static void CloseEditor(MainWindow editor)
     {
         var store = (EditSceneStore)typeof(MainWindow)
-            .GetField("_editScene", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetProperty("EditSceneStore", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(editor)!;
         store.MarkClean();
         editor.Close();
@@ -57,7 +57,7 @@ internal static class StuffsMultiChecks
         try
         {
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
-            var store = (EditSceneStore)typeof(MainWindow).GetField("_editScene", flags)!.GetValue(editor)!;
+            var store = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", flags)!.GetValue(editor)!;
             var scene = store.Current;
             var tree = Control<TreeView>(editor, "SceneObjects");
             Check(tree.SelectionMode == SelectionMode.Multiple, "Stuffs must allow multiple selection.");

@@ -16,9 +16,9 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow : Window
 {
-    /// <summary>The scene document stays alive while the isolated prefab document is active.</summary>
-    private readonly EditSceneStore _sceneDocument = new(new Scene());
-    private EditSceneStore _editScene;
+    private readonly EditorDocuments _documents = new();
+    internal EditSceneStore SceneDocument => _documents.Scene;
+    internal EditSceneStore? PrefabDocument => _documents.Prefab;
     /// <summary>Owner of code-reload preparation, adoption, cleanup, and pending state. Verifiable without a UI.</summary>
     private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
     /// <summary>Type owner for this window (project). Serializer, attach, Play, and reload all use it explicitly.</summary>
@@ -40,16 +40,16 @@ public partial class MainWindow : Window
     /// <summary>Whether UI-driven input errors exist. Passed as a value to gate decisions.</summary>
     internal bool HasInputErrors => _invalidFields.Count > 0 || (NameError?.IsVisible == true);
 
-    internal EditSceneStore EditSceneStore => _editScene;
+    internal EditSceneStore EditSceneStore => _documents.Current;
 
     internal UserCodeReloadCoordinator ReloadCoordinator => _reloadCoordinator;
 
-    internal GameSession EditSession => _editScene.Services;
+    internal GameSession EditSession => _documents.Current.Services;
 
     public MainWindow(ProjectSession session) : this()
     {
         ArgumentNullException.ThrowIfNull(session);
-        _editScene.ReplaceServices(session.EditServices).Dispose();
+        _documents.Current.ReplaceServices(session.EditServices).Dispose();
         // Transfers Session ownership (Components and Scene) to this window. The transferred Session is not disposed.
         var placeholder = _components;
         _components = session.Components;
@@ -87,7 +87,6 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        _editScene = _sceneDocument;
         InitializeComponent();
         // Only once at startup, adjusts the bottom pane height from the live Scene View/Game width so it is 16:9.
         CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
@@ -213,7 +212,7 @@ public partial class MainWindow : Window
         if (_pressedDataAsset is { FullPath: not null } dataEntry && _project is not null)
         {
             RefreshReferenceAssets();
-            var assets = _editScene.Current.DataAssets;
+            var assets = _documents.Current.Current.DataAssets;
             var relative = Path.GetRelativePath(_project.RootDirectory, dataEntry.FullPath).Replace('\\', '/');
             var id = assets.Ids.FirstOrDefault(id => assets.DisplayName(id) == relative);
             if (id != Guid.Empty)
@@ -335,7 +334,7 @@ public partial class MainWindow : Window
     {
         DetachInvalidFields(ComponentEditors);
         ComponentEditors.Children.Clear();
-        if (_assetEdit is not null && GetSelectedSceneObject() is null)
+        if (_documents.Asset is not null && GetSelectedSceneObject() is null)
         {
             AttachedClasses.IsVisible = false;
             NoComponentsHint.IsVisible = false;
@@ -993,7 +992,7 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("Add")) return;
         var parent = EditingParent();
-        var item = _editScene.Current.AddNamed(baseName);
+        var item = _documents.Current.Current.AddNamed(baseName);
         try
         {
             foreach (var type in componentTypes)
@@ -1003,7 +1002,7 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            _editScene.Current.Remove(item);
+            _documents.Current.Current.Remove(item);
             try { ComponentAssets.DisposeComponents(item.Components); }
             catch (Exception cleanupError) { Log.Engine.Error(cleanupError); }
             SetFileStatus($"Could not create UI: {error.GetBaseException().Message}", true);
@@ -1019,7 +1018,7 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("Add")) return;
         var parent = EditingParent();
-        var item = _editScene.Current.AddEmpty();
+        var item = _documents.Current.Current.AddEmpty();
         if (parent is not null) item.SetParent(parent);
         MarkSceneChanged();
         RefreshHierarchy(item.Id, expandId: parent?.Id);
@@ -1030,7 +1029,7 @@ public partial class MainWindow : Window
     private async void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
     {
         if (_hierarchyRefreshing || _assetSelectionChanging) return;
-        if (GetSelectedSceneObject() is not null && _assetEdit is not null)
+        if (GetSelectedSceneObject() is not null && _documents.Asset is not null)
         {
             _assetSelectionChanging = true;
             try
@@ -1053,7 +1052,7 @@ public partial class MainWindow : Window
     private void RefreshObjectInspector()
     {
         var item = GetSelectedSceneObject();
-        if (_assetEdit is not null && item is null)
+        if (_documents.Asset is not null && item is null)
         {
             DeleteObjectMenuItem.IsEnabled = false;
             DuplicateObjectMenuItem.IsEnabled = false;
@@ -1117,7 +1116,7 @@ public partial class MainWindow : Window
         var skippedPrefabRoot = false;
         foreach (var item in targets)
         {
-            if (!_editScene.Current.Objects.Contains(item)) continue;
+            if (!_documents.Current.Current.Objects.Contains(item)) continue;
             if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
             deletable.Add(item);
         }
@@ -1142,7 +1141,7 @@ public partial class MainWindow : Window
             }
         }
         foreach (var item in deletable)
-            _editScene.Current.Remove(item);
+            _documents.Current.Current.Remove(item);
         MarkSceneChanged();
         RefreshHierarchy(next?.Id);
         RefreshObjectInspector();
@@ -1166,7 +1165,7 @@ public partial class MainWindow : Window
         var skippedPrefabRoot = false;
         foreach (var item in targets)
         {
-            if (!_editScene.Current.Objects.Contains(item)) continue;
+            if (!_documents.Current.Current.Objects.Contains(item)) continue;
             if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
             sources.Add(item);
         }
@@ -1181,7 +1180,7 @@ public partial class MainWindow : Window
         foreach (var source in sources)
         {
             PrefabDocument document;
-            try { document = serializer.Capture(_editScene.Current, source); }
+            try { document = serializer.Capture(_documents.Current.Current, source); }
             catch (Exception error)
             {
                 SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
@@ -1189,7 +1188,7 @@ public partial class MainWindow : Window
             }
             document.Id = source.PrefabId ?? Guid.NewGuid();
             SceneObject copy;
-            try { copy = serializer.Instantiate(_editScene.Current, document, source.Parent, EditSession.Factory); }
+            try { copy = serializer.Instantiate(_documents.Current.Current, document, source.Parent, EditSession.Factory); }
             catch (Exception error)
             {
                 SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
@@ -1246,7 +1245,7 @@ public partial class MainWindow : Window
                     stack.Push(child);
             }
         }
-        var siblings = first.Parent is null ? _editScene.Current.RootObjects : first.Parent.Children;
+        var siblings = first.Parent is null ? _documents.Current.Current.RootObjects : first.Parent.Children;
         var siblingIndex = IndexOfSceneObject(siblings, first);
         if (siblingIndex >= 0)
         {
@@ -1262,9 +1261,9 @@ public partial class MainWindow : Window
     {
         if (source.Parent is null)
         {
-            var roots = _editScene.Current.RootObjects;
+            var roots = _documents.Current.Current.RootObjects;
             var sourceIndex = IndexOfSceneObject(roots, source);
-            if (sourceIndex >= 0) _editScene.Current.SetRootSiblingIndex(copy, sourceIndex + 1);
+            if (sourceIndex >= 0) _documents.Current.Current.SetRootSiblingIndex(copy, sourceIndex + 1);
             return;
         }
         var siblings = source.Parent.Children;

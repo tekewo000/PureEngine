@@ -106,7 +106,7 @@ public sealed class ProjectSession : IDisposable
             var registry = components.CreateCandidateRegistry(compiled);
             _ = project.ListDirectories();
             _ = project.ListFiles("Scenes");
-            var assets = ScanProjectAssets(project, registry);
+            var assets = EditorDocuments.BuildAssetStore(project, registry);
             services = GameSession.Create(services =>
             {
                 GameServices.ForUserCode(compiled.Success ? compiled : null)(services);
@@ -165,7 +165,7 @@ public sealed class ProjectSession : IDisposable
             var scene = new Scene();
             var project = ProjectFile.Create(parentDirectory, name, new SceneSerializer(components.Registry).Serialize(scene));
             ProjectCodeWorkspace.Ensure(project);
-            var assets = ScanProjectAssets(project, components.Registry);
+            var assets = EditorDocuments.BuildAssetStore(project, components.Registry);
             services = GameSession.Create(services =>
             {
                 GameServices.ForProject(components)(services);
@@ -178,21 +178,6 @@ public sealed class ProjectSession : IDisposable
             try { services?.Dispose(); }
             finally { components.Dispose(); }
             throw;
-        }
-    }
-
-    private static DataAssetStore? ScanProjectAssets(ProjectFile project, ComponentRegistry registry)
-    {
-        try
-        {
-            var store = DataAssetStore.ScanFolder(project.RootDirectory, registry, out var diagnostics);
-            foreach (var diagnostic in diagnostics) Log.Engine.Warning(diagnostic);
-            return store;
-        }
-        catch (Exception error)
-        {
-            Log.Engine.Error("Cannot scan data assets.", error);
-            return null;
         }
     }
 

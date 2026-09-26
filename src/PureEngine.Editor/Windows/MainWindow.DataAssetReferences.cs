@@ -14,14 +14,14 @@ public partial class MainWindow
     {
         if (IsPlaying) return;
         if (BuildProjectAssetStore(_components.Registry) is { } assets)
-            _editScene.Current.DataAssets.Refresh(assets);
+            _documents.Current.Current.DataAssets.Refresh(assets);
     }
 
     private object? DroppedDataAsset(DragEventArgs e, Type expectedType)
     {
         if (!DataAssetStore.IsAssetType(expectedType)
             || !Guid.TryParse(e.DataTransfer.TryGetValue(DataAssetIdFormat), out var id)) return null;
-        var assets = _editScene.Current.DataAssets;
+        var assets = _documents.Current.Current.DataAssets;
         return assets.TryGet<object>(id, out var value) && expectedType.IsInstanceOfType(value) ? value : null;
     }
 

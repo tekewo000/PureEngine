@@ -38,7 +38,7 @@ internal static class HierarchySelectionChecks
     private static void CloseEditor(MainWindow editor)
     {
         var store = (EditSceneStore)typeof(MainWindow)
-            .GetField("_editScene", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetProperty("EditSceneStore", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(editor)!;
         store.MarkClean();
         editor.Close();
@@ -59,7 +59,7 @@ internal static class HierarchySelectionChecks
         try
         {
             var store = (EditSceneStore)typeof(MainWindow)
-                .GetField("_editScene", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .GetProperty("EditSceneStore", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
                 .GetValue(editor)!;
             var scene = store.Current;
             var target = scene.AddEmpty();

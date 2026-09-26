@@ -19,32 +19,28 @@ public partial class MainWindow
     private const double DataAssetTableMinRowHeight = 80;
     private const double DataAssetTableMaxRowHeight = 640;
 
-    /// <summary>One table row: an asset file with its editing instance. Dirty rows are written on Save All.</summary>
-    private sealed class DataAssetTableRow(string path, object instance, Guid id, double height)
+    private sealed class TableRowView
     {
-        public string Path { get; set; } = path;
-        public object Instance { get; set; } = instance;
-        public Guid Id { get; set; } = id;
-        public bool Dirty { get; set; }
-        public double Height { get; set; } = height;
+        public double Height { get; set; } = DataAssetTableDefaultRowHeight;
         public Border? Card;
         public Grid? Cells;
         public readonly List<ScrollViewer> CellScrollers = [];
         public TextBlock? Title;
-        public void SetDirty()
-        {
-            Dirty = true;
-            Title?.Text = $"* {System.IO.Path.GetFileName(Path)}";
-        }
     }
 
-    private DataAssetDescriptor? _tableType;
-    private readonly List<DataAssetTableRow> _tableRows = [];
-    private readonly HashSet<object> _tableOwned = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<DataAssetEditState, TableRowView> _tableViews = [];
+
+    private TableRowView TableView(DataAssetEditState row)
+    {
+        if (!_tableViews.TryGetValue(row, out var view))
+            _tableViews.Add(row, view = new TableRowView());
+        return view;
+    }
+
     private bool _tableTypeChanging;
 
     /// <summary>Whether any table row has unsaved changes. For tests and close guards.</summary>
-    internal bool IsDataAssetTableDirty => _tableRows.Any(row => row.Dirty);
+    internal bool IsDataAssetTableDirty => _documents.Table.IsDirty;
 
     /// <summary>Rebuilds the table type picker. Preserves the selection by type ID and rescans rows for it.</summary>
     private void RefreshDataAssetTableTypes(bool rescanRows = true)
@@ -52,11 +48,11 @@ public partial class MainWindow
         _tableTypeChanging = true;
         try
         {
-            var selectedId = _tableType?.TypeId;
+            var selectedId = _documents.Table.Type?.TypeId;
             DataAssetTableTypes.Items.Clear();
             if (_project is null)
             {
-                _tableType = null;
+                _documents.Table.Type = null;
                 ClearTableRowViews();
                 UpdateDataAssetTableChrome();
                 return;
@@ -73,12 +69,12 @@ public partial class MainWindow
             DataAssetTableTypes.SelectedItem = selected;
             if (selected is null)
             {
-                _tableType = null;
+                _documents.Table.Type = null;
                 ClearTableRowViews();
             }
             else
             {
-                _tableType = (DataAssetDescriptor)selected.Tag!;
+                _documents.Table.Type = (DataAssetDescriptor)selected.Tag!;
                 if (rescanRows) RescanTableRowsCore();
             }
         }
@@ -90,7 +86,7 @@ public partial class MainWindow
     {
         if (_tableTypeChanging) return;
         var selected = (DataAssetTableTypes.SelectedItem as ComboBoxItem)?.Tag as DataAssetDescriptor;
-        if (selected is not null && _tableType is not null && selected.TypeId == _tableType.TypeId) return;
+        if (selected is not null && _documents.Table.Type is not null && selected.TypeId == _documents.Table.Type.TypeId) return;
         await RunFileOperation(async () =>
         {
             if (!await ConfirmCloseTableRows())
@@ -99,12 +95,12 @@ public partial class MainWindow
                 try
                 {
                     DataAssetTableTypes.SelectedItem = DataAssetTableTypes.Items
-                        .OfType<ComboBoxItem>().FirstOrDefault(item => ReferenceEquals(item.Tag, _tableType));
+                        .OfType<ComboBoxItem>().FirstOrDefault(item => ReferenceEquals(item.Tag, _documents.Table.Type));
                 }
                 finally { _tableTypeChanging = false; }
                 return;
             }
-            _tableType = selected;
+            _documents.Table.Type = selected;
             if (selected is null) ClearTableRowViews();
             else RescanTableRowsCore();
             UpdateDataAssetTableChrome();
@@ -115,20 +111,20 @@ public partial class MainWindow
     /// <summary>Reloads rows for the selected type from disk, keeping per-row heights by path.</summary>
     private void RescanTableRows()
     {
-        if (_tableType is null) return;
+        if (_documents.Table.Type is null) return;
         RescanTableRowsCore();
         UpdateDataAssetTableChrome();
     }
 
     private void RescanTableRowsCore()
     {
-        var descriptor = _tableType;
+        var descriptor = _documents.Table.Type;
         if (descriptor is null || _project is null)
         {
             ClearTableRowViews();
             return;
         }
-        var heights = _tableRows.ToDictionary(row => row.Path, row => row.Height, StringComparer.FromComparison(PathComparison()));
+        var heights = _documents.Table.Rows.ToDictionary(row => row.Path, row => TableView(row).Height, StringComparer.FromComparison(PathComparison()));
         ClearTableRowViews();
         var serializer = new DataAssetSerializer(_components.Registry);
         var root = _project.RootDirectory;
@@ -148,7 +144,7 @@ public partial class MainWindow
             SetFileStatus($"Cannot scan data assets: {error.GetBaseException().Message}", true);
             return;
         }
-        var byId = new Dictionary<Guid, DataAssetTableRow>();
+        var byId = new Dictionary<Guid, DataAssetEditState>();
         var duplicated = new HashSet<Guid>();
         foreach (var file in files)
         {
@@ -175,8 +171,7 @@ public partial class MainWindow
             }
             if (typeId != descriptor.TypeId) continue;
             var full = Path.GetFullPath(file);
-            if (duplicated.Contains(id) || !byId.TryAdd(id, new DataAssetTableRow(full, instance, id,
-                heights.GetValueOrDefault(full, DataAssetTableDefaultRowHeight))
+            if (duplicated.Contains(id) || !byId.TryAdd(id, new DataAssetEditState(full, instance, id, typeId)
                 { Dirty = membersChanged }))
             {
                 duplicated.Add(id);
@@ -184,36 +179,21 @@ public partial class MainWindow
                 Log.Engine.Warning($"{relative}: duplicate data asset ID {id:D}; excluded from the table.");
             }
         }
-        _tableRows.AddRange(byId.Values.OrderBy(row =>
+        _documents.Table.Rows.AddRange(byId.Values.OrderBy(row =>
             Path.GetRelativePath(root, row.Path).Replace('\\', '/'), StringComparer.Ordinal));
+        foreach (var row in _documents.Table.Rows) TableView(row).Height = heights.GetValueOrDefault(row.Path, DataAssetTableDefaultRowHeight);
         RefreshTableOwned();
         RebuildTableRowViews();
     }
 
     /// <summary>Rebuilds the table-owned instance set from all rows. New nested instances join on the next routed edit.</summary>
-    private void RefreshTableOwned()
-    {
-        _tableOwned.Clear();
-        foreach (var row in _tableRows) CollectAssetObjects(row.Instance, _tableOwned);
-    }
-
-    private DataAssetTableRow? FindTableRow(object owner)
-    {
-        foreach (var row in _tableRows)
-        {
-            if (ReferenceEquals(row.Instance, owner)) return row;
-            HashSet<object> graph = [with(ReferenceEqualityComparer.Instance)];
-            CollectAssetObjects(row.Instance, graph);
-            if (graph.Contains(owner)) return row;
-        }
-        return null;
-    }
+    private void RefreshTableOwned() => _documents.Table.RefreshOwnership();
 
     /// <summary>Routes a table-owned edit to its row. Shared with the single-asset and scene routing in <see cref="MarkEdited"/>.</summary>
     private void MarkTableRowDirty(object owner)
     {
         if (IsPlaying) return;
-        FindTableRow(owner)?.SetDirty();
+        if (_documents.Table.FindOwner(owner) is { } row) row.Dirty = true;
         RefreshTableOwned();
         UpdateDataAssetTableChrome();
     }
@@ -222,23 +202,23 @@ public partial class MainWindow
     {
         DetachInvalidFields(DataAssetTableRows);
         DataAssetTableRows.Children.Clear();
-        var descriptor = _tableType;
+        var descriptor = _documents.Table.Type;
         if (descriptor is null)
         {
             DataAssetTableStatus.Text = _project is null ? "Open a project." : "Select a type.";
             return;
         }
         var members = ComponentSchema.GetInspectorMembers(descriptor.Type);
-        if (_tableRows.Count == 0)
+        if (_documents.Table.Rows.Count == 0)
         {
             DataAssetTableStatus.Text = $"No {descriptor.DisplayName} rows — Add Row.";
             return;
         }
-        DataAssetTableStatus.Text = $"{_tableRows.Count} row(s) of {descriptor.DisplayName}.";
-        foreach (var row in _tableRows) DataAssetTableRows.Children.Add(BuildTableRowCard(row, descriptor, members));
+        DataAssetTableStatus.Text = $"{_documents.Table.Rows.Count} row(s) of {descriptor.DisplayName}.";
+        foreach (var row in _documents.Table.Rows) DataAssetTableRows.Children.Add(BuildTableRowCard(row, descriptor, members));
     }
 
-    private Border BuildTableRowCard(DataAssetTableRow row, DataAssetDescriptor descriptor, IReadOnlyList<MemberInfo> members)
+    private Border BuildTableRowCard(DataAssetEditState row, DataAssetDescriptor descriptor, IReadOnlyList<MemberInfo> members)
     {
         var card = new Border
         {
@@ -257,7 +237,7 @@ public partial class MainWindow
         };
         title.SetValue(AutomationProperties.NameProperty, $"Table.{descriptor.Type.Name}.{TableFileBase(row.Path)}.Title");
         ToolTip.SetTip(title, $"{row.Id:D}\n{row.Path}");
-        row.Title = title;
+        TableView(row).Title = title;
         title.Text = $"{(row.Dirty ? "* " : "")}{Path.GetFileName(row.Path)}";
         Grid.SetColumn(title, 0);
         header.Children.Add(title);
@@ -278,7 +258,7 @@ public partial class MainWindow
         Grid.SetColumn(delete, 3);
         header.Children.Add(delete);
         body.Children.Add(header);
-        var cells = new Grid { ColumnSpacing = 8, Height = row.Height };
+        var cells = new Grid { ColumnSpacing = 8, Height = TableView(row).Height };
         for (var i = 0; i < members.Count; i++)
             cells.ColumnDefinitions.Add(new ColumnDefinition
             {
@@ -286,8 +266,8 @@ public partial class MainWindow
                 SharedSizeGroup = $"TableCol{i}",
                 MinWidth = 220,
             });
-        row.Cells = cells;
-        row.CellScrollers.Clear();
+        TableView(row).Cells = cells;
+        TableView(row).CellScrollers.Clear();
         for (var i = 0; i < members.Count; i++)
         {
             var member = members[i];
@@ -300,11 +280,11 @@ public partial class MainWindow
             };
             ToolTip.SetTip(caption, caption.Text);
             cell.Children.Add(caption);
-            var scroller = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = Math.Max(24, row.Height - 30) };
+            var scroller = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = Math.Max(24, TableView(row).Height - 30) };
             var editor = BuildMemberEditor(row.Instance, member, $"Table.{descriptor.Type.Name}.{TableFileBase(row.Path)}.{member.Name}");
             scroller.Content = editor;
             cell.Children.Add(scroller);
-            row.CellScrollers.Add(scroller);
+            TableView(row).CellScrollers.Add(scroller);
             Grid.SetColumn(cell, i);
             cells.Children.Add(cell);
         }
@@ -321,19 +301,19 @@ public partial class MainWindow
         grip.DragDelta += (_, e) =>
         {
             if (IsPlaying) return;
-            row.Height = Math.Clamp(row.Height + e.Vector.Y, DataAssetTableMinRowHeight, DataAssetTableMaxRowHeight);
+            TableView(row).Height = Math.Clamp(TableView(row).Height + e.Vector.Y, DataAssetTableMinRowHeight, DataAssetTableMaxRowHeight);
             ApplyTableRowHeight(row);
         };
         body.Children.Add(grip);
         card.Child = body;
-        row.Card = card;
+        TableView(row).Card = card;
         return card;
     }
 
-    private static void ApplyTableRowHeight(DataAssetTableRow row)
+    private void ApplyTableRowHeight(DataAssetEditState row)
     {
-        row.Cells?.Height = row.Height;
-        foreach (var scroller in row.CellScrollers) scroller.MaxHeight = Math.Max(24, row.Height - 30);
+        TableView(row).Cells?.Height = TableView(row).Height;
+        foreach (var scroller in TableView(row).CellScrollers) scroller.MaxHeight = Math.Max(24, TableView(row).Height - 30);
     }
 
     private static string TableFileBase(string path)
@@ -347,10 +327,10 @@ public partial class MainWindow
         var dirty = IsDataAssetTableDirty;
         DataAssetTableTab.Header = dirty ? "Data Assets *" : "Data Assets";
         SaveDataAssetTableButton.IsEnabled = dirty && !IsPlaying;
-        AddDataAssetTableRowButton.IsEnabled = _tableType is not null && !IsPlaying;
+        AddDataAssetTableRowButton.IsEnabled = _documents.Table.Type is not null && !IsPlaying;
         DataAssetTableRows.IsEnabled = !IsPlaying;
-        foreach (var row in _tableRows)
-            row.Title?.Text = $"{(row.Dirty ? "* " : "")}{Path.GetFileName(row.Path)}";
+        foreach (var row in _documents.Table.Rows)
+            TableView(row).Title?.Text = $"{(row.Dirty ? "* " : "")}{Path.GetFileName(row.Path)}";
         var invalid = DataAssetTableRows.GetVisualDescendants().OfType<TextBox>().Count(_invalidFields.Contains);
         DataAssetTableError.IsVisible = invalid > 0;
         DataAssetTableError.Text = $"Error {invalid}";
@@ -363,8 +343,8 @@ public partial class MainWindow
     {
         DetachInvalidFields(DataAssetTableRows);
         DataAssetTableRows.Children.Clear();
-        _tableRows.Clear();
-        _tableOwned.Clear();
+        _documents.Table.Clear();
+        _tableViews.Clear();
     }
 
     private void OnSaveDataAssetTable(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
@@ -374,44 +354,30 @@ public partial class MainWindow
     internal async Task<bool> SaveDataAssetTableAsync()
     {
         if (IsPlaying) return false;
-        if (_tableType is null || !IsDataAssetTableDirty) return true;
+        if (_documents.Table.Type is null || !IsDataAssetTableDirty) return true;
         var saveBlock = EditorOperationGate.SaveBlockReason(_invalidFields.Count > 0);
         if (saveBlock is not null)
         {
             SetFileStatus($"Cannot save data asset table. {saveBlock}", true);
             return false;
         }
-        var serializer = new DataAssetSerializer(_components.Registry);
-        List<(DataAssetTableRow Row, string Yaml)> pending = [];
-        foreach (var row in _tableRows.Where(row => row.Dirty))
+        List<(DataAssetEditState Row, string Yaml)> pending;
+        try { pending = _documents.Table.PrepareSave(_components.Registry); }
+        catch (Exception error)
         {
-            string yaml;
-            try { yaml = serializer.Serialize(row.Instance, row.Id); }
-            catch (Exception error)
-            {
-                DataAssetTableStatus.Text = error.GetBaseException().Message;
-                SetFileStatus($"Cannot save data asset table: {error.GetBaseException().Message}", true);
-                return false;
-            }
-            pending.Add((row, yaml));
+            DataAssetTableStatus.Text = error.GetBaseException().Message;
+            SetFileStatus($"Cannot save data asset table: {error.GetBaseException().Message}", true);
+            return false;
         }
-        try
-        {
-            foreach (var (row, yaml) in pending) SceneFile.Write(row.Path, yaml);
-        }
+        try { DataAssetTableDocument.Save(pending); }
         catch (Exception error)
         {
             SetFileStatus($"Cannot save data asset table: {error.GetBaseException().Message}", true);
             return false;
         }
-        foreach (var (row, _) in pending)
-        {
-            row.Dirty = false;
-            row.Title?.Text = Path.GetFileName(row.Path);
-        }
         UpdateDataAssetTableChrome();
         RefreshProjectExplorer();
-        SetFileStatus($"Saved {_tableType.DisplayName} table: {pending.Count} row(s).");
+        SetFileStatus($"Saved {_documents.Table.Type.DisplayName} table: {pending.Count} row(s).");
         await Task.CompletedTask;
         return true;
     }
@@ -421,10 +387,10 @@ public partial class MainWindow
 
     private async Task AddDataAssetTableRowAsync()
     {
-        var descriptor = _tableType;
+        var descriptor = _documents.Table.Type;
         if (_project is null || descriptor is null || RejectWhenPlaying("Add Row")) return;
-        var folder = _tableRows.Count > 0
-            ? Path.GetRelativePath(_project.RootDirectory, Path.GetDirectoryName(_tableRows[0].Path)!).Replace('\\', '/')
+        var folder = _documents.Table.Rows.Count > 0
+            ? Path.GetRelativePath(_project.RootDirectory, Path.GetDirectoryName(_documents.Table.Rows[0].Path)!).Replace('\\', '/')
             : "Assets";
         Directory.CreateDirectory(_project.ResolveDirectoryPath(folder));
         var name = _project.NextDataAssetName(folder, descriptor.DisplayName);
@@ -432,7 +398,7 @@ public partial class MainWindow
         _project.ValidateDataAssetPath(path);
         var id = DataAssetFile.Create(path, descriptor.Type, _components.Registry);
         var (instance, _, _) = DataAssetFile.Load(path, _components.Registry);
-        _tableRows.Add(new DataAssetTableRow(path, instance, id, DataAssetTableDefaultRowHeight));
+        _documents.Table.Rows.Add(new DataAssetEditState(path, instance, id, descriptor.TypeId));
         RefreshTableOwned();
         RebuildTableRowViews();
         UpdateDataAssetTableChrome();
@@ -441,10 +407,10 @@ public partial class MainWindow
         await Task.CompletedTask;
     }
 
-    private async Task DuplicateTableRowAsync(DataAssetTableRow row)
+    private async Task DuplicateTableRowAsync(DataAssetEditState row)
     {
-        var descriptor = _tableType;
-        if (_project is null || descriptor is null || !_tableRows.Contains(row) || RejectWhenPlaying("Duplicate Row")) return;
+        var descriptor = _documents.Table.Type;
+        if (_project is null || descriptor is null || !_documents.Table.Rows.Contains(row) || RejectWhenPlaying("Duplicate Row")) return;
         var serializer = new DataAssetSerializer(_components.Registry);
         var folder = Path.GetRelativePath(_project.RootDirectory, Path.GetDirectoryName(row.Path)!).Replace('\\', '/');
         var name = _project.NextDataAssetName(folder, TableFileBase(row.Path));
@@ -454,7 +420,9 @@ public partial class MainWindow
         var yaml = serializer.Serialize(row.Instance, row.Id);
         var (instance, _) = serializer.Deserialize(yaml);
         SceneFile.Write(path, serializer.Serialize(instance, id));
-        _tableRows.Add(new DataAssetTableRow(path, instance, id, row.Height));
+        var duplicate = new DataAssetEditState(path, instance, id, descriptor.TypeId);
+        _documents.Table.Rows.Add(duplicate);
+        TableView(duplicate).Height = TableView(row).Height;
         RefreshTableOwned();
         RebuildTableRowViews();
         UpdateDataAssetTableChrome();
@@ -463,16 +431,17 @@ public partial class MainWindow
         await Task.CompletedTask;
     }
 
-    private async Task DeleteTableRowAsync(DataAssetTableRow row)
+    private async Task DeleteTableRowAsync(DataAssetEditState row)
     {
-        if (_project is null || !_tableRows.Contains(row) || RejectWhenPlaying("Delete Row")) return;
-        if (_assetEdit is not null && string.Equals(_assetEdit.Path, row.Path, PathComparison()))
+        if (_project is null || !_documents.Table.Rows.Contains(row) || RejectWhenPlaying("Delete Row")) return;
+        if (_documents.Asset is not null && string.Equals(_documents.Asset.Path, row.Path, PathComparison()))
             if (!await ConfirmCloseDataAsset()) return;
         var display = Path.GetRelativePath(_project.RootDirectory, row.Path).Replace('\\', '/');
         if (!await ConfirmExplorerDelete(display, isDirectory: false)) return;
         File.Delete(row.Path);
-        if (row.Card is not null) DetachInvalidFields(row.Card);
-        _tableRows.Remove(row);
+        if (TableView(row).Card is { } card) DetachInvalidFields(card);
+        _documents.Table.Rows.Remove(row);
+        _tableViews.Remove(row);
         RefreshTableOwned();
         RebuildTableRowViews();
         UpdateDataAssetTableChrome();
@@ -481,7 +450,7 @@ public partial class MainWindow
         await Task.CompletedTask;
     }
 
-    private bool ContainsOpenTable(string path) => _tableRows.Any(row =>
+    private bool ContainsOpenTable(string path) => _documents.Table.Rows.Any(row =>
         string.Equals(row.Path, path, PathComparison())
         || row.Path.StartsWith(Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar, PathComparison()));
 
@@ -514,7 +483,7 @@ public partial class MainWindow
         dialog.Content = new StackPanel
         {
             Margin = new Avalonia.Thickness(20), Spacing = 20,
-            Children = { new TextBlock { Text = $"{_tableRows.Count} table row(s) have unsaved changes or input errors. Save?", TextWrapping = Avalonia.Media.TextWrapping.Wrap }, buttons },
+            Children = { new TextBlock { Text = $"{_documents.Table.Rows.Count} table row(s) have unsaved changes or input errors. Save?", TextWrapping = Avalonia.Media.TextWrapping.Wrap }, buttons },
         };
         var answer = await dialog.ShowDialog<string?>(this);
         if (answer == "discard")
@@ -532,32 +501,11 @@ public partial class MainWindow
         return false;
     }
 
-    /// <summary>Validates table rows against candidate code before either document adopts the new types.</summary>
-    private List<DataAssetTableRow>? PrepareDataAssetTableReload(ComponentRegistry registry)
+    private void RefreshTableAfterReload()
     {
-        if (_tableType is null) return null;
-        var previous = new DataAssetSerializer(_components.Registry);
-        var next = new DataAssetSerializer(registry);
-        List<DataAssetTableRow> candidate = [];
-        foreach (var row in _tableRows)
-        {
-            var yaml = previous.Serialize(row.Instance, row.Id);
-            var (instance, id) = next.Deserialize(yaml, out _, out var membersChanged);
-            candidate.Add(new DataAssetTableRow(row.Path, instance, id, row.Height) { Dirty = row.Dirty || membersChanged });
-        }
-        return candidate;
-    }
-
-    private void AdoptDataAssetTableReload(List<DataAssetTableRow>? candidate)
-    {
-        if (candidate is null || _tableType is null) return;
-        var typeId = _tableType.TypeId;
-        _tableRows.Clear();
-        _tableRows.AddRange(candidate);
-        // Rebuilds must enumerate members of the new Type: old MemberInfos reject new instances.
-        var descriptors = DataAssetDescriptor.DescribeAll(_components.Registry, out _, _components.DataAssetTypes);
-        _tableType = descriptors.FirstOrDefault(descriptor => descriptor.TypeId == typeId) ?? _tableType;
-        RefreshTableOwned();
+        var heights = _tableViews.ToDictionary(entry => entry.Key.Path, entry => entry.Value.Height, StringComparer.FromComparison(PathComparison()));
+        _tableViews.Clear();
+        foreach (var row in _documents.Table.Rows) TableView(row).Height = heights.GetValueOrDefault(row.Path, DataAssetTableDefaultRowHeight);
         RebuildTableRowViews();
         UpdateDataAssetTableChrome();
     }

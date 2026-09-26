@@ -64,7 +64,7 @@ public partial class MainWindow
             var assets = BuildProjectAssetStore(_components.Registry);
             var prefabs = BuildPrefabCatalog();
             var configure = GameServices.ForProject(_components);
-            session = PlaySession.Prepare(_sceneDocument.Current, _components.Registry, services =>
+            session = PlaySession.Prepare(_documents.Scene.Current, _components.Registry, services =>
             {
                 configure(services);
                 if (assets is not null) services.AddSingleton(assets);

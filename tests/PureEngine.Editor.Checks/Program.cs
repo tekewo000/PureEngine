@@ -65,6 +65,7 @@ internal static class Program
         Directory.CreateDirectory(root);
         try
         {
+            EditorDocumentChecks.Run(root);
             PrefabFileEditingChecks.Run(root);
             if (args.Contains("--prefab-files")) return;
             AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions())

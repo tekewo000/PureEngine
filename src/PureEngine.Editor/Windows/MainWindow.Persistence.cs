@@ -22,15 +22,15 @@ public partial class MainWindow
 
     private void MarkSceneChanged()
     {
-        _editScene.MarkChanged();
+        _documents.Current.MarkChanged();
         UpdateSceneTitle();
         UpdatePrefabEditorChrome();
     }
 
     private void UpdateSceneTitle()
     {
-        Title = $"{(_editScene.IsDirty ? "* " : "")}{Path.GetFileName(_editScene.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
-        SceneViewTab.Header = _editScene.IsDirty ? "Scene View *" : "Scene View";
+        Title = $"{(_documents.Current.IsDirty ? "* " : "")}{Path.GetFileName(_documents.Current.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
+        SceneViewTab.Header = _documents.Current.IsDirty ? "Scene View *" : "Scene View";
     }
 
     private void SetFileStatus(string message, bool error = false)
@@ -70,15 +70,15 @@ public partial class MainWindow
     private async Task<bool> SaveMainSceneAsync(bool saveAs)
     {
         CancelSceneViewDrag();
-        var saveBlock = EditorOperationGate.SaveBlockReason(!IsPrefabEditing && _assetEdit is null && HasInputErrors);
+        var saveBlock = EditorOperationGate.SaveBlockReason(!IsPrefabEditing && _documents.Asset is null && HasInputErrors);
         if (saveBlock is not null)
         {
             SetFileStatus($"Cannot save. {saveBlock}", true);
             return false;
         }
         // Validation happens before picking or touching a destination file.
-        var yaml = _sceneSerializer.Serialize(_sceneDocument.Current);
-        var path = _sceneDocument.Path;
+        var yaml = _sceneSerializer.Serialize(_documents.Scene.Current);
+        var path = _documents.Scene.Path;
         if (saveAs || path is null)
         {
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -93,9 +93,7 @@ public partial class MainWindow
             if (file is null) return false;
             path = file.TryGetLocalPath() ?? throw new IOException("Select a local save destination.");
         }
-        _project?.ValidateScenePath(path);
-        SceneFile.Write(path, yaml);
-        _sceneDocument.MarkSaved(path);
+        _documents.SaveScene(path, yaml, _project);
         _explorerSelectedFile = path;
         UpdateSceneTitle();
         RefreshProjectExplorer();
@@ -153,9 +151,9 @@ public partial class MainWindow
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
-        var previous = _editScene.Replace(restored, path, dirty: false);
+        var previous = _documents.Current.Replace(restored, path, dirty: false);
         RefreshHierarchy();
-        SelectSceneObject(_editScene.Current.RootObjects.Count > 0 ? _editScene.Current.RootObjects[0] : null, focus: false);
+        SelectSceneObject(_documents.Current.Current.RootObjects.Count > 0 ? _documents.Current.Current.RootObjects[0] : null, focus: false);
         // Selection may already have been empty; explicitly reset the Inspector as well.
         RefreshObjectInspector();
         UpdateSceneTitle();
@@ -173,18 +171,16 @@ public partial class MainWindow
         // Shutdown order: dispose edit-scene components, then edit services, then request code release. Leaves other projects untouched.
         StopUserCodeWatching();
         _playTimer?.Stop();
-        _assetEdit = null;
-        _assetOwned.Clear();
+        _documents.Asset = null;
+        _documents.AssetOwned.Clear();
         DataAssetEditors.Children.Clear();
+        ClearTableRowViews();
         var errors = new List<Exception>();
         try { ForceStopPlayForShutdown(); }
         catch (Exception error) { errors.Add(error); }
         try { ClosePrefabEditor(); }
         catch (Exception error) { errors.Add(error); }
-        var previous = _editScene.Reset();
-        try { ComponentAssets.DisposeComponents(previous.OwnedComponents); }
-        catch (Exception error) { errors.Add(error); }
-        try { EditSession.Dispose(); }
+        try { _documents.Dispose(); }
         catch (Exception error) { errors.Add(error); }
         try { _components.Dispose(); }
         catch (Exception error) { errors.Add(error); }
@@ -218,7 +214,7 @@ public partial class MainWindow
     private async Task<bool> ConfirmUnsavedChanges()
     {
         if (!EditorOperationGate.NeedsUnsavedConfirmation(
-            _sceneDocument.IsDirty, !IsPrefabEditing && _assetEdit is null && HasInputErrors)) return true;
+            _documents.Scene.IsDirty, !IsPrefabEditing && _documents.Asset is null && HasInputErrors)) return true;
         var dialog = new Window
         {
             Title = "Unsaved Scene", Width = 420, SizeToContent = SizeToContent.Height,
@@ -256,13 +252,12 @@ public partial class MainWindow
             }
         }
         if (!EditorOperationGate.NeedsUnsavedConfirmation(
-            _sceneDocument.IsDirty || _prefabScene is { IsDirty: true } || _assetEdit is { Dirty: true } || IsDataAssetTableDirty, HasInputErrors)) return;
+            _documents.IsDirty, HasInputErrors)) return;
         e.Cancel = true;
         await RunFileOperation(async () =>
         {
             // Do not discard any document until every confirmation accepts closing the window.
             if (!await ConfirmTableRowsClose(closeOnConfirm: false)) return;
-            if (!await ConfirmCloseDataAsset()) return;
             if (!await ConfirmDataAssetClose(closeOnConfirm: false)) return;
             if (!await ConfirmPrefabEditorClose(closeOnConfirm: false)) return;
             if (!await ConfirmUnsavedChanges()) return;
@@ -277,9 +272,9 @@ public partial class MainWindow
         if (e.Key == Key.S)
         {
             e.Handled = true;
-            if (ViewportTabs.SelectedIndex == DataAssetTableViewportIndex && _tableType is not null)
+            if (ViewportTabs.SelectedIndex == DataAssetTableViewportIndex && _documents.Table.Type is not null)
                 await RunFileOperation(SaveDataAssetTableAsync);
-            else if (_assetEdit is not null && GetSelectedSceneObject() is null)
+            else if (_documents.Asset is not null && GetSelectedSceneObject() is null)
                 await RunFileOperation(SaveDataAssetAsync);
             else
                 await RunFileOperation(async () => await SaveSceneAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)));

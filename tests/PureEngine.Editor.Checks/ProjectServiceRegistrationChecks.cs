@@ -253,7 +253,7 @@ static class ProjectServiceRegistrationChecks
         Dispatcher.UIThread.RunJobs();
         try
         {
-            var scene = Field<EditSceneStore>(editor, "_editScene").Current;
+            var scene = Field<EditSceneStore>(editor, "EditSceneStore").Current;
             var item = scene.AddEmpty();
             item.Rename("Board");
             var services = Field<GameSession>(editor, "EditSession");
@@ -277,7 +277,7 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
 
-            var current = Field<EditSceneStore>(editor, "_editScene").Current.Objects.Single(o => o.Id == objectId);
+            var current = Field<EditSceneStore>(editor, "EditSceneStore").Current.Objects.Single(o => o.Id == objectId);
             dynamic renewed = current.Components.Single();
             Check(!ReferenceEquals((object)renewed, oldBoard), "Reload must create new instances.");
             Check((int)renewed.Score == 55, "Reload must preserve unsaved Inspector values.");
@@ -302,11 +302,11 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "StopPlay");
             Check(!(bool)Call(editor, "get_IsPlaying")!, "Stop must leave playing state.");
             Dispatcher.UIThread.RunJobs();
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
         }
         finally
         {
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
@@ -323,7 +323,7 @@ static class ProjectServiceRegistrationChecks
         Dispatcher.UIThread.RunJobs();
         try
         {
-            var scene = Field<EditSceneStore>(editor, "_editScene").Current;
+            var scene = Field<EditSceneStore>(editor, "EditSceneStore").Current;
             var item = scene.AddEmpty();
             var services = Field<GameSession>(editor, "EditSession");
             var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
@@ -388,11 +388,11 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
             Check(status.Text!.Contains("Applied C# changes"), "Recovery after failures must work.");
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
         }
         finally
         {
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }

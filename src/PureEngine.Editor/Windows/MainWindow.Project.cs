@@ -48,13 +48,13 @@ public partial class MainWindow
         }
         else
         {
-            if (_sceneDocument.Path is null)
+            if (_documents.Scene.Path is null)
             {
                 if (HasInputErrors || !await ConfirmCloseDataAsset()) return;
                 ActivateEditorViewport(0);
                 if (!await SaveSceneAsync(false)) return;
             }
-            _project.SetStartupScene(_sceneDocument.Path!);
+            _project.SetStartupScene(_documents.Scene.Path!);
         }
         RefreshProjectExplorer();
         SetFileStatus($"Set as startup scene: {_project.Document.StartupScene}");

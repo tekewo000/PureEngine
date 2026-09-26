@@ -26,7 +26,7 @@ internal static class SceneViewEditorChecks
         (T)(typeof(MainWindow).GetField(name, AnyInstance)!.GetValue(window)!);
 
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", AnyInstance)!.GetValue(window)!;
 
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
 

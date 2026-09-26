@@ -59,7 +59,7 @@ internal static class DirectAssetEditorChecks
         editor.FindControl<Grid>("GameViewport")!.Children.Clear();
         editor.Show();
         Dispatcher.UIThread.RunJobs();
-        var state = (EditSceneStore)typeof(MainWindow).GetField("_editScene", Flags)!.GetValue(editor)!;
+        var state = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Flags)!.GetValue(editor)!;
         try
         {
             typeof(MainWindow).GetField("_explorerFolder", Flags)!.SetValue(editor, "");

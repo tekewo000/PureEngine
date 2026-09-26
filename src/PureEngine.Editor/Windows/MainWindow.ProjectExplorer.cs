@@ -216,7 +216,7 @@ public partial class MainWindow
         ProjectFilesCount.Text = entries.Count == 0 ? "Empty folder" : $"{entries.Count} item(s)";
         ProjectFiles.SelectedItem = entries.FirstOrDefault(entry =>
             entry.FullPath is not null && string.Equals(entry.FullPath, _explorerSelectedFile, PathComparison()));
-        var editPath = _sceneDocument.Path;
+        var editPath = _documents.Scene.Path;
         if (ProjectFiles.SelectedItem is null && _explorerSelectedFile is not null
             && editPath is not null && entries.Any(entry => string.Equals(entry.FullPath, editPath, PathComparison())))
             ProjectFiles.SelectedItem = entries.First(entry => string.Equals(entry.FullPath, editPath, PathComparison()));
@@ -647,7 +647,7 @@ public partial class MainWindow
                 SetFileStatus("Cannot delete because it contains the startup scene. Change the startup scene first.", true);
                 return;
             }
-            var editPath = _sceneDocument.Path;
+            var editPath = _documents.Scene.Path;
             var containsOpen = editPath is not null && (string.Equals(target, editPath, PathComparison())
                 || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison())));
             if (containsOpen)
@@ -674,7 +674,7 @@ public partial class MainWindow
             SetFileStatus($"Deleted: {display}");
         });
 
-    private bool ContainsOpenPrefab(string path, bool isDirectory) => _prefabScene?.Path is { } prefabPath
+    private bool ContainsOpenPrefab(string path, bool isDirectory) => _documents.Prefab?.Path is { } prefabPath
         && (string.Equals(prefabPath, path, PathComparison())
             || isDirectory && prefabPath.StartsWith(
                 Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar, PathComparison()));
@@ -683,11 +683,11 @@ public partial class MainWindow
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)
     {
         if (_project is null) return;
-        var editPath = _sceneDocument.Path;
+        var editPath = _documents.Scene.Path;
         if (editPath is not null && (string.Equals(editPath, oldFull, PathComparison())
             || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison()))))
         {
-            _sceneDocument.SetPath(isDirectory
+            _documents.Scene.SetPath(isDirectory
                 ? Path.Combine(newFull, Path.GetRelativePath(oldFull, editPath))
                 : newFull);
             UpdateSceneTitle();

@@ -22,9 +22,9 @@ static class UserCodeChecks
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static Scene EditScene(MainWindow window) =>
-        ((EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!).Current;
+        ((EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(window)!).Current;
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(window)!;
     private static bool HasPendingReload(MainWindow window) =>
         typeof(MainWindow).GetField("_pendingCompilation", Instance)!.GetValue(window) is not null;
     private static void Check(bool condition, string message)
