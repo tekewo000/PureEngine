@@ -569,7 +569,7 @@
                   <TreeView.DataTemplates>
                     <TreeDataTemplate DataType="editor:HierarchyNode" ItemsSource="{Binding Children}">
                       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
-                        <PathIcon Classes="rowIcon" Data="{StaticResource Icon.Hierarchy}"
+                        <PathIcon Classes="rowIcon" Data="{StaticResource Icon.SceneObject}"
                                   IsVisible="{Binding IsSceneObject}" AutomationProperties.Name="SceneObject" />
                         <PathIcon Classes="rowIcon" Data="{StaticResource Icon.Prefab}"
                                   IsVisible="{Binding IsPrefab}" AutomationProperties.Name="Prefab" />
@@ -856,13 +856,20 @@
                 </Grid>
                 <StackPanel x:Name="AttachedClasses" IsVisible="{Binding Inspector.HasObject}" Spacing="8" Margin="0,4,0,0">
                   <Separator Classes="divider" />
-                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                    <TextBlock x:Name="ComponentsHeader" Text="{Binding Inspector.ComponentsTitle}" Classes="sectionHeader"
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                    <PathIcon Data="{StaticResource Icon.Component}" Classes="rowIcon"
+                              VerticalAlignment="Center" AutomationProperties.Name="Components" />
+                    <TextBlock x:Name="ComponentsHeader" Text="{Binding Inspector.ComponentsTitle}" Classes="sectionHeader" Grid.Column="1"
                                VerticalAlignment="Center" />
-                    <Button x:Name="AddComponentButton" Content="Add Component" Grid.Column="1"
+                    <Button x:Name="AddComponentButton" Grid.Column="2"
                             FontSize="11" Padding="8,2" VerticalAlignment="Center"
-                            AutomationProperties.Name="Add Component" Click="OnAddComponent" />
-                    <TextBlock x:Name="ComponentsError" Text="{Binding Inspector.ErrorText}" ToolTip.Tip="{Binding Inspector.ErrorHint}" Classes="errorBadge" Grid.Column="2" IsVisible="{Binding Inspector.HasFieldErrors}" />
+                            AutomationProperties.Name="Add Component" Click="OnAddComponent">
+                      <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <PathIcon Data="{StaticResource Icon.AddComponent}" Classes="buttonIcon" />
+                        <TextBlock Text="Add Component" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="ComponentsError" Text="{Binding Inspector.ErrorText}" ToolTip.Tip="{Binding Inspector.ErrorHint}" Classes="errorBadge" Grid.Column="3" IsVisible="{Binding Inspector.HasFieldErrors}" />
                   </Grid>
                   <StackPanel x:Name="ComponentEditors" Spacing="12" />
                 </StackPanel>

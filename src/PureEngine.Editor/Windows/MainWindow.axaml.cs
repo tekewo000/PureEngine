@@ -410,10 +410,23 @@ public partial class MainWindow : Window
         // Collapse toggle shares the title cell so the header Grid keeps a single
         // title TextBlock and the right-docked priority panel (see PriorityInspectorChecks).
         header.Children.Add(toggle);
+        // Box marks a component card, matching the Components section header.
+        var icon = new PathIcon
+        {
+            Data = (StreamGeometry?)Application.Current?.FindResource("Icon.Component"),
+            Width = 14,
+            Height = 14,
+            Margin = new Thickness(22, 0, 0, 0),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        icon.SetValue(AutomationProperties.NameProperty, "Component");
+        ToolTip.SetTip(icon, type.FullName);
+        header.Children.Add(icon);
         var title = new TextBlock { Text = type.Name, FontSize = 13, FontWeight = FontWeight.SemiBold,
             Foreground = CardTitleBrush,
-            MaxWidth = 160, TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new Thickness(22, 0, 0, 0),
+            MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(42, 0, 0, 0),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
         ToolTip.SetTip(title, type.FullName);
