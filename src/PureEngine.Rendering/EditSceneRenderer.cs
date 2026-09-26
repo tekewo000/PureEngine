@@ -45,6 +45,34 @@ public static class EditSceneRenderer
         return diagnostics;
     }
 
+    /// <summary>Collects scene-space layouts once per frame with layout diagnostics. Never throws.</summary>
+    /// <remarks>Layouts ignore pan and zoom; callers reuse the result for drawing and selection within the same frame.</remarks>
+    public static IReadOnlyList<SceneViewMath.LayoutEntry> CollectLayouts(
+        Scene scene, Vector2 viewportSize, List<Diagnostic> diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        List<SceneViewMath.LayoutEntry> collected = [];
+        foreach (var root in scene.RootObjects)
+            CollectRecursive(root, viewportSize, Matrix4x4.Identity, collected, diagnostics);
+        return collected;
+    }
+
+    /// <summary>Draws from already collected layouts without recomputing them. Never throws.</summary>
+    /// <remarks>Sorting and view composition match Build. Layout diagnostics come from <see cref="CollectLayouts"/>.</remarks>
+    public static IReadOnlyList<Diagnostic> AppendWithLayouts(
+        DrawList draw, IReadOnlyList<SceneViewMath.LayoutEntry> layouts, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize, Matrix4x4 view)
+    {
+        ArgumentNullException.ThrowIfNull(draw);
+        ArgumentNullException.ThrowIfNull(layouts);
+        ArgumentNullException.ThrowIfNull(images);
+        List<Diagnostic> diagnostics = [];
+        if (!IsDrawableViewport(viewportSize) || !IsAffine(view))
+            return diagnostics;
+        DrawEntries(draw, layouts, images, viewportSize, view, diagnostics);
+        return diagnostics;
+    }
+
     private static bool IsDrawableViewport(Vector2 viewportSize) =>
         float.IsFinite(viewportSize.X) && float.IsFinite(viewportSize.Y)
         && viewportSize.X >= 10 && viewportSize.Y >= 10;
@@ -60,11 +88,16 @@ public static class EditSceneRenderer
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
         Matrix4x4 view, List<Diagnostic> diagnostics)
     {
+        var collected = CollectLayouts(scene, viewportSize, diagnostics);
+        DrawEntries(draw, collected, images, viewportSize, view, diagnostics);
+    }
+
+    private static void DrawEntries(
+        DrawList draw, IReadOnlyList<SceneViewMath.LayoutEntry> layouts, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
+        Matrix4x4 view, List<Diagnostic> diagnostics)
+    {
         var clip = new Vector4(0, 0, viewportSize.X, viewportSize.Y);
-        List<SceneViewMath.LayoutEntry> collected = [];
-        foreach (var root in scene.RootObjects)
-            CollectRecursive(root, viewportSize, Matrix4x4.Identity, collected, diagnostics);
-        foreach (var entry in SceneViewMath.SortForRender(collected))
+        foreach (var entry in SceneViewMath.SortForRender(layouts))
         {
             try
             {

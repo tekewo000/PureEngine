@@ -1,5 +1,6 @@
 using System.Numerics;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
@@ -28,6 +29,7 @@ public partial class MainWindow
     private UiElement? _dragElement;
     private Vector2 _dragParentSize, _dragViewportSize;
     private (Vector2 Min, Vector2 Max, Vector2 Pivot, Vector2 Size, Quaternion Rotation, Vector3 Scale) _dragGeometry;
+    private TextBox? _dragPosXBox, _dragPosYBox, _dragPosZBox;
     private readonly HashSet<Guid> _sceneDrawFailures = [];
 
     internal Vector2 ScenePan => _scenePan;
@@ -96,6 +98,13 @@ public partial class MainWindow
     private bool TrySceneFrame(
         SceneObject target, Vector2 viewportSize,
         out Vector2[] cornersView, out Vector2 pivotView,
+        out Vector2 xAxis, out Vector2 yAxis, out bool gizmoValid) =>
+        TrySceneFrameWithLayouts(target, SceneLayouts(viewportSize), viewportSize, out cornersView, out pivotView, out xAxis, out yAxis, out gizmoValid);
+
+    /// <summary>Resolves the selection frame from already computed layouts. Reuses the frame layout to avoid a second enumeration.</summary>
+    private bool TrySceneFrameWithLayouts(
+        SceneObject target, IReadOnlyList<SceneViewMath.LayoutEntry> layouts, Vector2 viewportSize,
+        out Vector2[] cornersView, out Vector2 pivotView,
         out Vector2 xAxis, out Vector2 yAxis, out bool gizmoValid)
     {
         cornersView = [];
@@ -103,7 +112,7 @@ public partial class MainWindow
         xAxis = Vector2.UnitX;
         yAxis = Vector2.UnitY;
         gizmoValid = false;
-        var entry = FindLayout(SceneLayouts(viewportSize), target);
+        var entry = FindLayout(layouts, target);
         if (entry is not null
             && SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out cornersView, out pivotView))
         {
@@ -151,7 +160,7 @@ public partial class MainWindow
         if (IsPlaying) { RejectWhenPlaying("Select"); return; }
         var entries = SceneLayouts(viewportSize);
         if (GetSelectedSceneObject() is SceneObject selected
-            && TrySceneFrame(selected, viewportSize, out _, out var pivot, out var xAxis, out var yAxis, out var gizmoValid)
+            && TrySceneFrameWithLayouts(selected, entries, viewportSize, out _, out var pivot, out var xAxis, out var yAxis, out var gizmoValid)
             && gizmoValid
             && BeginSceneMove(selected, SceneViewMath.HitGizmo(pivot, xAxis, yAxis, viewPoint), viewPoint))
         {
@@ -371,6 +380,7 @@ public partial class MainWindow
         _dragTransform = null;
         _dragParent = null;
         _dragElement = null;
+        _dragPosXBox = _dragPosYBox = _dragPosZBox = null;
         // Clear state before CaptureLost is raised; never release capture stolen by another control.
         if (ReferenceEquals(pointer?.Captured, SceneViewport)) pointer!.Capture(null);
     }
@@ -400,26 +410,65 @@ public partial class MainWindow
     {
         if (!ReferenceEquals(GetSelectedSceneObject(), target))
             return;
-        var card = ComponentEditors.Children.OfType<Border>()
-            .FirstOrDefault(candidate => ReferenceEquals(candidate.Tag, transform));
-        if (card is null)
-            return;
-        var boxes = card.GetVisualDescendants().OfType<TextBox>().ToList();
-        if (boxes.Count < 3)
+        if (!TryGetDragPositionBoxes(transform, out var xBox, out var yBox, out var zBox))
             return;
         _sceneViewSyncing = true;
         try
         {
-            boxes[0].Text = transform.LocalPosition.X.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            boxes[1].Text = transform.LocalPosition.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            boxes[2].Text = transform.LocalPosition.Z.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            foreach (var box in boxes.Take(3))
-                MarkInvalid(box, null, "Enter a number — Press Esc to revert");
+            SyncDragPositionBox(xBox, transform.LocalPosition.X);
+            SyncDragPositionBox(yBox, transform.LocalPosition.Y);
+            SyncDragPositionBox(zBox, transform.LocalPosition.Z);
         }
         finally
         {
             _sceneViewSyncing = false;
         }
+    }
+
+    /// <summary>Resolves the cached LocalPosition boxes by automation name. Reuses them across moves when still attached.</summary>
+    private bool TryGetDragPositionBoxes(Transform transform, out TextBox xBox, out TextBox yBox, out TextBox zBox)
+    {
+        xBox = _dragPosXBox!;
+        yBox = _dragPosYBox!;
+        zBox = _dragPosZBox!;
+        if (xBox is not null && yBox is not null && zBox is not null
+            && IsDragPositionBoxAttached(xBox, "X") && IsDragPositionBoxAttached(yBox, "Y") && IsDragPositionBoxAttached(zBox, "Z"))
+            return true;
+        xBox = yBox = zBox = null!;
+        _dragPosXBox = _dragPosYBox = _dragPosZBox = null;
+        var card = ComponentEditors.Children.OfType<Border>()
+            .FirstOrDefault(candidate => ReferenceEquals(candidate.Tag, transform));
+        if (card is null)
+            return false;
+        TextBox? x = null, y = null, z = null;
+        foreach (var box in card.GetVisualDescendants().OfType<TextBox>())
+        {
+            var name = box.GetValue(AutomationProperties.NameProperty) as string;
+            if (name == "Transform.LocalPosition.X") x = box;
+            else if (name == "Transform.LocalPosition.Y") y = box;
+            else if (name == "Transform.LocalPosition.Z") z = box;
+            if (x is not null && y is not null && z is not null) break;
+        }
+        if (x is null || y is null || z is null)
+            return false;
+        _dragPosXBox = xBox = x;
+        _dragPosYBox = yBox = y;
+        _dragPosZBox = zBox = z;
+        return true;
+    }
+
+    private bool IsDragPositionBoxAttached(TextBox box, string axis) =>
+        box.GetValue(AutomationProperties.NameProperty) as string == $"Transform.LocalPosition.{axis}"
+        && box.GetVisualAncestors().Contains(ComponentEditors);
+
+    /// <summary>Updates one cached box only when the displayed value differs. Skips validation churn for already valid fields.</summary>
+    private void SyncDragPositionBox(TextBox box, float value)
+    {
+        var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (box.Text != text)
+            box.Text = text;
+        if (IsInvalidInput(box))
+            MarkInvalid(box, null, "Enter a number — Press Esc to revert");
     }
 
     internal bool IsSyncingInspectorForSceneView() => _sceneViewSyncing;

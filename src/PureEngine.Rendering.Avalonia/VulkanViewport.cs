@@ -29,6 +29,8 @@ public sealed class VulkanViewport : Control
     private bool _resetAtlas;
     public event Action<string>? RenderingFailed;
     public int FrameCount { get; private set; }
+    /// <summary>Frames skipped because the previous GPU submission was still in flight. The next tick renders the newest state.</summary>
+    public int SkippedFrameCount { get; private set; }
     public string? DeviceName => _renderer?.DeviceName;
     public string? Failure => _failure;
 
@@ -131,6 +133,13 @@ public sealed class VulkanViewport : Control
             }
             if (!_attached) return;
             if (_interop!.IsLost) throw new InvalidOperationException("Avalonia GPU device was lost.");
+            // Never block the UI thread on the GPU fence. When the previous frame is still in flight,
+            // skip this tick and render the newest input on the next tick instead of queueing stale frames.
+            if (!_renderer.IsFrameReady())
+            {
+                SkippedFrameCount++;
+                return;
+            }
             if (_renderer.Width != size.Width || _renderer.Height != size.Height)
             {
                 await RetireImports();
@@ -144,7 +153,11 @@ public sealed class VulkanViewport : Control
             }
             if (SceneBuilder is not null) SceneBuilder(_drawList!, logicalSize);
             else _sample!.Build(_drawList!, logicalSize);
-            _renderer.Render(_drawList!, logicalSize);
+            if (!_renderer.TryRender(_drawList!, logicalSize))
+            {
+                SkippedFrameCount++;
+                return;
+            }
             if (_image is null)
             {
                 using var memory = _renderer.ExportImage();
