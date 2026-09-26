@@ -3,7 +3,7 @@ using PureEngine.Core;
 
 namespace PureEngine.Rendering;
 
-/// <summary>Scene View display elements for the first half of V4. Draws the grid, origin, axes, selection frame, Pivot, and move gizmo into the DrawList.</summary>
+/// <summary>Scene View display elements for V4. Draws the grid, origin, axes, selection frame, Pivot, move gizmo, resize handles, and rotate handle into the DrawList.</summary>
 /// <remarks>Uses the same UiLayout results and view transform as SceneViewMath. Never becomes game Components or saved data.</remarks>
 public static class SceneViewOverlay
 {
@@ -13,6 +13,7 @@ public static class SceneViewOverlay
     private static readonly Vector4 OriginColor = new(0.92f, 0.93f, 0.95f, 1f);
     private static readonly Vector4 SelectionColor = new(0.55f, 0.49f, 0.96f, 1f);
     private static readonly Vector4 PivotColor = new(1f, 1f, 1f, 1f);
+    private static readonly Vector4 HandleFillColor = new(1f, 1f, 1f, 1f);
 
     /// <summary>Draws the background grid, origin, and X/Y axes. Call before images to stay behind. Invalid values are a no-op.</summary>
     public static void DrawGrid(DrawList draw, Vector2 viewportSize, Vector2 pan, float zoom)
@@ -126,6 +127,65 @@ public static class SceneViewOverlay
         draw.Rectangle(new Vector2(center, center),
             Matrix3x2.CreateTranslation(pivotView.X - (center / 2), pivotView.Y - (center / 2)),
             PivotColor, clip);
+    }
+
+    /// <summary>Draws the 8 resize squares (corners and edge midpoints) from view-space frame corners. Appearance follows screen logical pixels.</summary>
+    public static void DrawResizeHandles(DrawList draw, Vector2[] cornersView, Vector4 clip)
+    {
+        ArgumentNullException.ThrowIfNull(draw);
+        ArgumentNullException.ThrowIfNull(cornersView);
+        if (cornersView.Length != 4)
+            return;
+        SceneViewMath.ResizeHandle[] order =
+        [
+            SceneViewMath.ResizeHandle.TopLeft, SceneViewMath.ResizeHandle.TopRight,
+            SceneViewMath.ResizeHandle.BottomLeft, SceneViewMath.ResizeHandle.BottomRight,
+            SceneViewMath.ResizeHandle.Left, SceneViewMath.ResizeHandle.Top,
+            SceneViewMath.ResizeHandle.Right, SceneViewMath.ResizeHandle.Bottom,
+        ];
+        var outer = SceneViewMath.ResizeHandleSize;
+        var inner = outer - 4;
+        if (inner <= 0)
+            return;
+        foreach (var handle in order)
+        {
+            if (!SceneViewMath.TryGetResizeCenter(cornersView, handle, out var center))
+                return;
+            draw.Rectangle(new Vector2(outer, outer),
+                Matrix3x2.CreateTranslation(center.X - (outer / 2), center.Y - (outer / 2)),
+                SelectionColor, clip);
+            draw.Rectangle(new Vector2(inner, inner),
+                Matrix3x2.CreateTranslation(center.X - (inner / 2), center.Y - (inner / 2)),
+                HandleFillColor, clip);
+        }
+    }
+
+    /// <summary>Draws the rotate handle (connector line and diamond) above the top edge. Appearance follows screen logical pixels.</summary>
+    public static void DrawRotateHandle(DrawList draw, Vector2[] cornersView, Vector4 clip)
+    {
+        ArgumentNullException.ThrowIfNull(draw);
+        ArgumentNullException.ThrowIfNull(cornersView);
+        if (!SceneViewMath.TryGetResizeCenter(cornersView, SceneViewMath.ResizeHandle.Top, out var top))
+            return;
+        if (!SceneViewMath.TryGetRotateCenter(cornersView, out var center))
+            return;
+        DrawEdge(draw, top, center, 1.5f, SelectionColor, clip);
+        var outer = SceneViewMath.RotateHandleRadius;
+        var inner = outer - 3;
+        if (inner <= 0)
+            return;
+        DrawDiamond(draw, center, outer, SelectionColor, clip);
+        DrawDiamond(draw, center, inner, HandleFillColor, clip);
+    }
+
+    private static void DrawDiamond(DrawList draw, Vector2 center, float radius, Vector4 color, Vector4 clip)
+    {
+        var top = center - new Vector2(0, radius);
+        var right = center + new Vector2(radius, 0);
+        var bottom = center + new Vector2(0, radius);
+        var left = center - new Vector2(radius, 0);
+        draw.Triangle(top, right, bottom, color, clip);
+        draw.Triangle(top, bottom, left, color, clip);
     }
 
     private static void DrawArrowHead(DrawList draw, Vector2 pivot, Vector2 dir, Vector4 color, Vector4 clip)

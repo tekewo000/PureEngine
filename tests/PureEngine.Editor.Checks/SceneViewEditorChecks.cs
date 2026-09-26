@@ -46,6 +46,8 @@ internal static class SceneViewEditorChecks
         ActualPointerEvents();
         PanZoomPreserveDirty();
         MoveConfirmCancelAndZ();
+        ResizeHandles();
+        RotateHandle();
         InspectorLiveSync();
         SceneReplaceCancels();
         PlayCancelsAndBlocks();
@@ -55,7 +57,7 @@ internal static class SceneViewEditorChecks
         HierarchyTreeAndDrop();
         HierarchyRoutedDrag();
         BareParentGizmo();
-        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, Order save/clone/front pick, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, bare-parent gizmo, and save/clone.");
+        Console.WriteLine("PASS: scene pan/zoom, gizmo confirm/cancel, Z preservation, resize/rotate confirm/cancel, Order save/clone/front pick, inspector sync, scene replacement, play guard, delete safety, input separation, hierarchy tree/drop, bare-parent gizmo, and save/clone.");
     }
 
     private static MainWindow CreateEditor()
@@ -294,6 +296,161 @@ internal static class SceneViewEditorChecks
             Call(editor, "CancelSceneViewDrag");
             Check(transform.LocalPosition == committed, "Cancel must restore the start value.");
             Check(EditStore(editor).IsDirty, "Cancel must keep pre-existing dirty edits as unsaved.");
+        }
+        finally
+        {
+            CloseEditor(editor);
+        }
+    }
+
+    private static void ResizeHandles()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            var viewport = Control<Grid>(editor, "SceneViewport");
+            var scene = EditScene(editor);
+            var item = AddCard(editor, scene, new Vector3(10, 20, 5));
+            var transform = item.GetComponent<Transform>()!;
+            var element = item.GetComponent<UiElement>()!;
+            Select(editor, item);
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            var store = EditStore(editor);
+            store.MarkClean();
+            // The card spans (10,20)-(110,60) with top-left Pivot, so its bottom-right handle sits at (110,60).
+            Point At(float x, float y) => viewport.TranslatePoint(new Point(x, y), editor)!.Value;
+            void Down(float x, float y)
+            {
+                editor.MouseDown(At(x, y), MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+            }
+            void Move(float x, float y)
+            {
+                editor.MouseMove(At(x, y), RawInputModifiers.LeftMouseButton);
+                Dispatcher.UIThread.RunJobs();
+            }
+            void Up(float x, float y)
+            {
+                editor.MouseUp(At(x, y), MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+            }
+            void Key(Key key)
+            {
+                editor.KeyPress(key, RawInputModifiers.None, default, null);
+                editor.KeyRelease(key, RawInputModifiers.None, default, null);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Down(110, 60);
+            Check(Field<SceneViewMath.ResizeHandle>(editor, "_sceneResizeHandle") == SceneViewMath.ResizeHandle.BottomRight,
+                "Pressing the corner must route to the resize handle, not the move gizmo.");
+            Move(120, 75);
+            Check(element.SizeDelta == new Vector2(110, 55) && !store.IsDirty,
+                $"Pointer resize must grow SizeDelta without dirtying yet, got {element.SizeDelta}.");
+            Key(Avalonia.Input.Key.Escape);
+            Check(element.SizeDelta == new Vector2(100, 40) && !store.IsDirty, "Escape must restore the start size.");
+            Up(110, 60);
+            Check(!store.IsDirty, "Release after Escape must not confirm a cancelled resize.");
+            Down(110, 60);
+            Move(120, 75);
+            Up(120, 75);
+            Check(element.SizeDelta == new Vector2(110, 55) && store.IsDirty
+                && transform.LocalPosition == new Vector3(10, 20, 5),
+                $"Release must commit the size, retain position and Z, got {element.SizeDelta} / {transform.LocalPosition}.");
+            store.MarkClean();
+            var press = new Vector2(200, 100);
+            Check((bool)Call(editor, "TryBeginResizeForTest", item, SceneViewMath.ResizeHandle.Right, press)!, "Edge resize must begin.");
+            Call(editor, "TryUpdateResizeForTest", press + new Vector2(7, 9));
+            Check(element.SizeDelta == new Vector2(117, 55), $"Right edge must keep Y, got {element.SizeDelta}.");
+            var sizeCard = editor.GetVisualDescendants().OfType<Border>()
+                .Single(candidate => ReferenceEquals(candidate.Tag, element));
+            var sizeTexts = sizeCard.GetVisualDescendants().OfType<TextBox>()
+                .Where(box => ((string?)box.GetValue(AutomationProperties.NameProperty))?.StartsWith("UiElement.SizeDelta.", StringComparison.Ordinal) == true)
+                .Select(box => box.Text)
+                .ToList();
+            Check(sizeTexts is ["117", "55"], $"Inspector must reflect the resize, got '{string.Join(",", sizeTexts)}'.");
+            Check(!store.IsDirty, "Live size sync must not dirty before confirm.");
+            Check((bool)Call(editor, "TryConfirmResizeForTest", press + new Vector2(7, 9))!, "Changed resize confirm must report a change.");
+            Check(store.IsDirty, "Confirmed resize must dirty the scene.");
+            store.MarkClean();
+            Check((bool)Call(editor, "TryBeginResizeForTest", item, SceneViewMath.ResizeHandle.BottomRight, press)!, "Still resize must begin.");
+            Check((bool)Call(editor, "TryUpdateResizeForTest", press)!, "Zero delta must stay active.");
+            Check(!(bool)Call(editor, "TryConfirmResizeForTest", press)!, "Click without movement must not count as changed.");
+            Check(!store.IsDirty, "Click without movement must not dirty.");
+            element.Pivot = new Vector2(1, 1);
+            Check((bool)Call(editor, "TryBeginResizeForTest", item, SceneViewMath.ResizeHandle.TopLeft, press)!, "Collapse must begin.");
+            Call(editor, "TryUpdateResizeForTest", press + new Vector2(500, 500));
+            Check(element.SizeDelta == Vector2.Zero, $"Shrinks must clamp the resolved size at zero, got {element.SizeDelta}.");
+            Call(editor, "CancelSceneViewDrag");
+            Check(element.SizeDelta == new Vector2(117, 55) && !store.IsDirty, "Cancel must restore the start size.");
+            element.Pivot = Vector2.Zero;
+            Check(!(bool)Call(editor, "TryBeginResizeForTest", item, SceneViewMath.ResizeHandle.Left, press)!,
+                "Locked pivot sides must refuse before capturing.");
+            element.Pivot = Vector2.Zero;
+            Check((bool)Call(editor, "TryBeginResizeForTest", item, SceneViewMath.ResizeHandle.BottomRight, press)!, "Guarded resize must begin.");
+            Call(editor, "TryUpdateResizeForTest", press + new Vector2(4, 4));
+            Call(editor, "StartPlay");
+            Dispatcher.UIThread.RunJobs();
+            Check(editor.IsPlaying, "Play must start after cancelling the resize.");
+            Check(element.SizeDelta == new Vector2(117, 55), "Play start must revert the unconfirmed resize.");
+            Check(!(bool)Call(editor, "TryBeginResizeForTest", item, SceneViewMath.ResizeHandle.BottomRight, press)!,
+                "Resize must stay blocked while playing.");
+            Check(!(bool)Call(editor, "TryBeginRotateForTest", item, press)!,
+                "Rotate must stay blocked while playing.");
+            Call(editor, "StopPlay");
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            CloseEditor(editor);
+        }
+    }
+
+    private static void RotateHandle()
+    {
+        var editor = CreateEditor();
+        try
+        {
+            var viewport = Control<Grid>(editor, "SceneViewport");
+            var scene = EditScene(editor);
+            var item = AddCard(editor, scene, new Vector3(60, 100, 5));
+            var transform = item.GetComponent<Transform>()!;
+            var element = item.GetComponent<UiElement>()!;
+            element.Pivot = new Vector2(0.5f, 0.5f);
+            element.SizeDelta = new Vector2(100, 100);
+            Select(editor, item);
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+            var store = EditStore(editor);
+            store.MarkClean();
+            // Center Pivot puts the scene Pivot at (60,100); the rotate handle sits 28px above the top edge at (60,22).
+            Point At(float x, float y) => viewport.TranslatePoint(new Point(x, y), editor)!.Value;
+            editor.MouseDown(At(60, 22), MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Check(Field<bool>(editor, "_sceneRotating"), "Pressing the rotate handle must start a rotate drag.");
+            editor.MouseMove(At(138, 100), RawInputModifiers.LeftMouseButton);
+            Dispatcher.UIThread.RunJobs();
+            var mapped = Vector3.Transform(Vector3.UnitX, transform.LocalRotation);
+            Check(Math.Abs(mapped.X) < 1e-4 && Math.Abs(mapped.Y - 1) < 1e-4 && Math.Abs(mapped.Z) < 1e-4,
+                $"A quarter turn must map +X to +Y, got {mapped}.");
+            Check(transform.LocalPosition == new Vector3(60, 100, 5) && element.SizeDelta == new Vector2(100, 100) && !store.IsDirty,
+                "Rotate must change only the rotation without dirtying yet.");
+            editor.MouseUp(At(138, 100), MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Check(store.IsDirty, "Release must commit the rotation.");
+            Check(Math.Abs(transform.LocalRotation.Length() - 1) < 1e-5f, "Committed rotation must stay normalized.");
+            store.MarkClean();
+            var committed = transform.LocalRotation;
+            // The committed quarter turn moved the frame, so the handle now sits at (110,72).
+            var press = new Vector2(110, 72);
+            Check((bool)Call(editor, "TryBeginRotateForTest", item, press)!, "Hook rotate must begin on the moved handle.");
+            Call(editor, "TryUpdateRotateForTest", press + new Vector2(0, 78));
+            Check(transform.LocalRotation != committed, "Hook rotate must turn.");
+            Call(editor, "CancelSceneViewDrag");
+            Check(transform.LocalRotation == committed && !store.IsDirty, "Cancel must restore the start rotation.");
+            scene.Remove(item);
+            Check(!(bool)Call(editor, "TryConfirmRotateForTest", press)!, "Confirm after deletion must not dirty.");
+            Check(!store.IsDirty, "Delete safety path must not dirty through the rotate drag.");
         }
         finally
         {
