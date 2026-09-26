@@ -188,6 +188,15 @@ static class InspectorValueEditorChecks
         var swatchesClear = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Clear");
         Check(swatchesClear.Content is PathIcon swatchesClearIcon && ReferenceEquals(swatchesClearIcon.Data, Application.Current?.FindResource("Icon.Delete")),
             "Bulk Clear must use the shared Delete icon.");
+        var swatchesCreate = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Create");
+        Check(swatchesCreate.Content is PathIcon swatchesCreateIcon && ReferenceEquals(swatchesCreateIcon.Data, Application.Current?.FindResource("Icon.Compose")),
+            "List Create must use the shared Compose icon.");
+        var countsCreate = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Counts.Create");
+        Check(countsCreate.Content is PathIcon countsCreateIcon && ReferenceEquals(countsCreateIcon.Data, Application.Current?.FindResource("Icon.Compose")),
+            "Dictionary Create must use the shared Compose icon.");
+        var maybeTintCreate = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.MaybeTint.Create");
+        Check(maybeTintCreate.Content is PathIcon maybeTintCreateIcon && ReferenceEquals(maybeTintCreateIcon.Data, Application.Current?.FindResource("Icon.Compose")),
+            "Nullable Create must use the shared Compose icon.");
         Click(swatchesClear);
         Check(probe.Swatches.Count == 0, "List Clear must remove all rows and keep the list.");
         Box(editor, $"{nameof(InspectorValueProbe)}.Palette.Value[0].A").Text = "0.25";

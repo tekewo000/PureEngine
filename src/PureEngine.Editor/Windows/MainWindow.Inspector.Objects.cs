@@ -69,7 +69,8 @@ public partial class MainWindow
         var fields = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new instance.");
         var body = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => body.IsVisible = nowExpanded);
