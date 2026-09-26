@@ -1,27 +1,41 @@
 using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using PureEngine.Rendering.Avalonia;
+using PureEngine.Runtime;
 
 namespace PureEngine.Player;
 
 internal static class Program
 {
     [STAThread]
-    public static void Main(string[] args) => VulkanViewport.Configure(AppBuilder.Configure<ProbeApp>().UsePlatformDetect())
-        .StartWithClassicDesktopLifetime(args);
-}
-
-public sealed class ProbeApp : Application
-{
-    public override void OnFrameworkInitializationCompleted()
+    public static int Main(string[] args)
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (args is ["--smoke-test"])
+            return SmokeTest();
+        return VulkanViewport.Configure(AppBuilder.Configure<PlayerApplication>().UsePlatformDetect())
+            .StartWithClassicDesktopLifetime(args);
+    }
+
+    private static int SmokeTest()
+    {
+        try
         {
-            var viewport = new VulkanViewport();
-            viewport.RenderingFailed += Console.Error.WriteLine;
-            desktop.MainWindow = new Window { Title = "PureEngine — Image component rendering probe", Width = 800, Height = 450, Content = viewport };
+            PlayerLog.Current.Write($"Smoke testing game package from {AppContext.BaseDirectory}");
+            using var package = GamePackage.Open(AppContext.BaseDirectory);
+            using var session = package.CreateSession();
+            session.Start();
+            session.Step(1f / 60);
+            session.Stop();
+            if (session.Runtime.Errors.Count != 0)
+                throw new AggregateException("Packaged game lifecycle failed.", session.Runtime.Errors.Select(error => error.Exception));
+            PlayerLog.Current.Drain();
+            Console.WriteLine("PASS: Packaged game loaded, started, stepped, and stopped.");
+            return 0;
         }
-        base.OnFrameworkInitializationCompleted();
+        catch (Exception error)
+        {
+            PlayerLog.Current.Report(error);
+            Console.Error.WriteLine(error.GetBaseException().Message + "\n" + PlayerLog.Current.LocationDescription);
+            return 1;
+        }
     }
 }

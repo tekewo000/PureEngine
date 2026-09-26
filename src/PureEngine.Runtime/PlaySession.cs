@@ -14,6 +14,9 @@ public sealed class PlaySession : IDisposable
     private GameSession? _services;
     public SceneRuntime Runtime { get; }
 
+    /// <summary>The run's exact DI service, shared with components that change the active language.</summary>
+    public LocalizationService? Localization => _services?.Services.GetService<LocalizationService>();
+
     private PlaySession(GameSession services, SceneRuntime runtime)
     {
         _services = services;

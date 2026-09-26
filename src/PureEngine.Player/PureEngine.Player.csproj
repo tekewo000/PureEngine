@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net11.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../PureEngine.Rendering.Avalonia/PureEngine.Rendering.Avalonia.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PureEngine.Rendering.Avalonia/PureEngine.Rendering.Avalonia.csproj" />
+    <ProjectReference Include="../PureEngine.Runtime/PureEngine.Runtime.csproj" />
+  </ItemGroup>
 </Project>

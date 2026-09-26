@@ -38,7 +38,7 @@ public static class ProjectCodeWorkspace
                     new XElement("Reference", new XAttribute("Include", "PureEngine.Core"),
                         new XElement("HintPath", core.Location),
                         new XElement("Private", "false")))));
-        foreach (var assembly in new[] { typeof(IServiceCollection).Assembly, typeof(ServiceProvider).Assembly })
+        foreach (var assembly in new[] { typeof(IServiceCollection).Assembly, typeof(ServiceProvider).Assembly, typeof(Runtime.GameSession).Assembly })
             document.Root!.Element("ItemGroup")!.Add(
                 new XElement("Reference", new XAttribute("Include", assembly.GetName().Name!),
                     new XElement("HintPath", assembly.Location), new XElement("Private", "false")));

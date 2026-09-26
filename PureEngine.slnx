@@ -8,4 +8,5 @@
   <Project Path="src/PureEngine.Rendering/PureEngine.Rendering.csproj" />
   <Project Path="src/PureEngine.Rendering.Avalonia/PureEngine.Rendering.Avalonia.csproj" />
   <Project Path="src/PureEngine.Player/PureEngine.Player.csproj" />
+  <Project Path="tests/PureEngine.Player.Checks/PureEngine.Player.Checks.csproj" />
 </Solution>

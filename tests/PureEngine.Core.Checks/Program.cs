@@ -162,6 +162,7 @@ PriorityChecks.Run();
 LifecycleChecks.Run();
 DependencyInjectionChecks.Run();
 GameDependencyChecks.Run();
+GamePackageChecks.Run();
 LogChecks.Run();
 Console.WriteLine("PASS: add, rename, validation, identity, notifications, removal, attach, get-component, schema, asset drop policy, YAML persistence, UI creation, and projects.");
 
