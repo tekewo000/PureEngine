@@ -59,7 +59,7 @@ public static class SceneReferenceTypes
         if (underlying is not null)
             return ContainsAssetExternalReferenceCore(underlying, registry, chain);
         if (type.IsArray)
-            return type.GetArrayRank() == 1 && ContainsAssetExternalReferenceCore(type.GetElementType()!, registry, chain);
+            return ContainsAssetExternalReferenceCore(type.GetElementType()!, registry, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             return ContainsAssetExternalReferenceCore(type.GetGenericArguments()[0], registry, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
@@ -95,7 +95,7 @@ public static class SceneReferenceTypes
         if (underlying is not null)
             return ContainsReferenceCore(underlying, registry, chain);
         if (type.IsArray)
-            return type.GetArrayRank() == 1 && ContainsReferenceCore(type.GetElementType()!, registry, chain);
+            return ContainsReferenceCore(type.GetElementType()!, registry, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             return ContainsReferenceCore(type.GetGenericArguments()[0], registry, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
@@ -123,39 +123,31 @@ public static class SceneReferenceTypes
         }
     }
 
-    private static bool IsCustomShape(Type type)
-    {
-        if (type == typeof(object) || type == typeof(string))
-            return false;
-        if (!type.IsClass || type.IsAbstract || type.IsValueType || type.IsEnum)
-            return false;
-        if (type.IsArray || type.IsGenericType)
-            return false;
-        if (type == typeof(Transform) || type == typeof(Sprite) || type == typeof(SceneObject))
-            return false;
-        return type.GetConstructor(Type.EmptyTypes) is not null;
-    }
+    private static bool IsCustomShape(Type type) =>
+        type != typeof(SceneObject) && InspectorValueTypes.IsCustomObjectShape(type);
 
     /// <summary>Accepts values, references, and nested values containing references for editing and persistence.</summary>
     public static bool IsSupportedInspectorType(Type type, ComponentRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(registry);
-        return IsSupportedType(type, registry, [], allowContainer: true);
+        return IsSupportedType(type, registry, []);
     }
 
-    private static bool IsSupportedType(Type type, ComponentRegistry registry, HashSet<Type> chain, bool allowContainer)
+    private static bool IsSupportedType(Type type, ComponentRegistry registry, HashSet<Type> chain)
     {
         if (IsSingleReference(type, registry))
             return true;
+        if (Nullable.GetUnderlyingType(type) is { } underlying)
+            return IsSupportedType(underlying, registry, chain);
         if (type.IsArray)
-            return allowContainer && type.IsSZArray && IsSupportedType(type.GetElementType()!, registry, chain, allowContainer: false);
+            return (type.IsSZArray || type.GetArrayRank() > 1) && IsSupportedType(type.GetElementType()!, registry, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
-            return allowContainer && IsSupportedType(type.GetGenericArguments()[0], registry, chain, allowContainer: false);
+            return IsSupportedType(type.GetGenericArguments()[0], registry, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
         {
             var args = type.GetGenericArguments();
-            return allowContainer && args[0] == typeof(string) && IsSupportedType(args[1], registry, chain, allowContainer: false);
+            return args[0] == typeof(string) && IsSupportedType(args[1], registry, chain);
         }
         if (IsCustomShape(type))
         {
@@ -164,12 +156,12 @@ public static class SceneReferenceTypes
             {
                 return ComponentSchema.GetInspectorMembers(type).All(member =>
                     IsSupportedType(member is FieldInfo field ? field.FieldType : ((PropertyInfo)member).PropertyType,
-                        registry, chain, allowContainer: true));
+                        registry, chain));
             }
             finally { chain.Remove(type); }
         }
         if (InspectorValueTypes.IsSupportedType(type))
-            return allowContainer || type != typeof(Transform);
+            return true;
         return false;
     }
 }

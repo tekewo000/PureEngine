@@ -36,34 +36,34 @@ internal static class SceneReferenceNuller
                 foreach (var member in ComponentSchema.GetInspectorMembers(container.GetType()))
                 {
                     var value = member is FieldInfo field ? field.GetValue(container) : ((PropertyInfo)member).GetValue(container);
-                    Visit(value, prefix + member.Name, ownerId, () =>
+                    Visit(value, prefix + member.Name, ownerId, updated =>
                     {
-                        if (member is FieldInfo field) field.SetValue(container, null);
-                        else ((PropertyInfo)member).SetValue(container, null);
+                        if (member is FieldInfo field) field.SetValue(container, updated);
+                        else ((PropertyInfo)member).SetValue(container, updated);
                     });
                 }
             }
             finally { chain.Remove(container); }
         }
 
-        void Visit(object? value, string path, Guid ownerId, Action clear)
+        void Visit(object? value, string path, Guid ownerId, Action<object?> write)
         {
             if (value is null) return;
             if (removed.TryGetValue(value, out var targetId))
             {
-                clear();
+                write(null);
                 scene.References.SetMissing(ownerId, path, targetId);
                 return;
             }
-            if (value is SceneObject or string or Sprite or Transform || value.GetType().IsValueType || SceneObject.IsOwned(value))
+            if (value is SceneObject or string or Sprite or Transform || SceneObject.IsOwned(value)
+                || DataAssetStore.IsAssetType(value.GetType()))
                 return;
             if (value is Array array)
             {
-                if (array.Rank != 1) return;
-                for (var i = 0; i < array.Length; i++)
+                foreach (var indices in InspectorArrayShape.Indices(array))
                 {
-                    var index = i;
-                    Visit(array.GetValue(index), $"{path}[{index}]", ownerId, () => array.SetValue(null, index));
+                    Visit(array.GetValue(indices), $"{path}[{string.Join(",", indices)}]", ownerId,
+                        updated => array.SetValue(updated, indices));
                 }
             }
             else if (value is IList list)
@@ -71,17 +71,20 @@ internal static class SceneReferenceNuller
                 for (var i = 0; i < list.Count; i++)
                 {
                     var index = i;
-                    Visit(list[index], $"{path}[{index}]", ownerId, () => list[index] = null);
+                    Visit(list[index], $"{path}[{index}]", ownerId, updated => list[index] = updated);
                 }
             }
             else if (value is IDictionary dictionary)
             {
-                foreach (var key in dictionary.Keys.OfType<string>().ToArray())
-                    Visit(dictionary[key], SceneReferenceStore.DictionaryPath(path, key), ownerId, () => dictionary[key] = null);
+                foreach (var key in dictionary.Keys.OfType<string>().ToList())
+                    Visit(dictionary[key], SceneReferenceStore.DictionaryPath(path, key), ownerId, updated => dictionary[key] = updated);
             }
-            else
+            else if (!value.GetType().IsValueType || InspectorValueTypes.IsCustomObjectShape(value.GetType()))
             {
                 VisitMembers(value, path + ".", ownerId);
+                // Reflection edits a boxed struct; propagate that box through every parent slot.
+                if (value.GetType().IsValueType)
+                    write(value);
             }
         }
     }

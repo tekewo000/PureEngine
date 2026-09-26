@@ -45,10 +45,12 @@ public static class SceneCodeMigrator
         if (beforeIsRef || afterIsRef)
             return beforeIsRef && afterIsRef && before.FullName == after.FullName;
         if (before.IsArray && after.IsArray)
-            return before.IsSZArray == after.IsSZArray && CompatibleType(before.GetElementType()!, after.GetElementType()!, oldRegistry, newRegistry);
+            return before.IsSZArray == after.IsSZArray && before.GetArrayRank() == after.GetArrayRank()
+                && CompatibleType(before.GetElementType()!, after.GetElementType()!, oldRegistry, newRegistry);
         if (before.IsGenericType && after.IsGenericType
             && before.GetGenericTypeDefinition() == after.GetGenericTypeDefinition()
             && (before.GetGenericTypeDefinition() == typeof(List<>)
+                || before.GetGenericTypeDefinition() == typeof(Nullable<>)
                 || (before.GetGenericTypeDefinition() == typeof(Dictionary<,>) && before.GetGenericArguments()[0] == typeof(string))))
         {
             return before.GetGenericArguments().Zip(after.GetGenericArguments()).All(pair => CompatibleType(pair.First, pair.Second, oldRegistry, newRegistry));

@@ -21,15 +21,28 @@ internal static class SceneReferenceCodec
     {
         if (SceneReferenceTypes.IsSingleReference(declaredType, registry))
             return EncodeSingle(value, declaredType, ownerId, path, componentToId, scene, forSave);
-        if (declaredType.IsArray && declaredType.GetArrayRank() == 1)
-            return EncodeSequence(value, declaredType.GetElementType()!, registry, ownerId, path, componentToId, scene, forSave);
+        if (value is null)
+        {
+            RequireNullable(declaredType, path);
+            return null;
+        }
+        declaredType = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+        if (!SceneReferenceTypes.ContainsReference(declaredType, registry))
+            return InspectorValueTypes.ToStorable(value, declaredType);
+        if (declaredType.IsArray)
+            return InspectorArrayShape.Capture((Array)value, path, (element, elementPath) =>
+                Encode(element, declaredType.GetElementType()!, registry, ownerId, elementPath, componentToId, scene, forSave));
         if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(List<>))
             return EncodeSequence(value, declaredType.GetGenericArguments()[0], registry, ownerId, path, componentToId, scene, forSave);
         if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             return EncodeMapping(value, declaredType.GetGenericArguments()[1], registry, ownerId, path, componentToId, scene, forSave);
-        if (value is null)
-            return null;
         return EncodeCustom(value, declaredType, registry, ownerId, path, componentToId, scene, forSave);
+    }
+
+    private static void RequireNullable(Type type, string path)
+    {
+        if (type.IsValueType && Nullable.GetUnderlyingType(type) is null)
+            throw new InvalidDataException($"{path}: null is not allowed.");
     }
 
     private static Dictionary<string, object?>? EncodeSingle(
@@ -114,22 +127,7 @@ internal static class SceneReferenceCodec
         {
             var elementPath = $"{path}[{i}]";
             var element = list[i];
-            if (SceneReferenceTypes.IsSingleReference(elementType, registry))
-            {
-                storable.Add(EncodeSingle(element, elementType, ownerId, elementPath, componentToId, scene, forSave));
-            }
-            else if (element is null)
-            {
-                storable.Add(null);
-            }
-            else if (SceneReferenceTypes.ContainsReference(elementType, registry))
-            {
-                storable.Add(EncodeCustom(element, elementType, registry, ownerId, elementPath, componentToId, scene, forSave));
-            }
-            else
-            {
-                storable.Add(InspectorValueTypes.ToStorable(element, elementType));
-            }
+            storable.Add(Encode(element, elementType, registry, ownerId, elementPath, componentToId, scene, forSave));
         }
         return storable;
     }
@@ -155,22 +153,7 @@ internal static class SceneReferenceCodec
                 throw new InvalidDataException("Dictionary keys must be strings.");
             var elementPath = SceneReferenceStore.DictionaryPath(path, key);
             var element = entry.Value;
-            if (SceneReferenceTypes.IsSingleReference(valueType, registry))
-            {
-                storable.Add(key, EncodeSingle(element, valueType, ownerId, elementPath, componentToId, scene, forSave));
-            }
-            else if (element is null)
-            {
-                storable.Add(key, null);
-            }
-            else if (SceneReferenceTypes.ContainsReference(valueType, registry))
-            {
-                storable.Add(key, EncodeCustom(element, valueType, registry, ownerId, elementPath, componentToId, scene, forSave));
-            }
-            else
-            {
-                storable.Add(key, InspectorValueTypes.ToStorable(element, valueType));
-            }
+            storable.Add(key, Encode(element, valueType, registry, ownerId, elementPath, componentToId, scene, forSave));
         }
         return storable;
     }
@@ -234,14 +217,29 @@ internal static class SceneReferenceCodec
     {
         if (SceneReferenceTypes.IsSingleReference(declaredType, registry))
             return DecodeSingle(raw, declaredType, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
-        if (declaredType.IsArray && declaredType.GetArrayRank() == 1)
-            return DecodeSequence(raw, declaredType.GetElementType()!, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, isArray: true, declaredType, ref membersChanged);
+        if (raw is null)
+        {
+            RequireNullable(declaredType, displayPath);
+            return null;
+        }
+        declaredType = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+        if (!SceneReferenceTypes.ContainsReference(declaredType, registry))
+            return InspectorValueTypes.FromStorable(raw, declaredType, displayPath);
+        if (raw.GetType() == declaredType)
+            return DecodeLiveContainer(raw, declaredType, registry, ownerId, path, objectsById, componentsById, scene, displayPath);
+        if (declaredType.IsArray)
+        {
+            var changed = membersChanged;
+            var array = InspectorArrayShape.Restore(raw, declaredType, path, (element, elementPath) =>
+                Decode(element, declaredType.GetElementType()!, registry, ownerId, elementPath, objectsById, componentsById,
+                    scene, version, displayPath + elementPath[path.Length..], ref changed));
+            membersChanged = changed;
+            return array;
+        }
         if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(List<>))
-            return DecodeSequence(raw, declaredType.GetGenericArguments()[0], registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, isArray: false, declaredType, ref membersChanged);
+            return DecodeSequence(raw, declaredType.GetGenericArguments()[0], registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, declaredType, ref membersChanged);
         if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             return DecodeMapping(raw, declaredType.GetGenericArguments()[1], registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, declaredType, ref membersChanged);
-        if (raw is null)
-            return null;
         return DecodeCustom(raw, declaredType, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
     }
 
@@ -320,54 +318,20 @@ internal static class SceneReferenceCodec
         Scene scene,
         int version,
         string displayPath,
-        bool isArray,
         Type declaredType,
         ref bool membersChanged)
     {
         if (raw is null)
             return null;
         var items = ToSequence(raw, displayPath);
-        if (isArray)
-        {
-            var array = Array.CreateInstance(elementType, items.Count);
-            for (var i = 0; i < items.Count; i++)
-            {
-                var elementPath = $"{path}[{i}]";
-                var elementDisplay = $"{displayPath}[{i}]";
-                array.SetValue(DecodeElement(items[i], elementType, registry, ownerId, elementPath, objectsById, componentsById, scene, version, elementDisplay, ref membersChanged), i);
-            }
-            return array;
-        }
         var list = (IList)Activator.CreateInstance(declaredType)!;
         for (var i = 0; i < items.Count; i++)
         {
             var elementPath = $"{path}[{i}]";
             var elementDisplay = $"{displayPath}[{i}]";
-            list.Add(DecodeElement(items[i], elementType, registry, ownerId, elementPath, objectsById, componentsById, scene, version, elementDisplay, ref membersChanged));
+            list.Add(Decode(items[i], elementType, registry, ownerId, elementPath, objectsById, componentsById, scene, version, elementDisplay, ref membersChanged));
         }
         return list;
-    }
-
-    private static object? DecodeElement(
-        object? raw,
-        Type elementType,
-        ComponentRegistry registry,
-        Guid ownerId,
-        string path,
-        Dictionary<Guid, SceneObject> objectsById,
-        Dictionary<Guid, object> componentsById,
-        Scene scene,
-        int version,
-        string displayPath,
-        ref bool membersChanged)
-    {
-        if (SceneReferenceTypes.IsSingleReference(elementType, registry))
-            return DecodeSingle(raw, elementType, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
-        if (raw is null)
-            return null;
-        if (SceneReferenceTypes.ContainsReference(elementType, registry))
-            return Decode(raw, elementType, registry, ownerId, path, objectsById, componentsById, scene, version, displayPath, ref membersChanged);
-        return InspectorValueTypes.FromStorable(raw, elementType, displayPath);
     }
 
     private static object? DecodeMapping(
@@ -392,7 +356,7 @@ internal static class SceneReferenceCodec
         {
             var elementPath = SceneReferenceStore.DictionaryPath(path, key);
             var elementDisplay = $"{displayPath}.{key}";
-            dictionary.Add(key, DecodeElement(value, valueType, registry, ownerId, elementPath, objectsById, componentsById, scene, version, elementDisplay, ref membersChanged));
+            dictionary.Add(key, Decode(value, valueType, registry, ownerId, elementPath, objectsById, componentsById, scene, version, elementDisplay, ref membersChanged));
         }
         return dictionary;
     }
@@ -410,33 +374,6 @@ internal static class SceneReferenceCodec
         string displayPath,
         ref bool membersChanged)
     {
-        if (raw is not null && raw.GetType() == declaredType)
-        {
-            var copy = Activator.CreateInstance(declaredType)
-                ?? throw new InvalidDataException($"{displayPath}: cannot create {declaredType.Name}.");
-            foreach (var member in ComponentSchema.GetInspectorMembers(declaredType))
-            {
-                var memberType = MemberType(member);
-                var memberPath = $"{path}.{member.Name}";
-                var memberDisplay = $"{displayPath}.{member.Name}";
-                var memberValue = GetValue(raw, member);
-                object? resolved;
-                if (SceneReferenceTypes.IsSingleReference(memberType, registry))
-                {
-                    resolved = ResolveLiveReference(memberValue, memberType, ownerId, memberPath, objectsById, componentsById, scene, memberDisplay);
-                }
-                else if (SceneReferenceTypes.ContainsReference(memberType, registry))
-                {
-                    resolved = DecodeLiveContainer(memberValue, memberType, registry, ownerId, memberPath, objectsById, componentsById, scene, memberDisplay);
-                }
-                else
-                {
-                    resolved = CloneCustomValue(memberValue, memberType, memberDisplay);
-                }
-                SetValue(copy, member, resolved);
-            }
-            return copy;
-        }
         var map = ToStringKeyedMapping(raw, displayPath);
         var names = ComponentSchema.GetInspectorMemberNames(declaredType);
         Dictionary<MemberInfo, object?> values = [];
@@ -489,12 +426,20 @@ internal static class SceneReferenceCodec
         {
             if (scene.References.TryGetMissing(ownerId, path, out var missing))
             {
+                if (DataAssetStore.IsAssetType(declaredType))
+                    return scene.DataAssets.Find(missing, declaredType);
                 if (objectsById.TryGetValue(missing, out var targetObject) && declaredType == typeof(SceneObject))
                     return targetObject;
                 if (componentsById.TryGetValue(missing, out var targetComponent) && declaredType.IsAssignableFrom(targetComponent.GetType()))
                     return targetComponent;
             }
             return null;
+        }
+        if (DataAssetStore.IsAssetType(declaredType))
+        {
+            if (scene.DataAssets.TryGetId(liveValue, out var assetId))
+                return scene.DataAssets.Find(assetId, declaredType);
+            throw new InvalidDataException($"{displayPath}: asset reference is outside the scene snapshot.");
         }
         if (PrefabReferenceStore.TryGetIdentity(liveValue, out _)) return liveValue;
         if (liveValue is SceneObject liveObject)
@@ -529,36 +474,23 @@ internal static class SceneReferenceCodec
         Scene scene,
         string displayPath)
     {
+        if (SceneReferenceTypes.IsSingleReference(declaredType, registry))
+            return ResolveLiveReference(liveValue, declaredType, ownerId, path, objectsById, componentsById, scene, displayPath);
         if (liveValue is null)
+        {
+            RequireNullable(declaredType, displayPath);
             return null;
+        }
+        declaredType = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+        if (!SceneReferenceTypes.ContainsReference(declaredType, registry))
+            return CloneCustomValue(liveValue, declaredType, displayPath);
         if (declaredType.IsArray)
         {
             var elementType = declaredType.GetElementType()!;
             var source = (Array)liveValue;
-            var copy = Array.CreateInstance(elementType, source.Length);
-            for (var i = 0; i < source.Length; i++)
-            {
-                var element = source.GetValue(i);
-                var elementPath = $"{path}[{i}]";
-                var elementDisplay = $"{displayPath}[{i}]";
-                if (element is null)
-                {
-                    copy.SetValue(null, i);
-                }
-                else if (SceneReferenceTypes.IsSingleReference(elementType, registry))
-                {
-                    copy.SetValue(ResolveLiveReference(element, elementType, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay), i);
-                }
-                else if (SceneReferenceTypes.ContainsReference(elementType, registry))
-                {
-                    copy.SetValue(DecodeLiveContainer(element, elementType, registry, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay), i);
-                }
-                else
-                {
-                    copy.SetValue(CloneCustomValue(element, elementType, elementDisplay), i);
-                }
-            }
-            return copy;
+            return InspectorArrayShape.Restore(source, declaredType, path, (element, elementPath) =>
+                DecodeLiveContainer(element, elementType, registry, ownerId, elementPath, objectsById, componentsById,
+                    scene, displayPath + elementPath[path.Length..]));
         }
         if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(List<>))
         {
@@ -569,22 +501,7 @@ internal static class SceneReferenceCodec
                 var index = copy.Count;
                 var elementPath = $"{path}[{index}]";
                 var elementDisplay = $"{displayPath}[{index}]";
-                if (element is null)
-                {
-                    copy.Add(null);
-                }
-                else if (SceneReferenceTypes.IsSingleReference(elementType, registry))
-                {
-                    copy.Add(ResolveLiveReference(element, elementType, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay));
-                }
-                else if (SceneReferenceTypes.ContainsReference(elementType, registry))
-                {
-                    copy.Add(DecodeLiveContainer(element, elementType, registry, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay));
-                }
-                else
-                {
-                    copy.Add(CloneCustomValue(element, elementType, elementDisplay));
-                }
+                copy.Add(DecodeLiveContainer(element, elementType, registry, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay));
             }
             return copy;
         }
@@ -598,22 +515,7 @@ internal static class SceneReferenceCodec
                 var elementPath = SceneReferenceStore.DictionaryPath(path, key);
                 var elementDisplay = $"{displayPath}.{key}";
                 var element = entry.Value;
-                if (element is null)
-                {
-                    copy.Add(key, null);
-                }
-                else if (SceneReferenceTypes.IsSingleReference(valueType, registry))
-                {
-                    copy.Add(key, ResolveLiveReference(element, valueType, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay));
-                }
-                else if (SceneReferenceTypes.ContainsReference(valueType, registry))
-                {
-                    copy.Add(key, DecodeLiveContainer(element, valueType, registry, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay));
-                }
-                else
-                {
-                    copy.Add(key, CloneCustomValue(element, valueType, elementDisplay));
-                }
+                copy.Add(key, DecodeLiveContainer(element, valueType, registry, ownerId, elementPath, objectsById, componentsById, scene, elementDisplay));
             }
             return copy;
         }
@@ -627,23 +529,7 @@ internal static class SceneReferenceCodec
             var memberPath = $"{path}.{member.Name}";
             var memberDisplay = $"{displayPath}.{member.Name}";
             var memberValue = GetValue(liveValue, member);
-            object? resolved;
-            if (memberValue is null)
-            {
-                resolved = null;
-            }
-            else if (SceneReferenceTypes.IsSingleReference(memberType, registry))
-            {
-                resolved = ResolveLiveReference(memberValue, memberType, ownerId, memberPath, objectsById, componentsById, scene, memberDisplay);
-            }
-            else if (SceneReferenceTypes.ContainsReference(memberType, registry))
-            {
-                resolved = DecodeLiveContainer(memberValue, memberType, registry, ownerId, memberPath, objectsById, componentsById, scene, memberDisplay);
-            }
-            else
-            {
-                resolved = CloneCustomValue(memberValue, memberType, memberDisplay);
-            }
+            var resolved = DecodeLiveContainer(memberValue, memberType, registry, ownerId, memberPath, objectsById, componentsById, scene, memberDisplay);
             SetValue(instance, member, resolved);
         }
         return instance;
@@ -653,13 +539,8 @@ internal static class SceneReferenceCodec
     {
         if (value is null)
         {
-            if (!type.IsValueType || Nullable.GetUnderlyingType(type) is not null
-                || type == typeof(string) || type.IsArray
-                || (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(List<>)
-                    || type.GetGenericTypeDefinition() == typeof(Dictionary<,>)))
-                || !type.IsValueType)
-                return null;
-            throw new InvalidDataException($"{path}: null is not allowed.");
+            RequireNullable(type, path);
+            return null;
         }
         return InspectorValueTypes.FromStorable(InspectorValueTypes.ToStorable(value, type), type, path);
     }
