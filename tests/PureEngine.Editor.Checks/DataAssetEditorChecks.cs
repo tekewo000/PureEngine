@@ -123,12 +123,13 @@ static class DataAssetEditorChecks
             Check(store.GetAll<object>().Count == 1, "The saved asset must be visible to the runtime store.");
 
             // Invalid input shows an error and blocks saving without touching the file.
+            var savedBeforeInvalidInput = File.ReadAllText(path);
             attack = Box(editor, "SwordData.Attack");
             attack.Text = "abc";
             Dispatcher.UIThread.RunJobs();
             Check(Control<TextBlock>(editor, "DataAssetInvalid").IsVisible, "Invalid asset input must show an error badge.");
             Click(Control<Button>(editor, "SaveDataAssetButton"));
-            Check(!File.ReadAllText(path).Contains("abc"), "Invalid input must not reach the file.");
+            Check(File.ReadAllText(path) == savedBeforeInvalidInput, "Invalid input must leave the saved file unchanged.");
             editor.Close();
             Answer("Cancel");
             Check(editor.IsVisible && Box(editor, "SwordData.Attack").Text == "abc",
