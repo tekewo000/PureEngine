@@ -17,6 +17,7 @@ internal static class SceneReferenceNuller
         if (removed.Count == 0) return;
 
         var chain = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        List<Action> writes = [];
         foreach (var item in scene.Objects)
         {
             if (removed.ContainsKey(item)) continue;
@@ -27,6 +28,10 @@ internal static class SceneReferenceNuller
                 VisitMembers(component, "", ownerId);
             }
         }
+        // Shared embedded objects can occur at several owning paths. Discover every
+        // path before mutating any value, then apply leaf edits before boxed parents.
+        foreach (var write in writes)
+            write();
 
         void VisitMembers(object container, string prefix, Guid ownerId)
         {
@@ -51,8 +56,11 @@ internal static class SceneReferenceNuller
             if (value is null) return;
             if (removed.TryGetValue(value, out var targetId))
             {
-                write(null);
-                scene.References.SetMissing(ownerId, path, targetId);
+                writes.Add(() =>
+                {
+                    write(null);
+                    scene.References.SetMissing(ownerId, path, targetId);
+                });
                 return;
             }
             if (value is SceneObject or string or Sprite or Transform || SceneObject.IsOwned(value)
@@ -81,10 +89,11 @@ internal static class SceneReferenceNuller
             }
             else if (!value.GetType().IsValueType || InspectorValueTypes.IsCustomObjectShape(value.GetType()))
             {
+                var pendingWrites = writes.Count;
                 VisitMembers(value, path + ".", ownerId);
                 // Reflection edits a boxed struct; propagate that box through every parent slot.
-                if (value.GetType().IsValueType)
-                    write(value);
+                if (value.GetType().IsValueType && writes.Count != pendingWrites)
+                    writes.Add(() => write(value));
             }
         }
     }

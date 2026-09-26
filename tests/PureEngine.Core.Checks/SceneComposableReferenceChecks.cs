@@ -89,7 +89,60 @@ static class SceneComposableReferenceChecks
         RejectNullStruct(serializer);
         CheckPathBoundaries();
         CheckRankMigration();
+        CheckSharedEmbeddedAliases();
         Console.WriteLine("PASS: composable scene references, struct writeback, rectangular arrays, Missing paths, prefab copies, Play, and rank migration.");
+    }
+
+    private static void CheckSharedEmbeddedAliases()
+    {
+        var registry = new ComponentRegistry();
+        registry.Register<AliasHolder>("composable.alias");
+        registry.Register<Target>("composable.target");
+        var scene = new Scene();
+        var owner = scene.AddEmpty();
+        var peerOwner = scene.AddEmpty();
+        var targetObject = scene.AddEmpty();
+        var target = new Target();
+        targetObject.Attach(target);
+        var targetId = targetObject.GetComponentId(target);
+        var value = new ReferenceValue { Target = target, Object = targetObject, Number = 29 };
+        var embedded = new EmbeddedValue { Value = value };
+        List<ReferenceParent?> rows = [new ReferenceParent { Value = value }];
+        Dictionary<string, ReferenceValue> map = new() { ["key"] = value };
+        var matrix = new ReferenceValue[1, 1];
+        matrix[0, 0] = value;
+        var holder = new AliasHolder
+        {
+            First = embedded, Second = embedded,
+            FirstRows = rows, SecondRows = rows,
+            FirstMap = map, SecondMap = map,
+            FirstMatrix = matrix, SecondMatrix = matrix,
+        };
+        var peer = new AliasHolder { First = embedded, Second = embedded };
+        owner.Attach(holder);
+        peerOwner.Attach(peer);
+        var ownerId = owner.GetComponentId(holder);
+        var peerId = peerOwner.GetComponentId(peer);
+        scene.Remove(targetObject);
+        Check(embedded.Value.Target is null && embedded.Value.Object is null && embedded.Value.Number == 29
+            && rows[0]!.Value.Value.Target is null && rows[0]!.Value.Value.Number == 29
+            && map["key"].Target is null && map["key"].Number == 29
+            && matrix[0, 0].Target is null && matrix[0, 0].Number == 29,
+            "Deferred alias nulling must apply leaf edits before all boxed parent writebacks.");
+        string[] paths = ["First.Value", "Second.Value", "FirstRows[0].Value", "SecondRows[0].Value",
+            "FirstMap[key]", "SecondMap[key]", "FirstMatrix[0,0]", "SecondMatrix[0,0]"];
+        var serializer = new SceneSerializer(registry);
+        Scene[] copies = [scene, serializer.Clone(scene), serializer.Deserialize(serializer.Serialize(scene))];
+        foreach (var copy in copies)
+        {
+            foreach (var path in paths)
+                Check(copy.References.TryGetMissing(ownerId, path + ".Target", out var missing) && missing == targetId
+                    && copy.References.TryGetMissing(ownerId, path + ".Object", out missing) && missing == targetObject.Id,
+                    "Every alias path must retain both reference identities through clone and save/reopen.");
+            Check(copy.References.TryGetMissing(peerId, "First.Value.Target", out var peerMissing) && peerMissing == targetId
+                && copy.References.TryGetMissing(peerId, "Second.Value.Target", out peerMissing) && peerMissing == targetId,
+                "Shared embedded aliases across component owners must retain independent Missing paths.");
+        }
     }
 
     private static void CheckRankMigration()
@@ -227,5 +280,17 @@ static class SceneComposableReferenceChecks
     public sealed class RankThreeHolder
     {
         [Inspector] public SceneObject?[,,] Cells { get; set; } = new SceneObject?[0, 2, 3];
+    }
+
+    public sealed class AliasHolder
+    {
+        [Inspector] public EmbeddedValue First { get; set; } = new();
+        [Inspector] public EmbeddedValue Second { get; set; } = new();
+        [Inspector] public List<ReferenceParent?> FirstRows { get; set; } = [];
+        [Inspector] public List<ReferenceParent?> SecondRows { get; set; } = [];
+        [Inspector] public Dictionary<string, ReferenceValue> FirstMap { get; set; } = [];
+        [Inspector] public Dictionary<string, ReferenceValue> SecondMap { get; set; } = [];
+        [Inspector] public ReferenceValue[,] FirstMatrix { get; set; } = new ReferenceValue[0, 0];
+        [Inspector] public ReferenceValue[,] SecondMatrix { get; set; } = new ReferenceValue[0, 0];
     }
 }
