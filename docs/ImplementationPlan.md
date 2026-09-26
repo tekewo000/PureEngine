@@ -765,4 +765,5 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 - Editorは文書所有者付きのlive value bindingで、深いstructのboxed copyを全親へ書き戻す。32要素のページ表示、子コンテナの遅延展開、配列座標とResize、外側の行削除・キー変更時の子Missing情報の追従に対応。Inspectorの配列拡大操作上限は設計書を参照。
 - Core回帰：`NestedInspectorValueChecks` でstruct・Nullable・混在入れ子・形状・空次元・DataAsset保存／Cloneと外部参照制約を確認。`SceneComposableReferenceChecks` でScene保存／Clone、参照削除Missing、Nullable struct書戻し、Prefab配置時のID接続、Play分離、rank変更拒否を確認。
 - Editor Headless回帰：`ComposableInspectorChecks` で深い兄弟欄の書戻し、Nullable、混在入れ子、座標編集・Resize・不正形状時の元データ維持・ページ編集、struct内の参照選択／解除、外側の削除・改名によるMissing追従を確認。`UserCodeChecks` で実際の別アセンブリ再コンパイル後のstruct／Nullable／入れ子／空多次元配列の保持と非互換rank変更時の元Scene保持を確認。
+- 独立レビューで指摘された辞書キーの入力中の再構築を修正。実際のHeadless文字入力を一文字ずつ送り、フォーカス保持、Enter／フォーカス移動での確定、Esc、空・重複キー拒否、古い欄への遅延イベント無視を確認。DataAssetの多次元structセル編集も、Sceneを汚さず所有アセットだけを未保存にし、保存値へ到達することを確認。
 - 検証：Core／Editorのローカル回帰は実行済み。最終統合版の必須品質チェックとCIはlanding前に確認する。実画面・実GPUでの目視確認は行っていない。

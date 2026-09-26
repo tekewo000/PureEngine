@@ -45,6 +45,9 @@ public partial class MainWindow
         }
         if (IsValueContainer(type))
         {
+            if (binding.Read() is Array array
+                && Enumerable.Range(0, array.Rank).Any(dimension => array.GetLowerBound(dimension) != 0))
+                return new TextBlock { Text = "Non-zero array bounds are unsupported.", Classes = { "memberType" } };
             // New nested containers start folded; expanding creates only one bounded page.
             if (element) ViewModel.Inspector.CollapsedMembers.TryAdd(name, true);
             return BuildBoundContainer(binding, name, ownerId, path);
@@ -94,7 +97,8 @@ public partial class MainWindow
         var root = new StackPanel { Spacing = 6 };
         var body = new StackPanel { Spacing = 4 };
         var count = new TextBlock { Classes = { "memberType" } };
-        var create = BuildHeaderButton("Create", $"{name}.Create");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
+        ToolTip.SetTip(create, "Create a new instance.");
         var clear = BuildHeaderButton("Set Null", $"{name}.Null");
         Action refresh = () => { };
         var toggle = BuildCollapseToggle($"{name}.Collapse", name, ViewModel.Inspector.CollapsedMembers, expanded =>
@@ -171,7 +175,8 @@ public partial class MainWindow
         var clear = BuildHeaderIconButton("Icon.Delete", $"{name}.Clear");
         ToolTip.SetTip(clear, "Remove all entries; keep an empty collection.");
         var setNull = BuildHeaderButton("Set Null", $"{name}.Null");
-        var create = BuildHeaderButton("Create", $"{name}.Create");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
+        ToolTip.SetTip(create, "Create an empty collection.");
         var page = 0;
         Action refresh = () => { };
         var toggle = BuildCollapseToggle($"{name}.Collapse", name, ViewModel.Inspector.CollapsedMembers, expanded =>
@@ -290,12 +295,29 @@ public partial class MainWindow
         var row = new Grid { ColumnDefinitions = [with("*,*,Auto")], ColumnSpacing = 6 };
         var box = new TextBox { Text = key, Classes = { "inspectorField" } };
         box.SetValue(AutomationProperties.NameProperty, $"{name}.Key[{index}]");
+        ToolTip.SetTip(box, "Unique non-empty key — Enter or leave the field to apply; Esc to revert");
+        var active = true;
         box.TextChanged += (_, _) =>
         {
-            if (IsPlaying || binding.Read() is not IDictionary dictionary) return;
+            if (IsPlaying || !active || binding.Read() is not IDictionary dictionary) return;
             var next = box.Text ?? "";
             if (next == key) { MarkInvalid(box, null); return; }
-            if (next.Length == 0 || dictionary.Contains(next)) { MarkInvalid(box, "Enter a unique non-empty key"); return; }
+            MarkInvalid(box, next.Length == 0 || dictionary.Contains(next)
+                ? "Enter a unique non-empty key" : "Press Enter or leave the field to apply the key");
+        };
+        void commitKey()
+        {
+            if (IsPlaying || !active || TopLevel.GetTopLevel(box) is null
+                || binding.Read() is not IDictionary dictionary || !dictionary.Contains(key)) return;
+            var next = box.Text ?? "";
+            if (next == key) { MarkInvalid(box, null); return; }
+            if (next.Length == 0 || dictionary.Contains(next))
+            {
+                MarkInvalid(box, "Enter a unique non-empty key");
+                return;
+            }
+            // Disable the old row before rebuilding; focus loss and queued input must not rename it again.
+            active = false;
             var value = dictionary[key];
             dictionary.Remove(key);
             dictionary.Add(next, value);
@@ -303,12 +325,13 @@ public partial class MainWindow
             CommitBoundValue(binding, dictionary);
             MarkInvalid(box, null);
             refresh();
-        };
+        }
+        box.LostFocus += (_, _) => commitKey();
         box.KeyDown += (_, e) =>
         {
-            if (e.Key != Key.Escape) return;
-            box.Text = key;
-            e.Handled = true;
+            if (!active) return;
+            if (e.Key == Key.Enter) { commitKey(); e.Handled = true; }
+            else if (e.Key == Key.Escape) { box.Text = key; e.Handled = true; }
         };
         row.Children.Add(box);
         var childPath = SceneReferenceStore.DictionaryPath(path, key);

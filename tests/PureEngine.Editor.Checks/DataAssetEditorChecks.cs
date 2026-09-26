@@ -53,6 +53,11 @@ static class DataAssetEditorChecks
             {
                 [Inspector] public string Name { get; set; } = "Iron";
                 [Inspector] public int Attack { get; set; } = 10;
+                [Inspector] public EquipmentStats[,] Stats { get; set; } = new EquipmentStats[1, 1];
+            }
+            public struct EquipmentStats
+            {
+                [Inspector] public int Defense { get; set; }
             }
             public sealed class AssetReader(DataAssetStore assets)
             {
@@ -93,6 +98,11 @@ static class DataAssetEditorChecks
             Check(!Control<TextBlock>(editor, "DataAssetTitle").Text!.StartsWith("* "),
                 "A freshly opened asset must not be dirty.");
 
+            Box(editor, "SwordData.Stats[0,0].Defense").Text = "36";
+            Dispatcher.UIThread.RunJobs();
+            Check(Control<TextBlock>(editor, "DataAssetTitle").Text!.StartsWith("* ") && !editor.Title!.StartsWith("* "),
+                "Deep struct array edits must dirty only the owning asset.");
+
             // Editing a value marks only the asset dirty and never the scene.
             var attack = Box(editor, "SwordData.Attack");
             Check(attack.Text == "10", $"Initial Attack must be 10, got '{attack.Text}'.");
@@ -108,6 +118,7 @@ static class DataAssetEditorChecks
             Click(Control<Button>(editor, "SaveDataAssetButton"));
             Program.Until(() => !Control<TextBlock>(editor, "DataAssetTitle").Text!.StartsWith("* "));
             Check(File.ReadAllText(path).Contains("Attack: 25"), "Save must write the edited value to the file.");
+            Check(File.ReadAllText(path).Contains("Defense: 36"), "Save must retain deep struct array writes.");
             var store = DataAssetStore.ScanFolder(root, session.Components.Registry, out _);
             Check(store.GetAll<object>().Count == 1, "The saved asset must be visible to the runtime store.");
 

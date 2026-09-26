@@ -1,6 +1,8 @@
 using System.Reflection;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -45,8 +47,7 @@ static class ComposableInspectorChecks
         Box(editor, "Probe.Nested[0].Value[0][0].Inner.Number").Text = "31";
         Pump();
         Check(probe.Nested[0]["key"][0].Inner.Number == 31, "List/dictionary/array/struct edits must reach the root.");
-        Box(editor, "Probe.Nested[0].Key[0]").Text = "renamed";
-        Pump();
+        CheckKeyTyping(editor, probe);
         Check(probe.Nested[0]["renamed"][0].Inner.Number == 31, "Dictionary renames must preserve nested values.");
 
         Box(editor, "Probe.Matrix[1,1].Inner.Number").Text = "41";
@@ -77,6 +78,41 @@ static class ComposableInspectorChecks
         Console.WriteLine("PASS: deep struct writeback, nullable structs, nested containers, shaped array resizing, invalid shape retention, and paged editing.");
     }
 
+    private static void CheckKeyTyping(MainWindow editor, Probe probe)
+    {
+        var box = Box(editor, "Probe.Nested[0].Key[0]");
+        box.Focus();
+        box.SelectAll();
+        foreach (var character in "renamed")
+        {
+            editor.KeyTextInput(character.ToString());
+            Pump();
+            Check(box.IsFocused && editor.GetVisualDescendants().Contains(box), "Typing a key must retain the active editor and focus.");
+            Check(probe.Nested[0].ContainsKey("key"), "Typing must not prematurely rename the key.");
+        }
+        Check(box.Text == "renamed" && editor.ViewModel.Inspector.HasInputErrors, "Pending rename must retain all typed text and guard saving.");
+        PressKey(box, Key.Escape);
+        Check(box.Text == "key" && !editor.ViewModel.Inspector.HasInputErrors, "Escape must discard the pending key.");
+        box.Text = "other";
+        PressKey(box, Key.Enter);
+        Check(probe.Nested[0].ContainsKey("key") && editor.ViewModel.Inspector.HasInputErrors, "Duplicate key must not commit.");
+        box.Text = "";
+        PressKey(box, Key.Enter);
+        Check(probe.Nested[0].ContainsKey("key") && editor.ViewModel.Inspector.HasInputErrors, "Empty key must not commit.");
+        box.Text = "renamed";
+        PressKey(box, Key.Enter);
+        Check(!editor.ViewModel.Inspector.HasInputErrors, "Committed rename must clear pending input errors.");
+        box.Text = "stale";
+        PressKey(box, Key.Enter);
+        Check(!probe.Nested[0].ContainsKey("stale") && !editor.ViewModel.Inspector.HasInputErrors, "Detached key events must not mutate data or validation.");
+    }
+
+    private static void PressKey(TextBox box, Key key)
+    {
+        box.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key });
+        Pump();
+    }
+
     private static void CheckNestedMissing(MainWindow editor, EditSceneStore store, SceneObject item, Probe probe, SceneObject target)
     {
         Click(editor, "Probe.References[1].Collapse");
@@ -96,7 +132,10 @@ static class ComposableInspectorChecks
         Check(store.Current.References.TryGetMissing(id, "References[0][second].Target", out var missing) && missing == target.Id,
             "Outer row deletion must move descendant Missing IDs.");
         Click(editor, "Probe.References[0].Collapse");
-        Box(editor, "Probe.References[0].Key[0]").Text = "renamed";
+        var key = Box(editor, "Probe.References[0].Key[0]");
+        key.Focus();
+        key.Text = "renamed";
+        Box(editor, "Probe.Value.Inner.Number").Focus();
         Pump();
         Check(store.Current.References.TryGetMissing(id, "References[0][renamed].Target", out missing) && missing == target.Id,
             "Outer key rename must move descendant Missing IDs.");
@@ -140,7 +179,7 @@ static class ComposableInspectorChecks
     {
         [Inspector] public OuterValue Value { get; set; }
         [Inspector] public OuterValue? Optional { get; set; }
-        [Inspector] public List<Dictionary<string, OuterValue[]>> Nested { get; set; } = [new() { ["key"] = [new()] }];
+        [Inspector] public List<Dictionary<string, OuterValue[]>> Nested { get; set; } = [new() { ["key"] = [new()], ["other"] = [new()] }];
         [Inspector] public OuterValue[,] Matrix { get; set; } = new OuterValue[2, 2];
         [Inspector] public int[] Large { get; set; } = new int[70];
         [Inspector] public List<Dictionary<string, ReferenceValue>> References { get; set; } = [];
