@@ -175,6 +175,36 @@ public partial class MainWindow
         UpdateErrorBadge();
     }
 
+    /// <summary>Whether a sequence or dictionary element renders as its own collapsible panel (nested collection or object card).
+    /// Such elements span the full body width under their own index bar so the left index and right remove columns
+    /// stay fixed at each list header position instead of indenting with every nesting depth.</summary>
+    private bool IsNestedBoundElement(Type elementType, object? owner)
+    {
+        if (ShouldShowReferenceEditorFor(elementType, owner)) return false;
+        if (IsValueContainer(elementType)) return true;
+        var effective = Nullable.GetUnderlyingType(elementType) ?? elementType;
+        return InspectorValueTypes.IsCustomInspectorObject(effective)
+            || SceneReferenceTypes.ContainsReference(effective, Components.Registry);
+    }
+
+    /// <summary>Full-width block for a nested element: its index and remove bar on top, its own panel below.</summary>
+    private static StackPanel BuildNestedElementBlock(string labelText, Control nested, string removeName, bool showRemove, Action onRemove)
+    {
+        var block = new StackPanel { Spacing = 4 };
+        var bar = new Grid { ColumnDefinitions = [with("Auto,*,Auto")], ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        bar.Children.Add(new TextBlock { Text = labelText, Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center });
+        if (showRemove)
+        {
+            var remove = BuildRemoveButton(removeName);
+            Grid.SetColumn(remove, 2);
+            remove.Click += (_, _) => onRemove();
+            bar.Children.Add(remove);
+        }
+        block.Children.Add(bar);
+        block.Children.Add(nested);
+        return block;
+    }
+
     private StackPanel BuildBoundContainer(InspectorValueBinding binding, string name, Guid? ownerId, string path)
     {
         var type = binding.ValueType;
@@ -233,7 +263,21 @@ public partial class MainWindow
                     var slot = index;
                     var indices = current is Array array ? InspectorArrayShape.GetIndices(array, index) : [index];
                     var suffix = $"[{string.Join(",", indices)}]";
-                    var editor = BuildBoundValueEditor(binding.Element(elementType, indices), $"{name}{suffix}", ownerId, $"{path}{suffix}", element: true);
+                    var child = binding.Element(elementType, indices);
+                    var childName = $"{name}{suffix}";
+                    var childPath = $"{path}{suffix}";
+                    var editor = BuildBoundValueEditor(child, childName, ownerId, childPath, element: true);
+                    if (IsNestedBoundElement(elementType, binding.Owner))
+                    {
+                        body.Children.Add(BuildNestedElementBlock(suffix, editor, $"{name}.Remove[{index}]", !multidimensional, () =>
+                        {
+                            if (IsPlaying) return;
+                            RemoveBoundSequenceElement(binding, elementType, slot);
+                            if (ownerId is { } id) Documents.Current.Current.References.RemoveSequenceElement(id, path, slot);
+                            refresh();
+                        }));
+                        continue;
+                    }
                     var row = new Grid { ColumnDefinitions = [with("Auto,*,Auto")], ColumnSpacing = 6 };
                     row.Children.Add(new TextBlock { Text = suffix, Classes = { "memberType" } });
                     Grid.SetColumn(editor, 1);
@@ -315,9 +359,8 @@ public partial class MainWindow
         CommitBoundValue(binding, current);
     }
 
-    private Grid BuildBoundDictionaryRow(InspectorValueBinding binding, Type type, string key, int index, string name, Guid? ownerId, string path, Action refresh)
+    private Control BuildBoundDictionaryRow(InspectorValueBinding binding, Type type, string key, int index, string name, Guid? ownerId, string path, Action refresh)
     {
-        var row = new Grid { ColumnDefinitions = [with("*,*,Auto")], ColumnSpacing = 6 };
         var box = new TextBox { Text = key, Classes = { "inspectorField" } };
         box.SetValue(AutomationProperties.NameProperty, $"{name}.Key[{index}]");
         ToolTip.SetTip(box, "Unique non-empty key — Enter or leave the field to apply; Esc to revert");
@@ -358,15 +401,9 @@ public partial class MainWindow
             if (e.Key == Key.Enter) { commitKey(); e.Handled = true; }
             else if (e.Key == Key.Escape) { box.Text = key; e.Handled = true; }
         };
-        row.Children.Add(box);
         var childPath = SceneReferenceStore.DictionaryPath(path, key);
         var editor = BuildBoundValueEditor(binding.Entry(type, key), $"{name}.Value[{index}]", ownerId, childPath, element: true);
-        Grid.SetColumn(editor, 1);
-        row.Children.Add(editor);
-        AttachEditorDropHandlers(row, editor);
         var remove = BuildRemoveButton($"{name}.Remove[{index}]");
-        Grid.SetColumn(remove, 2);
-        row.Children.Add(remove);
         remove.Click += (_, _) =>
         {
             if (IsPlaying || binding.Read() is not IDictionary dictionary) return;
@@ -375,6 +412,24 @@ public partial class MainWindow
             CommitBoundValue(binding, dictionary);
             refresh();
         };
+        if (IsNestedBoundElement(type, binding.Owner))
+        {
+            var block = new StackPanel { Spacing = 4 };
+            var top = new Grid { ColumnDefinitions = [with("*,Auto")], ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            top.Children.Add(box);
+            Grid.SetColumn(remove, 1);
+            top.Children.Add(remove);
+            block.Children.Add(top);
+            block.Children.Add(editor);
+            return block;
+        }
+        var row = new Grid { ColumnDefinitions = [with("*,*,Auto")], ColumnSpacing = 6 };
+        row.Children.Add(box);
+        Grid.SetColumn(editor, 1);
+        row.Children.Add(editor);
+        AttachEditorDropHandlers(row, editor);
+        Grid.SetColumn(remove, 2);
+        row.Children.Add(remove);
         return row;
     }
 
