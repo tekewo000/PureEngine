@@ -110,11 +110,14 @@ public sealed class GamePackage : IDisposable
         foreach (var path in Directory.EnumerateFiles(DataDirectory, "*", SearchOption.AllDirectories)
             .Where(path => path.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.Ordinal))
-            WithScene(factory => new SceneSerializer(Registry, DataAssets, Prefabs, Localization)
-                .Deserialize(File.ReadAllText(path), factory), static _ => { });
+            WithScene(path, factory => RestoreScene(path, factory), static _ => { });
         foreach (var id in Prefabs.Ids)
-            WithScene(factory => new PrefabSerializer(Registry).RestoreForEditing(
-                Prefabs.Find(id)!, out _, DataAssets, Prefabs, factory, Localization), static _ => { });
+            WithScene(Prefabs.DisplayName(id), factory =>
+            {
+                var scene = new PrefabSerializer(Registry).RestoreForEditing(
+                    Prefabs.Find(id)!, out var membersChanged, DataAssets, Prefabs, factory, Localization);
+                return (scene, membersChanged);
+            }, static _ => { });
         foreach (var id in DataAssets.Ids)
             ValidateValue(DataAssets.Find(id, typeof(object)), [with(ReferenceEqualityComparer.Instance)]);
     }
@@ -126,8 +129,7 @@ public sealed class GamePackage : IDisposable
         PlaySession? result = null;
         try
         {
-            WithScene(factory => new SceneSerializer(Registry, DataAssets, Prefabs, Localization)
-                .Deserialize(File.ReadAllText(_startupScene), factory),
+            WithScene(_startupScene, factory => RestoreScene(_startupScene, factory),
                 scene => result = PlaySession.Prepare(scene, Registry, Configure));
             _sessions.Add(result!);
             return result!;
@@ -149,7 +151,14 @@ public sealed class GamePackage : IDisposable
         services.AddSingleton(Localization.Clone());
     }
 
-    private void WithScene(Func<Func<Type, object>, Scene> restore, Action<Scene> use)
+    private (Scene Scene, bool MembersChanged) RestoreScene(string path, Func<Type, object> factory)
+    {
+        var scene = new SceneSerializer(Registry, DataAssets, Prefabs, Localization)
+            .Deserialize(File.ReadAllText(path), out var membersChanged, factory);
+        return (scene, membersChanged);
+    }
+
+    private void WithScene(string path, Func<Func<Type, object>, (Scene Scene, bool MembersChanged)> restore, Action<Scene> use)
     {
         GameSession? services = null;
         Scene? scene = null;
@@ -157,7 +166,10 @@ public sealed class GamePackage : IDisposable
         try
         {
             services = GameSession.Create(Configure);
-            scene = restore(services.Factory);
+            var restored = restore(services.Factory);
+            scene = restored.Scene;
+            if (restored.MembersChanged)
+                throw new InvalidDataException($"{path}: packaged scene or prefab requires migration. Re-save it in the editor before building.");
             if (scene.References.MissingCount != 0 || scene.References.HasLegacy)
                 throw new InvalidDataException("Packaged scene or prefab contains missing IDs or legacy references.");
             HashSet<object> visited = [with(ReferenceEqualityComparer.Instance)];

@@ -71,6 +71,17 @@ internal static class GamePackageChecks
                 package.Validate();
                 Require(package.Prefabs.Find(prefabId) is not null, "Prefab IDs must survive packaging.");
             }
+            var prefabPath = Path.Combine(data, "One.pure.prefab.yaml");
+            File.WriteAllText(prefabPath, prefabYaml.Replace("Hp:", "OldHp:", StringComparison.Ordinal));
+            using (var package = GamePackage.Open(root))
+                RejectMigration(package.Validate, "One.pure.prefab.yaml");
+            File.WriteAllText(prefabPath, prefabYaml);
+            var extraScenePath = Path.Combine(data, "Stale.pure.scene.yaml");
+            File.WriteAllText(extraScenePath, new SceneSerializer(registry).Serialize(prefabScene)
+                .Replace("Hp:", "OldHp:", StringComparison.Ordinal));
+            using (var package = GamePackage.Open(root))
+                RejectMigration(package.Validate, "Stale.pure.scene.yaml");
+            File.Delete(extraScenePath);
             PrecompiledGame(root, data, manifest);
         }
         finally
@@ -136,6 +147,18 @@ internal static class GamePackageChecks
             var type = package.Registry.GetType("user.original-stable-id");
             Require(type.FullName == "PackageProbe" && (int)type.GetField("Starts")!.GetValue(null)! == 0,
                 "Validation must preserve renamed stable IDs without running Start.");
+            var startupPath = Path.Combine(data, manifest.StartupScene);
+            var startupYaml = File.ReadAllText(startupPath);
+            var staleYaml = startupYaml.Replace("Value:", "OldValue:", StringComparison.Ordinal);
+            File.WriteAllText(startupPath, staleYaml);
+            var previousDisposals = (int)type.GetField("Disposals")!.GetValue(null)!;
+            RejectMigration(package.Validate, manifest.StartupScene);
+            RejectMigration(() => { using var _ = package.CreateSession(); }, manifest.StartupScene);
+            Require((int)type.GetField("Starts")!.GetValue(null)! == 0
+                && (int)type.GetField("Disposals")!.GetValue(null)! == previousDisposals + 2,
+                "Migration rejection must dispose restored components without starting them.");
+            Require(File.ReadAllText(startupPath) == staleYaml, "Package validation must not rewrite stale files.");
+            File.WriteAllText(startupPath, startupYaml);
             using var session = package.CreateSession();
             var probe = session.Runtime.Scene.Objects.Single().Components.Single();
             Require((int)type.GetField("Value")!.GetValue(probe)! == 73, "Precompiled component values must restore by stable ID.");
@@ -156,6 +179,20 @@ internal static class GamePackageChecks
     private static void Require(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void RejectMigration(Action operation, string path)
+    {
+        try { operation(); }
+        catch (AggregateException error)
+        {
+            Require(error.Flatten().InnerExceptions.Any(cause => cause is InvalidDataException
+                && cause.Message.Contains(path, StringComparison.Ordinal)
+                && cause.Message.Contains("requires migration", StringComparison.Ordinal)),
+                $"Migration rejection must identify the stale file: {path}.");
+            return;
+        }
+        throw new InvalidOperationException($"Migration-required content must not be accepted: {path}.");
     }
 
     private static void Reject(Action operation, string message)
