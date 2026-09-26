@@ -201,7 +201,7 @@ public partial class MainWindow
         var check = new CheckBox { IsChecked = GetMemberValue(component, member) is true, Content = NullableBoolLabel(GetMemberValue(component, member)) };
         check.Classes.Add("inspectorCheck");
         check.SetValue(AutomationProperties.NameProperty, automationName);
-        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         check.IsCheckedChanged += (_, _) =>
         {
@@ -228,7 +228,7 @@ public partial class MainWindow
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, "Create a vector value.");
-        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var vectorPanel = BuildVectorEditorForNullable(component, member, automationName, dimensions);
@@ -266,7 +266,7 @@ public partial class MainWindow
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, "Create a color value.");
-        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var colorPanel = BuildColorEditorForNullable(component, member, automationName);
@@ -362,7 +362,7 @@ public partial class MainWindow
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, "Create a Transform value.");
-        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var body = new StackPanel { Spacing = 6 };
@@ -569,7 +569,7 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
         ToolTip.SetTip(add, "Add a row.");
-        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the list itself to null. Removing rows keeps an empty list.");
         var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all rows. The empty list stays.");
@@ -723,7 +723,7 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
         ToolTip.SetTip(add, "Add an entry.");
-        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the dictionary itself to null. Removing rows keeps an empty dictionary.");
         var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all entries. The empty dictionary stays.");
@@ -1012,7 +1012,7 @@ public partial class MainWindow
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, "Create an enum value.");
-        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        var clear = BuildHeaderIconButton("Icon.BorderNone", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var body = new StackPanel { Spacing = 4 };

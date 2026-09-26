@@ -112,7 +112,7 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" } };
         var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
         ToolTip.SetTip(create, "Create a new instance.");
-        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{name}.Null");
+        var clear = BuildHeaderIconButton("Icon.BorderNone", $"{name}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         Action refresh = () => { };
         var toggle = BuildCollapseToggle($"{name}.Collapse", name, ViewModel.Inspector.CollapsedMembers, expanded =>
@@ -188,7 +188,7 @@ public partial class MainWindow
         ToolTip.SetTip(add, "Add an entry.");
         var clear = BuildHeaderIconButton("Icon.Delete", $"{name}.Clear");
         ToolTip.SetTip(clear, "Remove all entries; keep an empty collection.");
-        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{name}.Null");
+        var setNull = BuildHeaderIconButton("Icon.BorderNone", $"{name}.Null");
         ToolTip.SetTip(setNull, "Set the collection to null.");
         var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
         ToolTip.SetTip(create, "Create an empty collection.");
