@@ -26,5 +26,6 @@ public static class GameServices
         services.AddScoped<IRandomService, RandomService>();
         services.AddScoped<BattleSession>();
         services.AddScoped<PrefabSpawner>();
+        services.AddScoped<LocalizationService>();
     }
 }

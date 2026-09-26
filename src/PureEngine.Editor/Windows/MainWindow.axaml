@@ -507,12 +507,14 @@
             <TextBlock Text="Play" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button x:Name="StopButton" MinWidth="96" Command="{Binding StopPlayCommand}" IsEnabled="{Binding Play.IsPlaying}" AutomationProperties.Name="Stop">
+        <Button x:Name="StopButton" MinWidth="96" Command="{Binding StopPlayCommand}" IsEnabled="{Binding Play.IsPlaying}" AutomationProperties.Name
+="Stop">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Stop}" />
             <TextBlock Text="Stop" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
+        <ComboBox x:Name="PreviewLanguageBox" ItemsSource="{Binding Localization.AvailableLanguages}" SelectedItem="{Binding Localization.PreviewLanguage, Mode=TwoWay}" MinWidth="88" VerticalAlignment="Center" AutomationProperties.Name="Preview language" ToolTip.Tip="Preview language for localized text" IsEnabled="{Binding HasProject}" />
       </StackPanel>
     </Grid>
 

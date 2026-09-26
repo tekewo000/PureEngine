@@ -158,7 +158,7 @@ static class UiComponentChecks
             .SequenceEqual(["Order", "Sprite", "Color"]),
             "Image Inspector members must list base Order before Sprite and Color.");
         Check(ComponentSchema.GetInspectorMembers(typeof(Text)).Select(member => member.Name)
-            .SequenceEqual(["Order", "Content", "Color", "FontSize", "LineSpacing"]),
+            .SequenceEqual(["Order", "Content", "LocalizedEntry", "Color", "FontSize", "LineSpacing"]),
             "Text Inspector members must list base Order first.");
         Check(ComponentSchema.GetInspectorMembers(typeof(DerivedProbe)).Select(member => member.Name)
             .SequenceEqual(["BaseValue", "DerivedValue"]),

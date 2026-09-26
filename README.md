@@ -37,7 +37,8 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
-- GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。`Text` の内容・色・サイズも描く。
+- GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。`Text` の内容・色・サイズも描く。`LocalizedEntry` を付けたTextはプレビュー言語・実行言語で解決した文言を描く。
+- 文言の多言語化は `LocalizedText` データアセットで行う。`Localization/Text` から作り、キー名と言語ごとの本文・ボイス欄を持つ。`Text` の `LocalizedEntry` 欄で選ぶだけで、改名・本文編集はアセット側に集約する。ツールバーの言語選択でScene View／Gameの表示を切り替え、ゲームコードは `LocalizationService` のコンストラクタ注入で取得・切替する。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -525,6 +526,24 @@ Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を
 `Text`（`core.text`）は内容・文字色・フォントサイズ・行間を持ち、同じオブジェクトの `Transform`・`UiElement` が解決した領域へ同梱フォントで描きます。`Content = "New Text"`・`Color = White`・`FontSize = 24`・`LineSpacing = 1.2`・`Order = 0` が既定値です。左寄せ・上起点で領域幅で折り返し、内容が空のときは描きません。同じオブジェクトのImage＋Textは一単位として大きい方の `Order` で並べ替え、Imageの後にTextを描きます。独立した順序が必要なら別オブジェクトにします。
 
 操作：Stuffsの右クリックメニュー「UI → Text」で作る（選択中があればその子）→ Inspectorで内容・色・サイズ・行間を変える → 保存 → 開き直す。Scene View／Gameの描画、Scene ViewでのUiElement矩形による選択、保存・Clone・欠落メンバーの既定値読み込みに対応します。GameにはText選択機能はありません。高さ方向はUiElement矩形でクリップせず、ビューポートのみで切ります。領域外へあふれた文字は選択範囲を広げません。寄せ・フォント素材の指定、Inspectorでの複数行編集は後続です。確定した仕様は[設計書](docs/EngineArchitecture.md#uiコンポーネント)、検証状況は[実装計画](docs/ImplementationPlan.md#text-component2026-09-24)を参照してください。
+
+## Localization（Text・Voiceの下地）
+
+文言は`LocalizedText`（`core.localized-text`）というデータアセットで持ち、表示キー名・言語ごとの本文・言語ごとのボイス欄からなる。言語キーは小文字のBCP47式（`ja`・`en`・`ko`等）。`[DataAsset("Localization/Text")]` の作成メニューから作り、単体InspectorとData Assets表の一括編集で言語ごとの中身を入れる。言語列の専用グリッドは後続で、同じファイル形式の表示切替として足す。
+
+```csharp
+// game code resolves entries through constructor injection.
+public sealed class Shop(LocalizationService localization)
+{
+    public string Title(LocalizedText entry) => localization.ResolveText(entry, "Shop");
+    public string? Voice(LocalizedText entry) => localization.ResolveVoice(entry);
+}
+```
+
+- `Text.LocalizedEntry` に付けた文言は、ツールバーのプレビュー言語（Scene View／Game共通）と実行言語で解決して描く。直書き `Content` は参照なし・全言語空のときの代替になる。空欄は未翻訳扱いで既定言語（`ja`）→最初の可用言語の順に代替し、空白は描かない。
+- 保存するのは文言ファイルの不変IDだけで、表示キー名の改名では壊れない。ファイル削除はMissing表示でID保持し、戻せば復旧する（データアセット参照と同じ流儀）。Clone・Playはスナップショット分離し、実行中の言語切替はその実行だけに効く。
+- ボイス欄は音声基盤が来るまでの予約で、文字列のまま保存・編集できる。再生解決は `ResolveVoice`（空は無音）までで、発音・音量の扱いは音実装時に決める。
+- 言語の追加は文言の辞書にキーを足すだけ。プレビュー選択肢は全文言の和集合＋既定言語で作り、選択は保存しない。確定した仕様は[設計書](docs/EngineArchitecture.md#uiコンポーネント)、検証状況は[実装計画](docs/ImplementationPlan.md#localization2026-09-26)を参照する。
 
 ## Game表示とButton操作
 

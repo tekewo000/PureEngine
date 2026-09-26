@@ -490,6 +490,12 @@ InputField・DropDown・Slider、Toggle／Checkbox・ScrollView・ProgressBarは
 
 Visible・Opacity・ClipChildrenや画面全体の解像度設定は引き続き設計対象だが、現在のUiElementのメンバーとして存在するものではない。どこへ持たせるかは使用する機能の実装時に確定する。Imageの色はCoreのColorを使い、描画境界でVector4へ変換する。
 
+#### Localization（Text・Voiceの下地・実装済み）
+
+文言は共有データの流儀に従い、専用形式を作らず `[DataAsset("Localization/Text")]` の `LocalizedText`（`core.localized-text`）で持つ。表示キー名（`Key`）・言語ごとの本文（`Texts`）・言語ごとのボイス欄（`Voices`）からなり、言語キーは小文字のBCP47式（`ja`・`en`・`ko`等）。空欄は未翻訳扱いで空白は描かない。`Text` は直書き `Content` に加えて任意の `LocalizedEntry` 参照を1本持ち、参照ありなら解決文を描く。Inspectorの参照欄は既存の名前選択・Clear・Missing表示・D&Dを使い、本文・改名の編集は置かない。改名・内容変更は単体InspectorとData Assets表の一括編集に集約する。言語列の専用グリッドは後続で、同じファイル形式の表示切替として足す。
+
+解決の正本はCoreの `LocalizationService` で、現在言語→既定言語（`ja`）→最初の可用言語→呼び出し側代替の順に代替する。言語コードは小文字へ正規化し、不正値は拒否する。保存するのは文言ファイルの不変IDだけで、表示キー名の改名では壊れない。欠落はID保持＋診断で、Clone・Playはスナップショット分離する（データアセット参照と同じ規則）。編集・各Playは独立したインスタンスをコンストラクタ注入で受け、実行中の言語切替はその実行だけに効く。プレビュー言語はEditorが所有し、ツールバーの選択でScene View／Gameの解決に使い、保存しない。ボイス欄は音声基盤までの予約で、文字列のまま保存・編集し、`ResolveVoice`（空は無音）までを提供する。
+
 #### Spriteの素材データ
 
 `PureEngine.Core/Assets/Sprite.cs`の`Sprite`はComponentではなく、Imageから参照する変更不可の素材データ。元画像のProjectローカルID（`Guid ImageId`）と、任意の切り出し矩形（`SourceRect`）を持つ。元の画像データ・ファイルパス・GPUハンドル・表示位置・UIのPivotは保持しない。

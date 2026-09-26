@@ -126,6 +126,7 @@ internal static class Program
             launcher.Show();
             Dispatcher.UIThread.RunJobs();
             UiTextEditorChecks.Run();
+            LocalizationEditorChecks.Run();
             PlayConnectionChecks.Run();
             ProjectDropChecks.Run();
             UiMenuChecks.Run();

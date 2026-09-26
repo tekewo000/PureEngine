@@ -10,6 +10,8 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
     private int _loggedErrors;
     public PlaySession? Session { get; private set; }
     public bool IsPlaying => Session is not null;
+    /// <summary>Run-owned localization service. Starts from the preview language; game code may switch it at runtime.</summary>
+    public LocalizationService? PlayLocalization { get; private set; }
     public event Action? BeforeStart;
     public event Action? Started;
     public event Action? Stopping;
@@ -41,17 +43,20 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
             editor.Console.Clear();
 
         PlaySession? session;
+        LocalizationService? localization = null;
         try
         {
             // Each run gets a fresh snapshot; edits made during the run never reach files or other runs.
             var assets = EditorDocuments.BuildAssetStore(editor.ProjectFile, editor.Components.Registry);
             var prefabs = EditorDocuments.BuildPrefabCatalog(editor.ProjectFile);
+            localization = new LocalizationService { CurrentLanguage = editor.Localization.PreviewLanguage };
             var configure = GameServices.ForProject(editor.Components);
             session = PlaySession.Prepare(editor.Documents.Scene.Current, editor.Components.Registry, services =>
             {
                 configure(services);
                 if (assets is not null) services.AddSingleton(assets);
                 services.AddSingleton(prefabs);
+                services.AddSingleton(localization);
             });
         }
         catch (Exception error)
@@ -62,6 +67,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
         }
 
         Session = session;
+        PlayLocalization = localization;
         _loggedErrors = 0;
         InputReset?.Invoke();
         try
@@ -113,10 +119,11 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
         finally
         {
             Session = null;
-
+            PlayLocalization = null;
             Changed(nameof(IsPlaying));
         }
 
+        // Pulls only unlogged entries
         // Pulls only unlogged entries into the Console so the same runtime errors are not logged twice.
         LogPendingRuntimeErrors(session);
         var errors = session.Runtime.Errors;
@@ -170,6 +177,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
     {
         var session = Session;
         Session = null;
+        PlayLocalization = null;
         Stopping?.Invoke();
 
         var errors = session?.Runtime.Errors ?? [];
@@ -213,7 +221,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
         finally
         {
             if (ReferenceEquals(Session, session)) Session = null;
-
+            if (Session is null) PlayLocalization = null;
             Changed(nameof(IsPlaying));
         }
 
@@ -244,7 +252,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
         finally
         {
             if (ReferenceEquals(Session, session)) Session = null;
-
+            if (Session is null) PlayLocalization = null;
             Changed(nameof(IsPlaying));
         }
 
@@ -282,7 +290,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
         finally
         {
             Session = null;
-
+            PlayLocalization = null;
             Changed(nameof(IsPlaying));
             InputReset?.Invoke();
             try { LogPendingRuntimeErrors(session); } catch { /* Do not let shutdown-time logging failures block shutdown. */ }

@@ -45,6 +45,7 @@ public partial class MainWindow
             if (kind == EditedDocumentKind.Table) UpdateDataAssetTableChrome();
             RefreshProjectExplorer();
         }
+        RefreshPreviewLanguages();
     }
 
     private async Task<bool> SaveSceneAsync(bool saveAs)
