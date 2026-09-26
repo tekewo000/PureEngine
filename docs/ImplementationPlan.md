@@ -286,7 +286,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 - 親子関係・兄弟順・Sprite参照・描画順（`Order`）・Buttonの`Interactable`・Textの内容と色・サイズの保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
-- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節の範囲。自作クラスは単体・配列・リスト要素・辞書値・入れ子で対応する。`Sprite` のコレクション要素の編集UI、配列・リスト要素や辞書値への `Transform`・コレクションの入れ子、string以外の辞書キー、サービス参照は未対応。サービス参照に `[Inspector]` を付けない。
+- Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節を正本とする。自作struct／Nullable、対応コンテナの任意入れ子、ゼロ下限の多次元配列を含む。非string辞書キー、非ゼロ下限配列、任意ポリモーフィズム、structのComponentアタッチ、サービス参照は対象外。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
 - ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoは未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。

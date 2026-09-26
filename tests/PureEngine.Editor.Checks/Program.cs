@@ -171,6 +171,7 @@ internal static class Program
 
             PriorityInspectorChecks.Run(editor);
             InspectorValueEditorChecks.Run(editor);
+            ComposableInspectorChecks.Run(editor);
             ReferenceEditorChecks.Run(editor);
             UiImageEditorChecks.Run(editor);
             // Isolated Scene View editors; closed before the unsaved flow so window counts stay intact.
