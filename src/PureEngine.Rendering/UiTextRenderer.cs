@@ -9,14 +9,14 @@ public static class UiTextRenderer
 {
     public static (Vector2 Size, Matrix4x4 World) Draw(
         DrawList draw, SceneObject item, Vector2 parentSize, Matrix4x4 parentWorld,
-        Vector4 clip, Matrix4x4? view = null, LocalizationService? localization = null)
+        Vector4 clip, Matrix4x4? view = null, LocalizationService? localization = null, LocalizationStore? strings = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(item);
         var transform = item.GetComponent<Transform>() ?? throw new InvalidOperationException($"{item.Name}: Transform is required.");
         var element = item.GetComponent<UiElement>() ?? throw new InvalidOperationException($"{item.Name}: UiElement is required.");
         var layout = UiLayout.Calculate(parentSize, parentWorld, transform, element);
-        DrawEntry(draw, item, layout.Size, layout.World, clip, view, localization);
+        DrawEntry(draw, item, layout.Size, layout.World, clip, view, localization, strings);
         return layout;
     }
 
@@ -24,12 +24,12 @@ public static class UiTextRenderer
     /// <remarks>Does not recompute layout; uses the passed Size/WorldScene. Skips and returns without Text, empty content, zero size, or degenerate transforms.</remarks>
     public static void DrawEntry(
         DrawList draw, SceneObject item, Vector2 size, Matrix4x4 worldScene,
-        Vector4 clip, Matrix4x4? view = null, LocalizationService? localization = null)
+        Vector4 clip, Matrix4x4? view = null, LocalizationService? localization = null, LocalizationStore? strings = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(item);
         if (item.GetComponent<Text>() is not { } text) return;
-        var content = LocalizationService.ResolveText(text.LocalizedEntry, text.Content, localization?.CurrentLanguage);
+        var content = LocalizationService.ResolveText(strings, text.LocalizedEntry, text.Content, localization?.CurrentLanguage);
         if (string.IsNullOrEmpty(content)) return;
         // Orthographic XY projection. Z is preserved by UiLayout, but does not change 2D submission order.
         // Composes the Editor view transform after layout without changing the Anchor parent area.

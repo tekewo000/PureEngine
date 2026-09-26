@@ -107,15 +107,17 @@ public sealed class ProjectSession : IDisposable
             _ = project.ListDirectories();
             _ = project.ListFiles("Scenes");
             var assets = EditorDocuments.BuildAssetStore(project, registry);
+            var localization = EditorDocuments.BuildLocalizationStore(project);
             services = GameSession.Create(services =>
             {
                 GameServices.ForUserCode(compiled.Success ? compiled : null)(services);
                 if (assets is not null) services.AddSingleton(assets);
+                services.AddSingleton(localization);
             });
             bool membersChanged;
             try
             {
-                scene = new SceneSerializer(registry, assets, PrefabCatalog.ScanFolder(project.RootDirectory, out _)).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
+                scene = new SceneSerializer(registry, assets, PrefabCatalog.ScanFolder(project.RootDirectory, out _), localization).Deserialize(File.ReadAllText(project.StartupScenePath), out membersChanged, services.Factory);
             }
             catch (Exception error) when (!compiled.Success)
             {
@@ -166,10 +168,12 @@ public sealed class ProjectSession : IDisposable
             var project = ProjectFile.Create(parentDirectory, name, new SceneSerializer(components.Registry).Serialize(scene));
             ProjectCodeWorkspace.Ensure(project);
             var assets = EditorDocuments.BuildAssetStore(project, components.Registry);
+            var localization = EditorDocuments.BuildLocalizationStore(project);
             services = GameSession.Create(services =>
             {
                 GameServices.ForProject(components)(services);
                 if (assets is not null) services.AddSingleton(assets);
+                services.AddSingleton(localization);
             });
             return new ProjectSession(project, components, scene, services, null);
         }

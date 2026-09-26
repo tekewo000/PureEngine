@@ -2,20 +2,35 @@ using PureEngine.Core;
 
 namespace PureEngine.Editor;
 
-/// <summary>Preview language for localized text in Scene View and Game. Owned by the editor, never saved.</summary>
+/// <summary>Preview language and localization table presentation state. The table file itself is never saved here.</summary>
 /// <remarks>
 /// The selection only changes which language renderers resolve. Files keep every language, and each Play run
 /// starts from this selection in its own service instance so game code can switch language at runtime.
 /// </remarks>
 public sealed class LocalizationViewModel : EditorObservable
 {
+    private readonly EditorDocuments _documents;
+    private readonly InspectorViewModel _inspector;
     private string _previewLanguage = LocalizationService.DefaultLanguage;
     private IReadOnlyList<string> _availableLanguages = [LocalizationService.DefaultLanguage];
+    private string _status = "No project.";
+
+    public LocalizationViewModel(EditorDocuments documents, InspectorViewModel inspector)
+    {
+        _documents = documents;
+        _inspector = inspector;
+        _inspector.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(InspectorViewModel.IsReadOnly)) Refresh();
+        };
+    }
+
+    public LocalizationDocument Document => _documents.Localization;
 
     /// <summary>Service used for the edit-scene preview. Follows <see cref="PreviewLanguage"/>.</summary>
     public LocalizationService PreviewService { get; } = new();
 
-    /// <summary>Languages in use by LocalizedText assets plus the default. Never empty.</summary>
+    /// <summary>Language columns in table order plus the default. Never empty.</summary>
     public IReadOnlyList<string> AvailableLanguages
     {
         get => _availableLanguages;
@@ -42,12 +57,46 @@ public sealed class LocalizationViewModel : EditorObservable
         }
     }
 
-    /// <summary>Rebuilds the language list from the project store. Keeps the selection when still available.</summary>
-    public void Refresh(DataAssetStore? store) =>
-        AvailableLanguages = store is null
-            ? [LocalizationService.DefaultLanguage]
-            : LocalizationService.AvailableLanguages(store);
+    public bool IsEnabled => !_inspector.IsReadOnly;
 
-    /// <summary>Resets to the default language when the project closes.</summary>
-    public void Clear() => Refresh(null);
+    public bool CanSave => Document.IsDirty && IsEnabled;
+
+    public string Title => Document.IsDirty ? "Localization *" : "Localization";
+
+    public string Status
+    {
+        get => _status;
+        private set => SetProperty(ref _status, value);
+    }
+
+    /// <summary>Rebuilds the language list from the given snapshot. Keeps the selection when still available.</summary>
+    public void RefreshLanguages(LocalizationStore? store) =>
+        AvailableLanguages = LocalizationService.AvailableLanguages(store);
+
+    /// <summary>Reloads the working copy from the project table file.</summary>
+    public void LoadForProject(ProjectFile? project)
+    {
+        if (project is null)
+        {
+            Document.Clear();
+        }
+        else
+        {
+            var diagnostics = Document.Load(project.LocalizationPath, project);
+            foreach (var diagnostic in diagnostics) Log.Engine.Warning(diagnostic);
+        }
+        Refresh();
+    }
+
+    /// <summary>Refreshes title, status, and save state after edits, saves, or truth changes.</summary>
+    public void Refresh()
+    {
+        var table = Document.Table;
+        Status = Document.Path is null
+            ? "No localization table. Add a key to create it."
+            : $"{table.Entries.Count} key(s), {table.Languages.Count} language(s).";
+        Changed(nameof(Title));
+        Changed(nameof(CanSave));
+        Changed(nameof(IsEnabled));
+    }
 }

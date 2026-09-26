@@ -18,7 +18,7 @@ public static class EditSceneRenderer
     /// <remarks>Resolves parent-child layout first, then sorts draw targets ascending by Order. Ties keep parent-then-child and sibling order.</remarks>
     public static IReadOnlyList<Diagnostic> Build(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize, Matrix4x4 view,
-        LocalizationService? localization = null)
+        LocalizationService? localization = null, LocalizationStore? strings = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(scene);
@@ -27,7 +27,7 @@ public static class EditSceneRenderer
         draw.Clear();
         if (!IsDrawableViewport(viewportSize) || !IsAffine(view))
             return diagnostics;
-        DrawOrdered(draw, scene, images, viewportSize, view, localization, diagnostics);
+        DrawOrdered(draw, scene, images, viewportSize, view, localization, strings, diagnostics);
         return diagnostics;
     }
 
@@ -35,7 +35,7 @@ public static class EditSceneRenderer
     /// <remarks>Layout-first and Order sorting match Build. Append order follows the caller DrawList state.</remarks>
     public static IReadOnlyList<Diagnostic> Append(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize, Matrix4x4 view,
-        LocalizationService? localization = null)
+        LocalizationService? localization = null, LocalizationStore? strings = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(scene);
@@ -43,7 +43,7 @@ public static class EditSceneRenderer
         List<Diagnostic> diagnostics = [];
         if (!IsDrawableViewport(viewportSize) || !IsAffine(view))
             return diagnostics;
-        DrawOrdered(draw, scene, images, viewportSize, view, localization, diagnostics);
+        DrawOrdered(draw, scene, images, viewportSize, view, localization, strings, diagnostics);
         return diagnostics;
     }
     /// <summary>Collects scene-space layouts once per frame with layout diagnostics. Never throws.</summary>
@@ -63,7 +63,7 @@ public static class EditSceneRenderer
     /// <remarks>Sorting and view composition match Build. Layout diagnostics come from <see cref="CollectLayouts"/>.</remarks>
     public static IReadOnlyList<Diagnostic> AppendWithLayouts(
         DrawList draw, IReadOnlyList<SceneViewMath.LayoutEntry> layouts, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize, Matrix4x4 view,
-        LocalizationService? localization = null)
+        LocalizationService? localization = null, LocalizationStore? strings = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(layouts);
@@ -71,7 +71,7 @@ public static class EditSceneRenderer
         List<Diagnostic> diagnostics = [];
         if (!IsDrawableViewport(viewportSize) || !IsAffine(view))
             return diagnostics;
-        DrawEntries(draw, layouts, images, viewportSize, view, localization, diagnostics);
+        DrawEntries(draw, layouts, images, viewportSize, view, localization, strings, diagnostics);
         return diagnostics;
     }
 
@@ -88,15 +88,15 @@ public static class EditSceneRenderer
 
     private static void DrawOrdered(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
-        Matrix4x4 view, LocalizationService? localization, List<Diagnostic> diagnostics)
+        Matrix4x4 view, LocalizationService? localization, LocalizationStore? strings, List<Diagnostic> diagnostics)
     {
         var collected = CollectLayouts(scene, viewportSize, diagnostics);
-        DrawEntries(draw, collected, images, viewportSize, view, localization, diagnostics);
+        DrawEntries(draw, collected, images, viewportSize, view, localization, strings, diagnostics);
     }
 
     private static void DrawEntries(
         DrawList draw, IReadOnlyList<SceneViewMath.LayoutEntry> layouts, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
-        Matrix4x4 view, LocalizationService? localization, List<Diagnostic> diagnostics)
+        Matrix4x4 view, LocalizationService? localization, LocalizationStore? strings, List<Diagnostic> diagnostics)
     {
         var clip = new Vector4(0, 0, viewportSize.X, viewportSize.Y);
         foreach (var entry in SceneViewMath.SortForRender(layouts))
@@ -111,7 +111,7 @@ public static class EditSceneRenderer
             }
             try
             {
-                UiTextRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, clip, view, localization);
+                UiTextRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, clip, view, localization, strings);
             }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
             {

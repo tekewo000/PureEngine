@@ -148,11 +148,11 @@ public sealed class PrefabSerializer(ComponentRegistry registry)
 
     /// <summary>Restores an isolated authoring scene while preserving the prefab's object and component IDs.</summary>
     public Scene RestoreForEditing(PrefabDocument document, out bool membersChanged,
-        DataAssetStore? assets = null, PrefabCatalog? prefabs = null, Func<Type, object>? factory = null)
+        DataAssetStore? assets = null, PrefabCatalog? prefabs = null, Func<Type, object>? factory = null, LocalizationStore? localization = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ValidateStructure(document);
-        return new SceneSerializer(registry, assets, prefabs).Restore(
+        return new SceneSerializer(registry, assets, prefabs, localization).Restore(
             new SceneDocument { Version = StrictReferenceVersion, Objects = document.Objects }, factory, out membersChanged);
     }
 

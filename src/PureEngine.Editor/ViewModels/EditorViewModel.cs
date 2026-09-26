@@ -13,12 +13,14 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
         Hierarchy.StatusChanged += SetStatus;
         DataAsset = new DataAssetViewModel(Documents, Inspector);
         DataAssetTable = new DataAssetTableViewModel(Documents.Table, Inspector);
+        Localization = new LocalizationViewModel(Documents, Inspector);
         Play = new PlayViewModel(this);
         Compilation = new CompilationViewModel(this);
         StartPlayCommand = new EditorCommand(Play.Start, () => !IsDisposed && !Play.IsPlaying);
         StopPlayCommand = new EditorCommand(() => Play.Stop(), () => !IsDisposed && Play.IsPlaying);
         SaveDataAssetCommand = new EditorCommand(() => _ = RunSave(SaveDataAsset), () => CanEdit && !FileBusy && DataAsset.CanSave);
         SaveTableCommand = new EditorCommand(() => _ = RunSave(SaveTable), () => CanEdit && !FileBusy && DataAssetTable.CanSave);
+        SaveLocalizationCommand = new EditorCommand(() => _ = RunSave(SaveLocalization), () => CanEdit && !FileBusy && Localization.CanSave);
         SavePrefabCommand = new EditorCommand(() => _ = RunSave(SavePrefab), () => CanSavePrefab && !FileBusy);
         DataAsset.PropertyChanged += (_, args) =>
         {
@@ -27,6 +29,10 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
         DataAssetTable.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(DataAssetTableViewModel.CanSave)) SaveTableCommand.Refresh();
+        };
+        Localization.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(LocalizationViewModel.CanSave)) SaveLocalizationCommand.Refresh();
         };
         Play.PropertyChanged += (_, args) =>
         {
@@ -48,11 +54,12 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
     public ConsoleViewModel Console { get; } = new();
     public PlayViewModel Play { get; }
     public CompilationViewModel Compilation { get; }
-    public LocalizationViewModel Localization { get; } = new();
+    public LocalizationViewModel Localization { get; }
     public EditorCommand StartPlayCommand { get; }
     public EditorCommand StopPlayCommand { get; }
     public EditorCommand SaveDataAssetCommand { get; }
     public EditorCommand SaveTableCommand { get; }
+    public EditorCommand SaveLocalizationCommand { get; }
     public EditorCommand SavePrefabCommand { get; }
     public SceneSerializer SceneSerializer { get; private set; }
     public ProjectComponents Components { get; private set; } = new();
@@ -70,6 +77,7 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
             Changed(nameof(IsFileIdle));
             SaveDataAssetCommand.Refresh();
             SaveTableCommand.Refresh();
+            SaveLocalizationCommand.Refresh();
             SavePrefabCommand.Refresh();
         }
     }
@@ -196,6 +204,26 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
         if (saved) DocumentSaved?.Invoke(EditedDocumentKind.Table);
         SetStatus(DataAssetTable.OperationStatus, !saved);
         return saved;
+    }
+
+    public bool SaveLocalization()
+    {
+        if (!CanEdit) return false;
+        if (ProjectFile is null || !Documents.Localization.IsDirty) return true;
+        try
+        {
+            Documents.Localization.Save(ProjectFile.LocalizationPath, ProjectFile);
+        }
+        catch (Exception error)
+        {
+            SetStatus($"Cannot save localization: {error.GetBaseException().Message}", true);
+            return false;
+        }
+        DocumentSaved?.Invoke(EditedDocumentKind.Localization);
+        Localization.Refresh();
+        RefreshDocumentState();
+        SetStatus($"Saved localization: {LocalizationSerializer.FileName}");
+        return true;
     }
 
     internal void RefreshAfterCodeAdoption()

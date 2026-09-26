@@ -29,6 +29,8 @@ public static class SceneReferenceTypes
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(registry);
+        if (type == typeof(LocalizedTextId))
+            return true;
         if (IsSceneObjectReference(type))
             return true;
         if (DataAssetStore.IsAssetType(type))
@@ -51,6 +53,8 @@ public static class SceneReferenceTypes
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(registry);
+        if (type == typeof(LocalizedTextId))
+            return true;
         if (IsSceneObjectReference(type))
             return true;
         if (DataAssetStore.IsAssetType(type))

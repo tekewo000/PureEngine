@@ -187,6 +187,22 @@ public sealed class ProjectFile
             throw new InvalidDataException("Save prefabs as .pure.prefab.yaml inside the project folder.");
     }
 
+    /// <summary>Single project-wide localization table file at the project root.</summary>
+    public string LocalizationPath => Path.Combine(RootDirectory, LocalizationSerializer.FileName);
+
+    /// <summary>Localization table file extension, distinct from scenes, data assets, and prefabs.</summary>
+    public static bool IsLocalizationFileName(string fileName) =>
+        fileName.EndsWith(".pure.loc.yaml", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Rejects paths escaping the project and enforces the localization table extension.</summary>
+    public void ValidateLocalizationPath(string path)
+    {
+        path = Path.GetFullPath(path);
+        ValidateProjectPath(RootDirectory, path);
+        if (!IsLocalizationFileName(path))
+            throw new InvalidDataException("Save the localization table as .pure.loc.yaml inside the project folder.");
+    }
+
     /// <summary>Returns a non-duplicated prefab name within the specified folder.</summary>
     public string NextPrefabName(string relativeDirectory, string baseName)
     {

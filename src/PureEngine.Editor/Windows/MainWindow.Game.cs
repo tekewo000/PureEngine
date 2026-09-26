@@ -63,7 +63,7 @@ public partial class MainWindow
             states[id] = new GameSceneRenderer.ButtonVisual(state, GameViewport.IsKeyboardFocusWithin && _gameFocused == id);
         }
         var localization = ViewModel.Play.PlayLocalization ?? ViewModel.Localization.PreviewService;
-        var diagnostics = GameSceneRenderer.Build(draw, runtime.Scene, _previewImages, size, states, localization);
+        var diagnostics = GameSceneRenderer.Build(draw, runtime.Scene, _previewImages, size, states, localization, runtime.Scene.Localization);
         _gameDrawFailures.Clear();
         foreach (var diagnostic in diagnostics)
             _gameDrawFailures.Add(diagnostic.ObjectId);

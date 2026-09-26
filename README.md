@@ -38,7 +38,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
 - ツールバーのPlay／Stopで編集中シーンの複製を開始・停止できる。Play中は約60Hzで更新し、Stopで終了する。実行中の編集・切替は無効化する。
 - GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。`Text` の内容・色・サイズも描く。`LocalizedEntry` を付けたTextはプレビュー言語・実行言語で解決した文言を描く。
-- 文言の多言語化は `LocalizedText` データアセットで行う。`Localization/Text` から作り、キー名と言語ごとの本文・ボイス欄を持つ。`Text` の `LocalizedEntry` 欄で選ぶだけで、改名・本文編集はアセット側に集約する。ツールバーの言語選択でScene View／Gameの表示を切り替え、ゲームコードは `LocalizationService` のコンストラクタ注入で取得・切替する。
+- 文言の多言語化はプロジェクト直下の文言テーブルで行う。Game横のLocalizationタブで行（キー）と言語列を編集し、`Text` の `LocalizedEntry` 欄でキーを選ぶだけで、改名・本文編集はタブに集約する。ツールバーの言語選択でScene View／Gameの表示を切り替え、ゲームコードは `LocalizationService` と `LocalizationStore` のコンストラクタ注入で取得・切替する。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
 
 ## 技術
@@ -529,21 +529,21 @@ Imageは`RendererComponent`から派生し、`Sprite`・`Color`・`Order = 0`を
 
 ## Localization（Text・Voiceの下地）
 
-文言は`LocalizedText`（`core.localized-text`）というデータアセットで持ち、表示キー名・言語ごとの本文・言語ごとのボイス欄からなる。言語キーは小文字のBCP47式（`ja`・`en`・`ko`等）。`[DataAsset("Localization/Text")]` の作成メニューから作り、単体InspectorとData Assets表の一括編集で言語ごとの中身を入れる。言語列の専用グリッドは後続で、同じファイル形式の表示切替として足す。
+文言はプロジェクト直下の `Localization.pure.loc.yaml` に1表で持つ。言語列はテーブル全体で統一し（行ごとの言語差はない）、行は表示キー名・言語ごとの本文・言語ごとのボイス欄からなる。言語キーは小文字のBCP47式（`ja`・`en`・`ko`等）。Game横のLocalizationタブで行の追加・改名・削除と言語列の追加・削除、各セルの本文・ボイス編集を行う。
 
 ```csharp
-// game code resolves entries through constructor injection.
-public sealed class Shop(LocalizationService localization)
+// game code resolves rows through constructor injection.
+public sealed class Shop(LocalizationService localization, LocalizationStore strings)
 {
-    public string Title(LocalizedText entry) => localization.ResolveText(entry, "Shop");
-    public string? Voice(LocalizedText entry) => localization.ResolveVoice(entry);
+    public string Title(LocalizedTextId id) => localization.ResolveText(strings, id, "Shop");
+    public string? Voice(LocalizedTextId id) => localization.ResolveVoice(strings, id);
 }
 ```
 
-- `Text.LocalizedEntry` に付けた文言は、ツールバーのプレビュー言語（Scene View／Game共通）と実行言語で解決して描く。直書き `Content` は参照なし・全言語空のときの代替になる。空欄は未翻訳扱いで既定言語（`ja`）→最初の可用言語の順に代替し、空白は描かない。
-- 保存するのは文言ファイルの不変IDだけで、表示キー名の改名では壊れない。ファイル削除はMissing表示でID保持し、戻せば復旧する（データアセット参照と同じ流儀）。Clone・Playはスナップショット分離し、実行中の言語切替はその実行だけに効く。
+- `Text.LocalizedEntry` に付けた行は、ツールバーのプレビュー言語（Scene View／Game共通）と実行言語で解決して描く。直書き `Content` は参照なし・全言語空のときの代替になる。空欄は未翻訳扱いで既定言語（`ja`）→表の最初の可用言語の順に代替し、空白は描かない。
+- 保存するのは行の不変IDだけで、表示キー名の改名では壊れない。行の削除はMissing表示でID保持し、戻せば復旧する。Clone・Playはスナップショット分離し、実行中の言語切替はその実行だけに効く。未保存の表がある間はPlayを開始しない。
 - ボイス欄は音声基盤が来るまでの予約で、文字列のまま保存・編集できる。再生解決は `ResolveVoice`（空は無音）までで、発音・音量の扱いは音実装時に決める。
-- 言語の追加は文言の辞書にキーを足すだけ。プレビュー選択肢は全文言の和集合＋既定言語で作り、選択は保存しない。確定した仕様は[設計書](docs/EngineArchitecture.md#uiコンポーネント)、検証状況は[実装計画](docs/ImplementationPlan.md#localization2026-09-26)を参照する。
+- 言語の追加は列の追加で、全行に空欄ができる。プレビュー選択肢は表の言語列で作り、選択は保存しない。確定した仕様は[設計書](docs/EngineArchitecture.md#uiコンポーネント)、検証状況は[実装計画](docs/ImplementationPlan.md#localization2026-09-26)を参照する。
 
 ## Game表示とButton操作
 

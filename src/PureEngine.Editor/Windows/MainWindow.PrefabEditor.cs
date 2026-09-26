@@ -12,11 +12,12 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    /// <summary>Viewport tab order: Scene View, Game, Data Assets table, Prefab Editor. Prefab indices follow the table.</summary>
+    /// <summary>Viewport tab order: Scene View, Game, Data Assets table, Localization, Prefab Editor. Prefab indices follow the tables.</summary>
     internal const int SceneViewportIndex = 0;
     internal const int GameViewportIndex = 1;
     internal const int DataAssetTableViewportIndex = 2;
-    internal const int PrefabViewportIndex = 3;
+    internal const int LocalizationViewportIndex = 3;
+    internal const int PrefabViewportIndex = 4;
 
     private bool _switchingViewport;
     private int _activeViewportIndex;
@@ -97,7 +98,8 @@ public partial class MainWindow
         if (requested == _activeViewportIndex) return;
         SetViewportSelection(_activeViewportIndex);
         if (ViewModel.FileBusy || (requested == PrefabViewportIndex && (Documents.Prefab is null || IsPlaying))
-            || (requested == DataAssetTableViewportIndex && IsPlaying)) return;
+            || (requested == DataAssetTableViewportIndex && IsPlaying)
+            || (requested == LocalizationViewportIndex && IsPlaying)) return;
         // The table is an additional view, not a document replacement: it never forces the single asset closed.
         if (requested != DataAssetTableViewportIndex && HasInputErrors && Documents.Asset is null)
         {

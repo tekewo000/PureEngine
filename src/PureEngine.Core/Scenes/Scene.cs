@@ -17,6 +17,9 @@ public sealed class Scene
 
     public DataAssetStore DataAssets { get; internal set; } = new();
 
+    /// <summary>Localization table snapshot for entry resolution. Editing keeps it in sync with the table tab.</summary>
+    public LocalizationStore Localization { get; internal set; } = new();
+
     public PrefabReferenceStore Prefabs { get; internal set; } = new();
 
     /// <summary>Components owned by this scene, including inactive prefab templates, for resource cleanup.</summary>

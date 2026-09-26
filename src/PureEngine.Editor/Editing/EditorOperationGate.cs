@@ -19,11 +19,12 @@ public static class EditorOperationGate
     }
 
     /// <summary>Reason to refuse starting play. Null when it can start.</summary>
-    public static string? PlayBlockReason(bool alreadyPlaying, bool fileBusy, bool hasInputErrors)
+    public static string? PlayBlockReason(bool alreadyPlaying, bool fileBusy, bool hasInputErrors, bool localizationDirty = false)
     {
         if (alreadyPlaying) return "Already playing.";
         if (fileBusy) return "Cannot play during file operations.";
         if (hasInputErrors) return "Fix the Inspector input errors.";
+        if (localizationDirty) return "Save the localization table before playing.";
         return null;
     }
 
