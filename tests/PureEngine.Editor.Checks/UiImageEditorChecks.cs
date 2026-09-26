@@ -60,8 +60,8 @@ internal static class UiImageEditorChecks
             var controls = dialog.GetVisualDescendants().OfType<Control>().ToList();
             var search = controls.OfType<TextBox>().Single();
             var list = controls.OfType<ListBox>().Single();
-            var add = controls.OfType<Button>().Single(button => Equals(button.Content, "Add"));
-            var close = controls.OfType<Button>().Single(button => Equals(button.Content, "Close"));
+            var add = controls.OfType<Button>().Single(button => Equals(button.GetValue(AutomationProperties.NameProperty) as string, "AddComponentAdd"));
+            var close = controls.OfType<Button>().Single(button => Equals(button.GetValue(AutomationProperties.NameProperty) as string, "AddComponentClose"));
             list.SelectedIndex = list.Items.Count - 1;
             Dispatcher.UIThread.RunJobs();
             Check(list.SelectedIndex == list.Items.Count - 1, "Selecting a row must not rebuild/reset the list.");
