@@ -39,6 +39,10 @@ static class EditorChromeChecks
             Click(menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Add Empty")));
             Check(Equals(sceneTab.Header, "Scene View *"), "The Scene tab must carry the same unsaved marker as the title.");
             Check(compile.Text == "Compile: —", "Selection changes must not touch the compile status.");
+            var selected = editor.ViewModel.Inspector.SelectedObject;
+            Check(selected is not null, "Adding an object must select it for the Inspector.");
+            Check(editor.FindControl<TextBlock>("ObjectId")!.Text == $"ID: {selected!.Id}",
+                "The Inspector header must show the ID on the NAME row.");
 
             typeof(MainWindow).GetMethod("SetCompileStatusForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(editor, [TimeSpan.FromSeconds(1.23)]);
@@ -65,6 +69,6 @@ static class EditorChromeChecks
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
-        Console.WriteLine("PASS: Editor chrome compile status, dirty tab marker, Game placeholder, and numeric field face.");
+        Console.WriteLine("PASS: Editor chrome compile status, dirty tab marker, Game placeholder, numeric field face, and Inspector NAME/ID header.");
     }
 }
