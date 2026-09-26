@@ -13,6 +13,19 @@ public partial class MainWindow
 {
     private const int InspectorPageSize = 32;
 
+    private static Avalonia.Controls.Button BuildValueCommandButton(string content, string name)
+    {
+        var button = new Avalonia.Controls.Button
+        {
+            Content = content,
+            FontSize = 11,
+            Padding = new Avalonia.Thickness(8, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        button.SetValue(AutomationProperties.NameProperty, name);
+        return button;
+    }
+
     private static bool IsValueContainer(Type type) => type.IsArray || type.IsGenericType
         && (type.GetGenericTypeDefinition() == typeof(List<>) || type.GetGenericTypeDefinition() == typeof(Dictionary<,>));
 
@@ -99,7 +112,8 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" } };
         var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
         ToolTip.SetTip(create, "Create a new instance.");
-        var clear = BuildHeaderButton("Set Null", $"{name}.Null");
+        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{name}.Null");
+        ToolTip.SetTip(clear, "Set to null.");
         Action refresh = () => { };
         var toggle = BuildCollapseToggle($"{name}.Collapse", name, ViewModel.Inspector.CollapsedMembers, expanded =>
         {
@@ -174,7 +188,8 @@ public partial class MainWindow
         ToolTip.SetTip(add, "Add an entry.");
         var clear = BuildHeaderIconButton("Icon.Delete", $"{name}.Clear");
         ToolTip.SetTip(clear, "Remove all entries; keep an empty collection.");
-        var setNull = BuildHeaderButton("Set Null", $"{name}.Null");
+        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{name}.Null");
+        ToolTip.SetTip(setNull, "Set the collection to null.");
         var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
         ToolTip.SetTip(create, "Create an empty collection.");
         var page = 0;
@@ -242,8 +257,8 @@ public partial class MainWindow
             }
             if (size > InspectorPageSize)
             {
-                var previous = BuildHeaderButton("Previous", $"{name}.Previous");
-                var next = BuildHeaderButton("Next", $"{name}.Next");
+                var previous = BuildValueCommandButton("Previous", $"{name}.Previous");
+                var next = BuildValueCommandButton("Next", $"{name}.Next");
                 previous.IsEnabled = page > 0;
                 next.IsEnabled = start + InspectorPageSize < size;
                 previous.Click += (_, _) => { page--; refresh(); };
@@ -375,7 +390,7 @@ public partial class MainWindow
             return box;
         }).ToList();
         panel.Children.Add(BuildAxisGrid([.. Enumerable.Range(0, array.Rank).Select(dimension => dimension.ToString(CultureInfo.InvariantCulture))], boxes));
-        var resize = BuildHeaderButton("Resize", $"{name}.Resize");
+        var resize = BuildValueCommandButton("Resize", $"{name}.Resize");
         panel.Children.Add(resize);
         resize.Click += (_, _) =>
         {

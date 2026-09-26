@@ -75,7 +75,7 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - 実行中に変化した値を、制作データへ自動で書き戻さない。
 - 非publicメンバー、readonly、読み取り専用プロパティは対象外。対応する値の型は下記の範囲とする。
 - Inspectorの表示順は基底→派生の順とする。同じクラス内では従来の `MetadataToken` 順を維持する（フィールドがプロパティより先で、両者を混ぜたソース宣言順ではない）。`Image`・`Text` はどちらも共通基底の `Order` が先頭になる。
-- 参照欄は名前だけの1行選択＋右端の×（Clear）とし、ID・フルパスはツールチップへ移す。2行目の補足はMissing・旧インライン値の注意だけに使う。コレクション見出しはAdd・Set Nullと目立たない一括Clearにし、要素の削除は行の×で行う。
+- 参照欄は名前だけの1行選択＋右端の×（Clear）とし、ID・フルパスはツールチップへ移す。2行目の補足はMissing・旧インライン値の注意だけに使う。コレクション見出しは枠なしアイコンのAdd・Set Null・一括Clearにし、要素の削除は行の×で行う。
 
 対応する値の型（Coreの `InspectorValueTypes` で検証・変換し、Editorは同じ範囲を表示する）：
 
@@ -87,7 +87,7 @@ Destroyは削除時の処理であり、Stop時も実行用Sceneの破棄に伴�
 - `Transform`：null可の参照型。`LocalPosition`・`LocalRotation`・`LocalScale` を入れ子で編集する
 - `Sprite`：null可の参照型。画像IDと切り出し矩形を持ち、Inspectorでは選択・None解除で編集する。2行目の補足はMissing・切り出し時のみ表示する
 - 配列・リスト：ゼロ下限の `T[]`・多次元配列 `T[,]` 等・`List<T>`。対応値型、参照、コンテナを任意に入れ子にでき、nullと空を区別する
-- 辞書：`Dictionary<string, TValue>`（値は他の対応型と同じ範囲、キーはstringのみ、null可）。見出しはAdd・Set Nullと目立たない一括Clear
+- 辞書：`Dictionary<string, TValue>`（値は他の対応型と同じ範囲、キーはstringのみ、null可）。見出しは枠なしアイコンのAdd・Set Null・一括Clear
 - 自作struct：`[Inspector]` メンバーを持つ値として扱い、Nullableにも対応する。深い入れ子・配列要素・辞書値の編集はすべての親へ書き戻す。struct自体のComponentアタッチは対象外
 - 自作クラス：既存互換としてpublicな引数なしコンストラクタを持つclassで、すべての `[Inspector]` メンバーが対応型であるもの。参照型のためnull可。抽象クラス・ジェネリック・`object` 自体・再帰（自分を直接・間接に含む）は対象外。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する。新しい埋め込み指定は追加せず、共有設定はDataAssetを使う
 
