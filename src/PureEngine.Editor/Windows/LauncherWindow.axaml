@@ -30,10 +30,15 @@
                      AutomationProperties.Name="Recent projects">
               <ListBox.ItemTemplate>
                 <DataTemplate DataType="editor:RecentProject">
-                  <StackPanel Spacing="5" ToolTip.Tip="{Binding ManifestPath}">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding ManifestPath}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
-                  </StackPanel>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="5" ToolTip.Tip="{Binding ManifestPath}" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding ManifestPath}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Remove" Click="OnRemoveRecent"
+                            AutomationProperties.Name="Remove recent project" ToolTip.Tip="Remove from list"
+                            VerticalAlignment="Center" Margin="8,0,0,0" />
+                  </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>

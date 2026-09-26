@@ -369,7 +369,7 @@ components:
 - アプリ起動時は `LauncherWindow` を表示し、新規作成・Projectファイルの選択・最近開いたProjectからの再開を行う。
 - `ProjectSession` がProjectと起動シーンを読み込んで検証し、成功したデータを `MainWindow` に渡す。読み込み失敗時はLauncherにエラーを表示する。
 - Editorを開いている間はLauncherを非表示にする。Editorを閉じると既存の未保存確認を経てLauncherへ戻る。Launcherを閉じるとアプリを終了する。
-- 履歴はProject名とmanifestのローカルパスを最大12件保存する。保存先は `%LOCALAPPDATA%/PureEngine/recent-projects.json`。履歴が破損・保存不可でもProjectの作成・読み込みは妨げない。
+- 履歴はProject名とmanifestのローカルパスを最大12件保存する。保存先は `%LOCALAPPDATA%/PureEngine/recent-projects.json`。履歴が破損・保存不可でもProjectの作成・読み込みは妨げない。各エントリは一覧のRemoveボタンまたはDelete／Backspaceで削除でき、削除は履歴ファイルのみに反映しProjectフォルダには触れない。
 - Launcherから新規作成するProjectは空のMainシーンを持つ。Editor内でのProject作成・切り替え操作はLauncherへの復帰に統一する。
 
 ## UI・描画・プレビュー
