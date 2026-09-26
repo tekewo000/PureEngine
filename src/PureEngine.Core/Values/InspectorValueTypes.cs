@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace PureEngine.Core;
 
-/// <summary>Inspector and persistable value types. Handles scalars, enums, vectors, colors, Transform, Sprite, arrays, List, dictionaries, and nested custom classes.</summary>
+/// <summary>Inspector and persistable value types, including nested containers and custom classes and structs.</summary>
 public static class InspectorValueTypes
 {
     public static bool IsSupportedType(Type type)
@@ -30,18 +30,15 @@ public static class InspectorValueTypes
             return true;
         var underlying = Nullable.GetUnderlyingType(type);
         if (underlying is not null)
-            return underlying == typeof(int) || underlying == typeof(float) || underlying == typeof(double) || underlying == typeof(bool)
-                || underlying == typeof(Vector2) || underlying == typeof(Vector3) || underlying == typeof(Vector4) || underlying == typeof(Quaternion)
-                || underlying == typeof(Color)
-                || underlying.IsEnum;
+            return IsSupportedTypeCore(underlying, chain);
         if (type.IsArray)
-            return type.GetArrayRank() == 1 && IsSupportedElementCore(type.GetElementType()!, chain);
+            return (type.GetArrayRank() > 1 || type.IsSZArray) && IsSupportedTypeCore(type.GetElementType()!, chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
-            return IsSupportedElementCore(type.GetGenericArguments()[0], chain);
+            return IsSupportedTypeCore(type.GetGenericArguments()[0], chain);
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
         {
             var args = type.GetGenericArguments();
-            return args[0] == typeof(string) && IsSupportedElementCore(args[1], chain);
+            return args[0] == typeof(string) && IsSupportedTypeCore(args[1], chain);
         }
         return IsCustomInspectorObjectCore(type, chain);
     }
@@ -53,32 +50,12 @@ public static class InspectorValueTypes
             throw new InvalidDataException($"Unsupported Inspector value type: {type.FullName}");
     }
 
-    private static bool IsSupportedElementCore(Type type, HashSet<Type> chain)
-    {
-        if (type == typeof(string))
-            return true;
-        if (type == typeof(int) || type == typeof(float) || type == typeof(double) || type == typeof(bool))
-            return true;
-        if (type == typeof(Vector2) || type == typeof(Vector3) || type == typeof(Vector4) || type == typeof(Quaternion) || type == typeof(Color))
-            return true;
-        if (type == typeof(Sprite))
-            return true;
-        if (type.IsEnum)
-            return true;
-        var underlying = Nullable.GetUnderlyingType(type);
-        if (underlying is not null)
-            return underlying == typeof(int) || underlying == typeof(float) || underlying == typeof(double) || underlying == typeof(bool)
-                || underlying.IsEnum;
-        return IsCustomInspectorObjectCore(type, chain);
-    }
-
     /// <summary>
-    /// Whether this is a custom class treated as nested <c>[Inspector]</c> members rather than with a built-in conversion.
+    /// Whether this is a custom class or struct treated as nested <c>[Inspector]</c> members rather than with a built-in conversion.
     /// The editor uses this check to show a nested editor. Derived-type assignment is not handled; the declared and runtime types must match.
     /// </summary>
     /// <remarks>
-    /// Requirements: a reference-type class (excluding string, arrays, List, Dictionary, Nullable, enums, Transform, and Sprite),
-    /// excluding abstract types, generics, structs, and object itself, with a public parameterless constructor, and
+    /// Requirements: a concrete non-generic custom class with a public parameterless constructor, or a custom struct, and
     /// with every <c>[Inspector]</c> member being a supported type. Recursion (direct or indirect self-containment) is not supported.
     /// </remarks>
     public static bool IsCustomInspectorObject(Type type)
@@ -108,18 +85,21 @@ public static class InspectorValueTypes
         }
     }
 
-    /// <summary>Checks only the custom-class shape without full support validation. Used for branching in the conversion body. Callers perform validation.</summary>
+    /// <summary>Checks the custom class or struct shape. Callers perform full member validation.</summary>
     private static bool IsCustomObjectShape(Type type)
     {
         if (type == typeof(object) || type == typeof(string))
             return false;
-        if (!type.IsClass || type.IsAbstract || type.IsValueType || type.IsEnum)
+        if ((!type.IsClass && !type.IsValueType) || type.IsAbstract || type.IsEnum || type.IsByRefLike)
             return false;
         if (type.IsArray || type.IsGenericType)
             return false;
         if (type == typeof(Transform) || type == typeof(Sprite))
             return false;
-        return type.GetConstructor(Type.EmptyTypes) is not null;
+        if (type.IsValueType && (type == typeof(Color)
+            || type.Assembly == typeof(int).Assembly || type.Assembly == typeof(Vector2).Assembly))
+            return false;
+        return type.IsValueType || type.GetConstructor(Type.EmptyTypes) is not null;
     }
 
     private static Type MemberType(MemberInfo member) => member is FieldInfo field
@@ -278,10 +258,7 @@ public static class InspectorValueTypes
             if (value.GetType() != type)
                 throw new InvalidDataException($"Invalid array value: {value.GetType().FullName}.");
             var array = (Array)value;
-            var storable = new List<object?>(array.Length);
-            foreach (var element in array)
-                storable.Add(ToStorableCore(element, elementType, seen));
-            return storable;
+            return InspectorArrayShape.Capture(array, element => ToStorableCore(element, elementType, seen));
         }
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
         {
@@ -471,11 +448,8 @@ public static class InspectorValueTypes
         if (type.IsArray)
         {
             var elementType = type.GetElementType()!;
-            var items = ToSequence(raw, path);
-            var array = Array.CreateInstance(elementType, items.Count);
-            for (var i = 0; i < items.Count; i++)
-                array.SetValue(FromStorable(items[i], elementType, $"{path}[{i}]"), i);
-            return array;
+            return InspectorArrayShape.Restore(raw, type, path,
+                (item, itemPath) => FromStorable(item, elementType, itemPath));
         }
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
         {
