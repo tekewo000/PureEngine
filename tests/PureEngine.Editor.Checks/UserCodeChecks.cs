@@ -22,16 +22,16 @@ static class UserCodeChecks
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static Scene EditScene(MainWindow window) =>
-        ((EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!).Current;
+        ((EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(window)!).Current;
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(window)!;
     private static bool HasPendingReload(MainWindow window) =>
-        typeof(MainWindow).GetField("_pendingCompilation", Instance)!.GetValue(window) is not null;
+        window.ViewModel.Compilation.HasPending;
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
     }
-    private static void PumpUntil(Func<bool> condition, string message)
+    private static void PumpUntil(Func<bool> condition, string message, Func<string>? failureContext = null)
     {
         var timer = Stopwatch.StartNew();
         while (!condition() && timer.Elapsed < TimeSpan.FromSeconds(15))
@@ -39,7 +39,8 @@ static class UserCodeChecks
             using var slice = new CancellationTokenSource(30);
             Dispatcher.UIThread.MainLoop(slice.Token);
         }
-        Check(condition(), message);
+        var completed = condition();
+        Check(completed, message + (completed || failureContext is null ? "" : " " + failureContext()));
     }
     private static string Source(int version) => $$"""
         using PureEngine.Core;
@@ -108,7 +109,7 @@ static class UserCodeChecks
         item.SetUpdatePriority(player, 5);
         var id = item.Id;
         var editor = new MainWindow(session);
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         Check(ReferenceEquals(owner, session.Components), "Editor must adopt the session owner.");
         Check(editor.FindControl<TextBlock>("CompileStatus")!.Text!.StartsWith("Compile: ", StringComparison.Ordinal)
             && editor.FindControl<TextBlock>("CompileStatus")!.Text != "Compile: —",
@@ -119,11 +120,12 @@ static class UserCodeChecks
         try
         {
             // Keep the user's folder selected across reloads.
-            typeof(MainWindow).GetField("_explorerFolder", Instance)!.SetValue(editor, "Gameplay/Actors");
+            editor.ViewModel.Project.Folder = "Gameplay/Actors";
             Call(editor, "RefreshProjectExplorer");
             Check(editor.FindControl<ListBox>("ProjectFiles")!.Items.Count == 1, "C# must appear in its own folder.");
             File.WriteAllText(file, Source(2) + "\npublic record Extra { }\npublic class Second { }");
-            PumpUntil(() => Version(editor) == 2, "Saving C# must reload automatically.");
+            PumpUntil(() => Version(editor) == 2, "Saving C# must reload automatically.", () =>
+                $"Status: {editor.FindControl<TextBlock>("FileStatus")!.Text}; compile: {editor.FindControl<TextBlock>("CompileStatus")!.Text}; pending: {HasPendingReload(editor)}; input errors: {editor.ViewModel.Inspector.InvalidCount}/{editor.ViewModel.Inspector.HasNameError}; task: {Field<Task>(editor, "ReloadTask").Status}.");
             Check(editor.FindControl<TextBlock>("CompileStatus")!.Text!.StartsWith("Compile: ", StringComparison.Ordinal)
                 && editor.FindControl<TextBlock>("CompileStatus")!.Text != "Compile: —",
                 "Reloading C# must update the compilation time.");
@@ -133,7 +135,7 @@ static class UserCodeChecks
                 && current.GetStartPriority(Player(editor)) == -9 && current.GetUpdatePriority(Player(editor)) == 5
                 && (int)Player(editor).GetType().GetField("Health")!.GetValue(Player(editor))! == 73
                 && editor.Title!.StartsWith("* "), "Reload must preserve identity, unsaved values, Priority and dirty state.");
-            Check(Field<string>(editor, "_explorerFolder") == "Gameplay/Actors", "Reload must preserve selected project folder.");
+            Check(editor.ViewModel.Project.Folder == "Gameplay/Actors", "Reload must preserve selected project folder.");
             Check((int)Player(editor).GetType().GetField("Added")!.GetValue(Player(editor))! == 42,
                 "New Inspector fields must keep their initializer.");
 
@@ -160,7 +162,7 @@ static class UserCodeChecks
             PumpUntil(() => editor.FindControl<TextBlock>("FileStatus")!.Text!.Contains("C# compilation failed"),
                 "Compiler errors must be reported.");
             Check(ReferenceEquals(good, Player(editor)), "Compile failure must keep the exact old instances.");
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Any(entry =>
+            Check(editor.ViewModel.Console.History.Any(entry =>
                 entry.Message.Contains("Player.cs(") && entry.Message.Contains("CS")),
                 "Console must include compiler file, line, and diagnostic.");
             File.WriteAllText(file, Source(5));
@@ -534,7 +536,7 @@ static class UserCodeChecks
     private static void CheckCreateCSharp(ProjectSession session)
     {
         var editor = new MainWindow(session);
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         void Create(string menuName, string? name)

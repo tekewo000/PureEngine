@@ -24,7 +24,8 @@ static class DataAssetEditorChecks
             .Single(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
         static void Click(Button button)
         {
-            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if (button.Command is { } command) command.Execute(button.CommandParameter);
+            else button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
         }
         static void Answer(string answer)
@@ -78,8 +79,7 @@ static class DataAssetEditorChecks
             var type = session.Components.DataAssetTypes.Single();
             var path = Path.Combine(root, "Sword.pure.asset.yaml");
             DataAssetFile.Create(path, type, session.Components.Registry);
-            typeof(MainWindow).GetField("_explorerFolder",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(editor, "");
+            editor.ViewModel.Project.Folder = "";
             Call(editor, "RefreshProjectExplorer");
             Dispatcher.UIThread.RunJobs();
             var files = Control<ListBox>(editor, "ProjectFiles");
@@ -141,7 +141,7 @@ static class DataAssetEditorChecks
             Check(!ReferenceEquals(session.Components.DataAssetTypes.Single(), type)
                 && Box(editor, "SwordData.Attack").Text == "25", "Compatible reload must rebind and preserve the asset.");
 
-            var state = (EditSceneStore)typeof(MainWindow).GetField("_editScene",
+            var state = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
             var readerType = session.Components.UserTypes.Single(candidate => candidate.Name == "AssetReader");
             var editServices = (PureEngine.Runtime.GameSession)typeof(MainWindow).GetProperty("EditSession",

@@ -732,8 +732,10 @@ global.jsonはEngineビルド時に埋め込んだSDK設定を不足時のみコ
 
 ## Editorの所有と実行接続（A1〜A5統合済み）
 
-依存方向はEditor → Runtime → Core。ProjectComponentsがプロジェクト単位の型登録・ソース対応・採用中コードを持つ。ComponentAssetsは状態を持たない共通処理のみを提供する。ProjectSessionは起動Scene・編集用サービス・ProjectComponentsを所有し、MainWindowへ引き渡す。
+EditorはMVVM構成とし、`EditorViewModel` が各ペイン、Play、コード反映を接続する。`EditorDocuments` が編集文書を所有し、`UserCodeReloadCoordinator` がScene・単体DataAsset・表編集の候補移行を接続する。MainWindowにはControl生成、ネイティブ入力、ダイアログ、描画ホストとモデルへの接続を残す。モジュールの責務と検証は [EditorMvvmMigration.md](EditorMvvmMigration.md) を参照。
 
-編集状態と編集用サービスはEditSceneStore、保存・Play・再読み込みの可否判定はEditorOperationGate、コード採用と旧資源の解放はUserCodeReloadCoordinatorが担当する。再読み込みは候補Registry・サービス・移行先Sceneを準備してから採用し、旧Component → 旧サービス → 旧コードの順に解放する。終了時もこの所有順に従う。
+依存方向はEditor → Runtime → Core。ProjectComponentsがプロジェクト単位の型登録・ソース対応・採用中コードを持つ。ComponentAssetsは状態を持たない共通処理のみを提供する。ProjectSessionは起動Scene・編集用サービス・ProjectComponentsと増分コンパイル状態を所有し、EditorViewModelへ引き渡す。
+
+編集状態と編集用サービスはEditSceneStore、保存・Play・再読み込みの可否判定はEditorOperationGate、コード採用と旧資源の解放はUserCodeReloadCoordinatorが担当する。PlayViewModelは実行Session、CompilationViewModelは要求世代・候補を所有する。再読み込みは候補Registry・サービス・移行先Sceneを準備してから採用し、旧Component → 旧サービス → 旧コードの順に解放する。終了時もこの所有順に従い、Viewの購読とタイマーを解除する。
 
 RuntimeのGameSession.CreateとPlaySession.PrepareはAction<IServiceCollection>を受け取る。EditorはGameServices.ForProjectから組み込み＋当該プロジェクトの登録を渡し、UIなしの実行側はゲーム側の登録処理を直接渡せる。完了条件と検証は[ArchitectureImprovements.md](ArchitectureImprovements.md)を参照。

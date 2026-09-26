@@ -42,7 +42,7 @@ public partial class MainWindow
         void refresh()
         {
             var selectedType = (list.SelectedItem as ComponentAddRow)?.Type;
-            var candidates = ComponentAssets.SearchCandidates(_components.Registry, search.Text);
+            var candidates = ComponentAssets.SearchCandidates(Components.Registry, search.Text);
             var rows = new List<ComponentAddRow>();
             foreach (var (type, typeId) in candidates)
             {
@@ -63,7 +63,7 @@ public partial class MainWindow
             if (list.SelectedItem is not ComponentAddRow row || row.Attached) return;
             try
             {
-                if (!_components.TryAttach(target, row.Type, EditSession.Factory)) return;
+                if (!Components.TryAttach(target, row.Type, EditSession.Factory)) return;
             }
             catch (Exception error)
             {

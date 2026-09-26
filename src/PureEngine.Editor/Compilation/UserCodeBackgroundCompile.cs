@@ -20,7 +20,7 @@ public sealed record UserCodeCompileAttempt(
 /// <summary>
 /// Runs only source reading and compilation in the background.
 /// Scene migration and result adoption run on the caller's UI thread, validating the generation immediately before adoption.
-/// MainWindow owns the latest pending result and releases it when a new request or shutdown makes it unnecessary.
+/// CompilationViewModel owns the latest pending result and releases it when a new request or shutdown makes it unnecessary.
 /// ProjectSession.OpenAsync owns the tracker until startup completes or is canceled.
 /// Only one compilation runs at a time; queued requests collapse to the latest ticket.
 /// </summary>

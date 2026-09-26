@@ -5,9 +5,9 @@ namespace PureEngine.Editor;
 
 /// <summary>
 /// Owner of the editing scene, path, dirty flag, and editing services. Consolidates the mutation paths
-/// for editing state that were spread across MainWindow partials; MainWindow handles view updates (items source, Inspector, title).
+/// for editing state. EditorDocuments owns the stores; pane models and bindings present their values.
 /// Has no Avalonia dependency. Returns the old scene to the caller for disposal.
-/// The coordinator (adoption) or MainWindow (shutdown) guarantees teardown order from components to services.
+/// The coordinator (adoption) or EditorDocuments (shutdown) guarantees teardown order from components to services.
 /// </summary>
 public sealed class EditSceneStore(Scene initial, string? path = null, bool dirty = false)
 {

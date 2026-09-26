@@ -16,7 +16,7 @@ static class PlayConnectionChecks
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", AnyInstance)!.GetValue(window)!;
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;
@@ -46,7 +46,7 @@ static class PlayConnectionChecks
     private static void EnsureChecks(MainWindow editor)
     {
         // A4: Register explicitly with each window's owner.
-        var components = Field<ProjectComponents>(editor, "_components");
+        var components = editor.ViewModel.Components;
         components.Registry.Register<PlayCounter>("checks.play-counter");
         components.Registry.Register<PlayBadLifecycle>("checks.play-bad");
         components.Registry.Register<PlayFailUpdate>("checks.play-fail-update");
@@ -93,7 +93,7 @@ static class PlayConnectionChecks
         {
             var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "EditSession");
-            var owner = Field<ProjectComponents>(editor, "_components");
+            var owner = editor.ViewModel.Components;
             var item = scene.AddEmpty();
             item.Rename("Player");
             owner.TryAttach(item, typeof(PlayCounter), services.Factory);
@@ -106,7 +106,7 @@ static class PlayConnectionChecks
             var status = Control<TextBlock>(editor, "FileStatus");
             Check(playButton.IsEnabled && !stopButton.IsEnabled, "Idle must enable Play and disable Stop.");
 
-            Call(editor, "StartPlay");
+            playButton.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Check((bool)Call(editor, "get_IsPlaying")!, "StartPlay must enter playing state.");
             Check(!playButton.IsEnabled && stopButton.IsEnabled, "Playing must enable Stop and disable Play.");
@@ -117,7 +117,7 @@ static class PlayConnectionChecks
             Check(timer is not null && timer.IsEnabled, "Play must drive Step on a timer.");
             StopTimer(editor);
 
-            var play = Field<PlaySession?>(editor, "_play")!;
+            var play = editor.ViewModel.Play.Session!;
             Check(play is not null && play.Runtime.IsRunning, "Play runtime must be running.");
             Check(PlayCounter.Starts == 1, $"Start must run once, got {PlayCounter.Starts}.");
             Call(editor, "StepPlayOnce", 1f / 60f);
@@ -126,7 +126,7 @@ static class PlayConnectionChecks
             Check(PlayCounter.Updates == 3, $"Update must continue, got {PlayCounter.Updates}.");
             Check(edit.Value == 10, "Running must not mutate the authoring scene.");
 
-            Call(editor, "StopPlay");
+            stopButton.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Check(!(bool)Call(editor, "get_IsPlaying")!, "StopPlay must leave playing state.");
             Check(PlayCounter.Destroys == 1, $"Stop must destroy once, got {PlayCounter.Destroys}.");
@@ -138,7 +138,7 @@ static class PlayConnectionChecks
             Check(PlayCounter.Updates == frozen, "Update must stop after Stop.");
 
             // A double stop is a no-op that keeps the editor operable.
-            Call(editor, "StopPlay");
+            stopButton.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Check(PlayCounter.Destroys == 1, "Double stop must not destroy twice.");
             Check(playButton.IsEnabled, "Double stop must stay operable.");
@@ -159,7 +159,7 @@ static class PlayConnectionChecks
             var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "EditSession");
             var item = scene.AddEmpty();
-            Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
+            editor.ViewModel.Components.TryAttach(item, typeof(PlayCounter), services.Factory);
             var edit = item.GetComponent<PlayCounter>()!;
             edit.Value = 41;
             var countBefore = scene.Objects.Count;
@@ -167,7 +167,7 @@ static class PlayConnectionChecks
 
             Call(editor, "StartPlay");
             StopTimer(editor);
-            var first = Field<PlaySession?>(editor, "_play")!;
+            var first = editor.ViewModel.Play.Session!;
             Call(editor, "StepPlayOnce", 1f / 60f);
             Call(editor, "StopPlay");
             Check(PlayCounter.Starts == 1 && PlayCounter.Destroys == 1, "First play must start and destroy once.");
@@ -175,7 +175,7 @@ static class PlayConnectionChecks
 
             Call(editor, "StartPlay");
             StopTimer(editor);
-            var second = Field<PlaySession?>(editor, "_play")!;
+            var second = editor.ViewModel.Play.Session!;
             Check(!ReferenceEquals(first, second) && !ReferenceEquals(first.Runtime, second.Runtime),
                 "Replay must create a new SceneRuntime.");
             Call(editor, "StepPlayOnce", 1f / 60f);
@@ -200,7 +200,7 @@ static class PlayConnectionChecks
             var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "EditSession");
             var item = scene.AddEmpty();
-            Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
+            editor.ViewModel.Components.TryAttach(item, typeof(PlayCounter), services.Factory);
             Dispatcher.UIThread.RunJobs();
             Call(editor, "SyncHierarchyForTest");
             Select(editor, item);
@@ -249,7 +249,7 @@ static class PlayConnectionChecks
             Call(editor, "StartPlay");
             Dispatcher.UIThread.RunJobs();
             Check(!(bool)Call(editor, "get_IsPlaying")!, "Failed start must not stay playing.");
-            Check(Field<PlaySession?>(editor, "_play") is null, "Failed start must release the session.");
+            Check(editor.ViewModel.Play.Session is null, "Failed start must release the session.");
             Check(status.Text?.Contains("Cannot start Play") == true, "Failed start must report the reason.");
             Check(Control<Button>(editor, "PlayButton").IsEnabled, "Failed start must restore buttons.");
             Check(SceneObjects(editor).IsEnabled, "Failed start must restore editing.");
@@ -271,7 +271,7 @@ static class PlayConnectionChecks
             var scene = EditScene(editor);
             var services = Field<GameSession>(editor, "EditSession");
             var item = scene.AddEmpty();
-            Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayFailUpdate), services.Factory);
+            editor.ViewModel.Components.TryAttach(item, typeof(PlayFailUpdate), services.Factory);
             Dispatcher.UIThread.RunJobs();
 
             Call(editor, "StartPlay");
@@ -280,7 +280,7 @@ static class PlayConnectionChecks
             Call(editor, "StepPlayOnce", 1f / 60f);
             Dispatcher.UIThread.RunJobs();
             Check(!(bool)Call(editor, "get_IsPlaying")!, "Update failure must auto-stop.");
-            Check(Field<PlaySession?>(editor, "_play") is null, "Auto-stop must release the session.");
+            Check(editor.ViewModel.Play.Session is null, "Auto-stop must release the session.");
             var status = Control<TextBlock>(editor, "FileStatus");
             Check(status.Text?.Contains("boom") == true, "Update failure must report runtime errors.");
             Check(PlayFailUpdate.Destroys == 1, "Auto-stop must destroy once.");
@@ -301,7 +301,7 @@ static class PlayConnectionChecks
         var scene = EditScene(editor);
         var services = Field<GameSession>(editor, "EditSession");
         var item = scene.AddEmpty();
-        Field<ProjectComponents>(editor, "_components").TryAttach(item, typeof(PlayCounter), services.Factory);
+        editor.ViewModel.Components.TryAttach(item, typeof(PlayCounter), services.Factory);
         Dispatcher.UIThread.RunJobs();
 
         Call(editor, "StartPlay");

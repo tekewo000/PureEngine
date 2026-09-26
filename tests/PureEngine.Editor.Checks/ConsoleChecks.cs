@@ -18,7 +18,7 @@ static class ConsoleChecks
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", AnyInstance)!.GetValue(window)!;
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static T Control<T>(MainWindow window, string name) where T : Control =>
         window.FindControl<T>(name)!;
@@ -44,7 +44,7 @@ static class ConsoleChecks
     private static void EnsureChecks(MainWindow editor)
     {
         // A4: Register explicitly with each window's owner. Do not depend on shared statics.
-        var components = Field<ProjectComponents>(editor, "_components");
+        var components = editor.ViewModel.Components;
         components.Registry.Register<ConsoleProbe>("checks.console-probe");
         components.Registry.Register<ConsoleFailUpdate>("checks.console-fail-update");
         components.Registry.Register<ConsoleFailCleanup>("checks.console-fail-cleanup");
@@ -113,7 +113,7 @@ static class ConsoleChecks
             var failure = new InvalidOperationException("outer", new ArgumentException("inner"));
             try { throw failure; } catch (Exception error) { Log.Error("hello-error", error); }
             Drain(editor);
-            var history = Field<List<LogEntry>>(editor, "_consoleHistory");
+            var history = editor.ViewModel.Console.History;
             Check(history.Count == 3, $"History must hold 3, got {history.Count}.");
             Check(history[0].Level == LogLevel.Info && history[1].Level == LogLevel.Warning && history[2].Level == LogLevel.Error,
                 "Levels must be Info/Warning/Error.");
@@ -157,7 +157,7 @@ static class ConsoleChecks
             Dispatcher.UIThread.RunJobs();
             Log.Info("hidden-tab");
             Drain(editor);
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 4, "Hidden tab must still receive logs.");
+            Check(editor.ViewModel.Console.History.Count == 4, "Hidden tab must still receive logs.");
             CloseEditor(editor);
         }
         finally
@@ -220,16 +220,16 @@ static class ConsoleChecks
             // Batch intake: many logs in one drain.
             for (var i = 0; i < 300; i++) Log.Info($"batch-{i}");
             Drain(editor);
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 4 + 1 + 300, "Batched intake must take all pending at once.");
+            Check(editor.ViewModel.Console.History.Count == 4 + 1 + 300, "Batched intake must take all pending at once.");
 
             // History cap: oldest retained entries are dropped and counted, queue drops are shown separately.
             // 1050 logs at once: queue keeps 1000 (drops 50), then history keeps 1000 newest.
             for (var i = 0; i < MainWindow.ConsoleMaxHistory + 50; i++) Log.Info($"history-cap-{i}");
             Drain(editor);
-            var capped = Field<List<LogEntry>>(editor, "_consoleHistory");
+            var capped = editor.ViewModel.Console.History;
             Check(capped.Count == MainWindow.ConsoleMaxHistory, $"History must cap at {MainWindow.ConsoleMaxHistory}, got {capped.Count}.");
-            Check(Field<int>(editor, "_consoleHistoryDropped") == 305,
-                $"History drops must be 305, got {Field<int>(editor, "_consoleHistoryDropped")}.");
+            Check(editor.ViewModel.Console.HistoryDropped == 305,
+                $"History drops must be 305, got {editor.ViewModel.Console.HistoryDropped}.");
             Check(capped[^1].Message == $"history-cap-{MainWindow.ConsoleMaxHistory + 49}", "History must keep newest.");
             var droppedText = Control<TextBlock>(editor, "ConsoleDropped").Text ?? "";
             Check(droppedText.Contains("history") && droppedText.Contains("queue"), "Dropped counts for queue/history must be shown.");
@@ -263,7 +263,7 @@ static class ConsoleChecks
             Drain(editor);
             Check(View(editor).Length == 1 && View(editor)[0].Entry.Source == LogSource.Game,
                 "Engine filter must hide all engine levels, including newly received logs.");
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 4
+            Check(editor.ViewModel.Console.History.Count == 4
                 && Control<TextBlock>(editor, "ConsoleErrorCount").Text == "1",
                 "Source filtering must retain history and severity totals.");
             filter.IsChecked = true;
@@ -386,12 +386,12 @@ static class ConsoleChecks
             EditScene(editor).AddEmpty().Attach(new ConsoleFailCleanup());
             Call(editor, "StartPlay");
             Field<DispatcherTimer>(editor, "_playTimer").Stop();
-            var play = Field<PlaySession>(editor, "_play");
+            var play = editor.ViewModel.Play.Session!;
             play.Runtime.Scene.Remove(play.Runtime.Scene.Objects[0]);
             Call(editor, "StepPlayOnce", 1f / 60f);
             Drain(editor);
             Check(play.Runtime.IsRunning, "Removing an object with a cleanup error must allow execution to continue.");
-            int Reports() => Field<List<LogEntry>>(editor, "_consoleHistory")
+            int Reports() => editor.ViewModel.Console.History
                 .Count(entry => entry.ExceptionDetail?.Contains("destroy failure A") == true);
             Check(Reports() == 1, "Removal error must reach Console before Stop.");
             Call(editor, "StepPlayOnce", 1f / 60f);
@@ -410,22 +410,22 @@ static class ConsoleChecks
             // Clear button clears history/view.
             Log.Info("to-clear");
             Drain(editor);
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 1, "Setup log missing.");
-            Control<Button>(editor, "ConsoleClear").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Check(editor.ViewModel.Console.History.Count == 1, "Setup log missing.");
+            Control<Button>(editor, "ConsoleClear").Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 0 && View(editor).Length == 0, "Clear must empty history/view.");
-            Check(Field<int>(editor, "_consoleHistoryDropped") == 0, "Clear must reset history drops.");
+            Check(editor.ViewModel.Console.History.Count == 0 && View(editor).Length == 0, "Clear must empty history/view.");
+            Check(editor.ViewModel.Console.HistoryDropped == 0, "Clear must reset history drops.");
 
             // Clear on Play is ON by default and runs before Start without erasing the start log.
             Check(Control<CheckBox>(editor, "ConsoleClearOnPlay").IsChecked == true, "Clear on Play must default to ON.");
             Log.Info("before-play");
             Drain(editor);
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == 1, "Pre-play log missing.");
+            Check(editor.ViewModel.Console.History.Count == 1, "Pre-play log missing.");
             Call(editor, "StartPlay");
             var playTimer = Field<DispatcherTimer?>(editor, "_playTimer");
             playTimer?.Stop();
             Drain(editor);
-            var afterStart = Field<List<LogEntry>>(editor, "_consoleHistory");
+            var afterStart = editor.ViewModel.Console.History;
             Check(afterStart.Count == 1 && afterStart[0].Source == LogSource.Engine
                 && afterStart[0].Message.Contains("Play started"), $"Clear on Play must clear before Start and keep the engine start log, got {afterStart.Count}.");
             Call(editor, "StopPlay");
@@ -435,13 +435,13 @@ static class ConsoleChecks
             Dispatcher.UIThread.RunJobs();
             Log.Info("keep-me");
             Drain(editor);
-            var before = Field<List<LogEntry>>(editor, "_consoleHistory").Count;
+            var before = editor.ViewModel.Console.History.Count;
             Call(editor, "StartPlay");
             Field<DispatcherTimer?>(editor, "_playTimer")?.Stop();
             Drain(editor);
             Call(editor, "StopPlay");
             Drain(editor);
-            var after = Field<List<LogEntry>>(editor, "_consoleHistory");
+            var after = editor.ViewModel.Console.History;
             Check(after.Count > before && after.Any(entry => entry.Message.Contains("keep-me")),
                 "Clear on Play OFF must keep previous logs.");
             CloseEditor(editor);
@@ -479,7 +479,7 @@ static class ConsoleChecks
             Drain(editor);
             Dispatcher.UIThread.RunJobs();
 
-            var history = Field<List<LogEntry>>(editor, "_consoleHistory");
+            var history = editor.ViewModel.Console.History;
             var runtimeLogs = history.Where(entry => entry.Message.Contains("Failer")).ToArray();
             // Two objects: each Destroy fails (2 runtime errors) plus stop summary.
             Check(runtimeLogs.Length >= 2, $"All termination errors must be taken, got {runtimeLogs.Length}.");
@@ -497,7 +497,7 @@ static class ConsoleChecks
             var countAfterStop = history.Count;
             Call(editor, "StopPlay");
             Drain(editor);
-            Check(Field<List<LogEntry>>(editor, "_consoleHistory").Count == countAfterStop, "Double stop must not duplicate errors.");
+            Check(editor.ViewModel.Console.History.Count == countAfterStop, "Double stop must not duplicate errors.");
 
             // Logs must remain readable after Stop.
             var list = Control<ListBox>(editor, "ConsoleList");
@@ -534,7 +534,7 @@ static class ConsoleChecks
         {
             var scene = EditScene(auto);
             var services = Field<GameSession>(auto, "EditSession");
-            var owner = Field<ProjectComponents>(auto, "_components");
+            var owner = auto.ViewModel.Components;
             var item = scene.AddEmpty();
             owner.TryAttach(item, typeof(ConsoleFailUpdate), services.Factory);
             Dispatcher.UIThread.RunJobs();
@@ -547,7 +547,7 @@ static class ConsoleChecks
             Drain(auto);
             Dispatcher.UIThread.RunJobs();
             Check(!(bool)Call(auto, "get_IsPlaying")!, "Update failure must auto-stop.");
-            var history = Field<List<LogEntry>>(auto, "_consoleHistory");
+            var history = auto.ViewModel.Console.History;
             var updateLogs = history.Where(entry => entry.Message.Contains("ConsoleFailUpdate")).ToArray();
             Check(updateLogs.Length == 1, $"Update error must appear once, got {updateLogs.Length}.");
             Check(history.Any(entry => entry.Message.Contains("Play update failed") || entry.Message.Contains("Play stopped")),
@@ -555,7 +555,7 @@ static class ConsoleChecks
             var frozen = history.Count;
             Call(auto, "StopPlay");
             Drain(auto);
-            Check(Field<List<LogEntry>>(auto, "_consoleHistory").Count == frozen, "Post-auto-stop Stop must not duplicate.");
+            Check(auto.ViewModel.Console.History.Count == frozen, "Post-auto-stop Stop must not duplicate.");
             CloseEditor(auto);
         }
         finally
@@ -574,7 +574,7 @@ static class ConsoleChecks
         Log.Info("before-close");
         Call(first, "DrainConsole");
         Dispatcher.UIThread.RunJobs();
-        Check(Field<List<LogEntry>>(first, "_consoleHistory").Count == 1, "First window must intake.");
+        Check(first.ViewModel.Console.History.Count == 1, "First window must intake.");
         var timerBefore = Field<DispatcherTimer?>(first, "_consoleTimer");
         Check(timerBefore is not null && timerBefore.IsEnabled, "Intake timer must run while open.");
         EditStore(first).MarkClean();
@@ -590,13 +590,13 @@ static class ConsoleChecks
         Field<DispatcherTimer?>(second, "_playTimer")?.Stop();
         Call(second, "DrainConsole");
         Dispatcher.UIThread.RunJobs();
-        var history = Field<List<LogEntry>>(second, "_consoleHistory");
+        var history = second.ViewModel.Console.History;
         Check(history.Count == 1 && history[0].Message == "between-windows",
             $"Reopened window must intake once without duplication, got {history.Count}.");
         Log.Info("second-live");
         Call(second, "DrainConsole");
         Dispatcher.UIThread.RunJobs();
-        Check(Field<List<LogEntry>>(second, "_consoleHistory").Count == 2, "Second window must continue intake.");
+        Check(second.ViewModel.Console.History.Count == 2, "Second window must continue intake.");
         EditStore(second).MarkClean();
         second.Close();
         Dispatcher.UIThread.RunJobs();

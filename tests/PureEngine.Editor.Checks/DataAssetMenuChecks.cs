@@ -32,7 +32,7 @@ static class DataAssetMenuChecks
             var (asset, id, _) = DataAssetFile.Load(first, session.Components.Registry);
             Check(asset is MenuAssetFixture { Attack: 12 } && id != Guid.Empty,
                 "Menu creation must persist constructor defaults and identity.");
-            var store = (EditSceneStore)typeof(MainWindow).GetField("_editScene", Instance)!.GetValue(editor)!;
+            var store = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(editor)!;
             Check(!store.IsDirty && store.Current.Objects.Count == 0, "Creating an asset must not change the scene.");
             Check(files.ItemsSource!.Cast<ProjectExplorerEntry>().Any(entry => entry.IsDataAsset && entry.FullPath == first),
                 "The created asset must appear in the Project pane.");

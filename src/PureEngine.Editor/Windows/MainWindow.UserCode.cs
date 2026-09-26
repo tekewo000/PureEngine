@@ -1,6 +1,5 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
-using Microsoft.Extensions.DependencyInjection;
 using PureEngine.Core;
 
 namespace PureEngine.Editor;
@@ -8,52 +7,26 @@ namespace PureEngine.Editor;
 public partial class MainWindow
 {
     private UserCodeWatcher? _userCodeWatcher;
-    private UserCodeCompileTracker? _compileTracker;
-    private UserCodeCompileAttempt? _pendingCompilation;
-    private TimeSpan? _lastCompileElapsed;
-    internal Task ReloadTask { get; private set; } = Task.CompletedTask;
+    internal Task ReloadTask => ViewModel.Compilation.ReloadTask;
 
-    /// <summary>Right-hand status segment showing the last user-code compilation time.</summary>
-    private void UpdateCompileStatus()
+    private void InitCompilationModel()
     {
-        var text = _lastCompileElapsed is { } elapsed ? $"Compile: {elapsed.TotalSeconds:0.00}s" : "Compile: —";
-        CompileStatus.Text = text;
-        ToolTip.SetTip(CompileStatus, text);
+        ViewModel.Compilation.BeforeApply += CancelSceneViewDrag;
+        ViewModel.Compilation.Adopted += OnUserCodeAdopted;
+        ViewModel.Compilation.AttemptCompleted += OnUserCodeAttemptCompleted;
     }
 
-    /// <summary>Overwrites the last compilation time for headless verification.</summary>
-    internal void SetCompileStatusForTest(TimeSpan elapsed)
-    {
-        _lastCompileElapsed = elapsed;
-        UpdateCompileStatus();
-    }
+    internal void SetCompileStatusForTest(TimeSpan elapsed) => ViewModel.Compilation.SetElapsed(elapsed);
 
-    private void StartUserCodeWatching(UserCodeIncrementalCompiler? userCodeCache = null)
+    private void StartUserCodeWatching()
     {
-        StopUserCodeWatching();
-        if (_project is null)
-        {
-            if (userCodeCache is not null)
-            {
-                try { userCodeCache.Dispose(); } catch { }
-            }
-            return;
-        }
+        _userCodeWatcher?.Dispose();
+        _userCodeWatcher = null;
+        if (Project is null) return;
+        if (ViewModel.Compilation.Tracker is null) ViewModel.Compilation.Start(Project, null);
         try
         {
-            _compileTracker = new UserCodeCompileTracker(_project.RootDirectory, cache: userCodeCache);
-            userCodeCache = null;
-        }
-        finally
-        {
-            if (userCodeCache is not null)
-            {
-                try { userCodeCache.Dispose(); } catch { }
-            }
-        }
-        try
-        {
-            _userCodeWatcher = new UserCodeWatcher(_project.RootDirectory);
+            _userCodeWatcher = new UserCodeWatcher(Project.RootDirectory);
             _userCodeWatcher.ReloadRequested += OnUserCodeReloadRequested;
         }
         catch (Exception error)
@@ -67,10 +40,7 @@ public partial class MainWindow
     {
         _userCodeWatcher?.Dispose();
         _userCodeWatcher = null;
-        _compileTracker?.Dispose();
-        _compileTracker = null;
-        UserCodeCompileTracker.Release(_pendingCompilation?.Result);
-        _pendingCompilation = null;
+        ViewModel.Compilation.Dispose();
     }
 
     private void OnUserCodeReloadRequested()
@@ -79,117 +49,26 @@ public partial class MainWindow
         _ = ReloadUserCode();
     }
 
-    internal Task ReloadUserCode()
+    internal Task ReloadUserCode() => ViewModel.Compilation.Reload();
+
+    private void FlushPendingUserCodeReload() => ViewModel.Compilation.ApplyPending();
+
+    private void OnUserCodeAdopted(Guid? selectedId)
     {
-        var tracker = _compileTracker;
-        if (tracker is null) return Task.CompletedTask;
-        CompileStatus.Text = "Compiling...";
-        ToolTip.SetTip(CompileStatus, "Compiling...");
-        var ticket = tracker.Request();
-        return ReloadTask = CompileAndQueue(tracker, ticket);
+        // Native drag payloads must release the previous collectible assembly.
+        _dragTypes = null;
+        _assetPress = null;
+        _pressedPrefab = null;
+        RefreshTableAfterReload();
+        RefreshDataAssetTableTypes(rescanRows: false);
+        RefreshAssetOwned();
+        SelectSceneObject(selectedId is { } id ? ViewModel.Hierarchy.Find(id) : null, focus: false);
+        RefreshObjectInspector();
+        UpdateSceneTitle();
     }
 
-    private async Task CompileAndQueue(UserCodeCompileTracker tracker, UserCodeCompileTicket ticket)
+    private void OnUserCodeAttemptCompleted()
     {
-        UserCodeCompileAttempt? attempt = null;
-        try
-        {
-            attempt = await tracker.CompileAsync(ticket);
-            if (!ReferenceEquals(tracker, _compileTracker) || !tracker.IsCurrent(ticket)
-                || attempt.Canceled || attempt.Superseded) return;
-            _lastCompileElapsed = attempt.Elapsed;
-            UpdateCompileStatus();
-            if (attempt.Result?.Unchanged == true) return;
-            UserCodeCompileTracker.Release(_pendingCompilation?.Result);
-            _pendingCompilation = attempt;
-            attempt = null; // The pending slot now owns the result.
-            FlushPendingUserCodeReload();
-        }
-        catch (Exception error)
-        {
-            if (ReferenceEquals(tracker, _compileTracker) && tracker.IsCurrent(ticket))
-            {
-                Log.Engine.Error("Cannot apply C# changes. Keeping the previous state.", error);
-                SetFileStatus(error.GetBaseException().Message, true);
-                UpdateCompileStatus();
-            }
-        }
-        finally { UserCodeCompileTracker.Release(attempt?.Result); }
-    }
-
-    private void FlushPendingUserCodeReload()
-    {
-        if (_pendingCompilation is not { Result: { } compiled } attempt || _compileTracker is null
-            || _reloadCoordinator.IsReloading
-            || EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null) return;
-        if (_prefabScene is not null && compiled.Success)
-        {
-            SetFileStatus("C# changes are ready. Close Prefab Editor to apply them.");
-            return;
-        }
-        CancelSceneViewDrag();
-        _pendingCompilation = null;
-        if (!_compileTracker.IsCurrent(attempt.Ticket))
-        {
-            UserCodeCompileTracker.Release(compiled);
-            return;
-        }
-        var selectedId = GetSelectedSceneObject()?.Id;
-        DataAssetEditState? candidateAsset = null;
-        List<DataAssetTableRow>? candidateTable = null;
-        Action<IServiceCollection>? assetConfigure = null;
-        try
-        {
-            if (compiled.Success)
-            {
-                var registry = _components.CreateCandidateRegistry(compiled);
-                candidateAsset = PrepareDataAssetReload(registry);
-                candidateTable = PrepareDataAssetTableReload(registry);
-                var reloadedAssets = BuildProjectAssetStore(registry);
-                if (reloadedAssets is not null) assetConfigure = services => services.AddSingleton(reloadedAssets);
-            }
-        }
-        catch (Exception error)
-        {
-            UserCodeCompileTracker.Release(compiled);
-            Log.Engine.Error("Cannot apply C# changes. Keeping the previous scene and data asset.", error);
-            SetFileStatus(error.GetBaseException().Message, true);
-            return;
-        }
-        var outcome = _reloadCoordinator.Apply(_editScene, _components, compiled, assetConfigure);
-        foreach (var diagnostic in outcome.Diagnostics)
-        {
-            var message = UserCodeCompiler.FormatDiagnostic(diagnostic);
-            if (diagnostic.IsError) Log.Engine.Error(message);
-            else Log.Engine.Warning(message);
-        }
-        if (outcome.Adopted)
-        {
-            // Clear drag references to the previous collectible assembly.
-            _dragTypes = null;
-            _assetPress = null;
-            _pressedPrefab = null;
-            _assetEdit = candidateAsset;
-            AdoptDataAssetTableReload(candidateTable);
-            RefreshDataAssetTableTypes(rescanRows: false);
-            RefreshAssetOwned();
-            RefreshHierarchy(selectedId);
-            RefreshObjectInspector();
-            UpdateSceneTitle();
-        }
-        if (outcome.Error is not null)
-        {
-            var message = outcome.Adopted ? "Failed to unload the previous code." : "Cannot apply C# changes. Keeping the previous state.";
-            Log.Engine.Error(message, outcome.Error);
-            SetFileStatus(message + " " + outcome.Error.GetBaseException().Message, true);
-        }
-        else if (outcome.Adopted)
-        {
-            var message = $"Applied C# changes: {_components.UserTypes.Count} class(es).";
-            Log.Engine.Info(message);
-            SetFileStatus(message);
-        }
-        else SetFileStatus("C# compilation failed. Keeping the previous state. Fix the errors and save.", true);
         RefreshProjectExplorer();
         DrainConsole();
     }

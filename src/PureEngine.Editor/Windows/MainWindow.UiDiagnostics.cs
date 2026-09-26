@@ -70,7 +70,7 @@ public partial class MainWindow
     }
 
     private SceneObject? FindOwner(object component) =>
-        _editScene.Current.Objects.FirstOrDefault(item =>
+        Documents.Current.Current.Objects.FirstOrDefault(item =>
             item.Components.Any(candidate => ReferenceEquals(candidate, component)));
 
     private TextBlock BuildUiWarning(SceneObject item, object component)

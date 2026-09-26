@@ -251,9 +251,11 @@ static class ProjectServiceRegistrationChecks
         var editor = new MainWindow(opened);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
+        // This check owns explicit compile requests; UserCodeChecks covers real watcher delivery.
+        Field<UserCodeWatcher>(editor, "_userCodeWatcher").Dispose();
         try
         {
-            var scene = Field<EditSceneStore>(editor, "_editScene").Current;
+            var scene = Field<EditSceneStore>(editor, "EditSceneStore").Current;
             var item = scene.AddEmpty();
             item.Rename("Board");
             var services = Field<GameSession>(editor, "EditSession");
@@ -277,9 +279,9 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
 
-            var current = Field<EditSceneStore>(editor, "_editScene").Current.Objects.Single(o => o.Id == objectId);
+            var current = Field<EditSceneStore>(editor, "EditSceneStore").Current.Objects.Single(o => o.Id == objectId);
             dynamic renewed = current.Components.Single();
-            Check(!ReferenceEquals((object)renewed, oldBoard), "Reload must create new instances.");
+            Check(!ReferenceEquals((object)renewed, oldBoard), $"Reload must create new instances. Status: {editor.ViewModel.Status}; compile: {editor.ViewModel.Compilation.StatusText}; task: {editor.ViewModel.Compilation.ReloadTask.Status}; pending: {editor.ViewModel.Compilation.HasPending}; errors: {editor.ViewModel.Inspector.InvalidCount}/{editor.ViewModel.Inspector.HasNameError}.");
             Check((int)renewed.Score == 55, "Reload must preserve unsaved Inspector values.");
             Check(current.GetStartPriority((object)renewed) == -4, "Reload must preserve Priority.");
             Check(editor.Title!.StartsWith("* "), "Reload must preserve dirty state.");
@@ -302,11 +304,11 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "StopPlay");
             Check(!(bool)Call(editor, "get_IsPlaying")!, "Stop must leave playing state.");
             Dispatcher.UIThread.RunJobs();
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
         }
         finally
         {
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }
@@ -321,9 +323,11 @@ static class ProjectServiceRegistrationChecks
         var editor = new MainWindow(opened);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
+        // This check owns explicit compile requests; UserCodeChecks covers real watcher delivery.
+        Field<UserCodeWatcher>(editor, "_userCodeWatcher").Dispose();
         try
         {
-            var scene = Field<EditSceneStore>(editor, "_editScene").Current;
+            var scene = Field<EditSceneStore>(editor, "EditSceneStore").Current;
             var item = scene.AddEmpty();
             var services = Field<GameSession>(editor, "EditSession");
             var boardType = opened.Components.GetTypesForFile(file).Single(t => t.Name == "QuestBoard");
@@ -388,11 +392,11 @@ static class ProjectServiceRegistrationChecks
             Call(editor, "ReloadUserCode");
             Dispatcher.UIThread.RunJobs();
             Check(status.Text!.Contains("Applied C# changes"), "Recovery after failures must work.");
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
         }
         finally
         {
-            Field<EditSceneStore>(editor, "_editScene").MarkClean();
+            Field<EditSceneStore>(editor, "EditSceneStore").MarkClean();
             editor.Close();
             Dispatcher.UIThread.RunJobs();
         }

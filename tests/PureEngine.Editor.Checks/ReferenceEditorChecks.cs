@@ -31,8 +31,8 @@ static class ReferenceEditorChecks
             typeof(MainWindow).GetMethod("SelectSceneObjectForTest",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
                 .Invoke(window, [item]);
-        var editStore = (EditSceneStore)typeof(MainWindow).GetField("_editScene", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
-        var components = (ProjectComponents)typeof(MainWindow).GetField("_components", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        var editStore = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        var components = (ProjectComponents)typeof(MainWindow).GetProperty("Components", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
         if (!components.Registry.Ids.Contains("checks.test-holder"))
             components.Registry.Register<TestRefHolder>("checks.test-holder");
         var scene = editStore.Current;

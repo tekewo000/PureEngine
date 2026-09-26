@@ -15,6 +15,41 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
+    private void InitInspectorModel()
+    {
+        ViewModel.Inspector.DocumentEdited += RefreshEditedDocument;
+        ViewModel.Inspector.PropertyChanged += OnInspectorModelChanged;
+    }
+
+    private void OnInspectorModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(InspectorViewModel.HasInputErrors)) QueuePendingUserCodeReload();
+    }
+
+    private void RefreshEditedDocument(EditedDocumentKind kind)
+    {
+        if (kind == EditedDocumentKind.Table) UpdateDataAssetTableChrome();
+        else if (kind == EditedDocumentKind.DataAsset) ViewModel.DataAsset.Refresh();
+        else
+        {
+            UpdateSceneTitle();
+            UpdatePrefabEditorChrome();
+        }
+    }
+
+    private void SetInputError(TextBox box, string message)
+    {
+        if (!_inputIds.TryGetValue(box, out var id)) _inputIds.Add(box, id = Guid.NewGuid());
+        ViewModel.Inspector.SetError(id, message);
+    }
+
+    private void ClearInputError(TextBox box)
+    {
+        if (_inputIds.Remove(box, out var id)) ViewModel.Inspector.SetError(id, null);
+    }
+
+    private bool IsInvalidInput(TextBox box) => _inputIds.TryGetValue(box, out var id) && ViewModel.Inspector.IsInvalid(id);
+
     private TextBox BuildDoubleEditor(object component, MemberInfo member, string automationName)
     {
         const string hint = "Enter a number — Press Esc to revert";
@@ -24,19 +59,7 @@ public partial class MainWindow
         box.SetValue(AutomationProperties.NameProperty, automationName);
         ToolTip.SetTip(box, hint);
         box.TextChanged += (_, _) =>
-        {
-            if (IsPlaying) return;
-            if (double.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value)
-                && double.IsFinite(value))
-            {
-                SetMemberValue(component, member, value);
-                MarkInvalid(box, null, hint);
-            }
-            else
-            {
-                MarkInvalid(box, "Enter a number");
-            }
-        };
+            MarkInvalid(box, ViewModel.Inspector.SetNumericText(component, member, box.Text), hint);
         AttachEscapeRevert(box, component, member);
         return box;
     }
@@ -366,7 +389,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             SetMemberValue(component, member, null);
             foreach (var box in root.GetVisualDescendants().OfType<TextBox>())
-                _invalidFields.Remove(box);
+                ClearInputError(box);
             UpdateErrorBadge();
             refresh();
         };
@@ -558,7 +581,7 @@ public partial class MainWindow
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var elements = new StackPanel { Spacing = 4 };
-        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, _collapsedMembers,
+        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => elements.IsVisible = nowExpanded);
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
@@ -571,7 +594,7 @@ public partial class MainWindow
         void refresh()
         {
             foreach (var box in elements.GetVisualDescendants().OfType<TextBox>())
-                _invalidFields.Remove(box);
+                ClearInputError(box);
             elements.Children.Clear();
             var value = GetMemberValue(component, member);
             if (value is null)
@@ -584,7 +607,7 @@ public partial class MainWindow
             {
                 nullHeader.IsVisible = false;
                 header.IsVisible = true;
-                elements.IsVisible = !_collapsedMembers.TryGetValue(automationName, out var elementsCollapsed) || !elementsCollapsed;
+                elements.IsVisible = !ViewModel.Inspector.CollapsedMembers.TryGetValue(automationName, out var elementsCollapsed) || !elementsCollapsed;
                 var items = value is IEnumerable enumerable ? enumerable.Cast<object?>().ToList() : [];
                 count.Text = $"{items.Count} items";
                 for (var i = 0; i < items.Count; i++)
@@ -666,7 +689,7 @@ public partial class MainWindow
     private Control BuildSequenceElementEditor(object component, MemberInfo member, Type elementType, int index, string automationName)
     {
         var elementName = $"{automationName}[{index}]";
-        if (SceneReferenceTypes.IsSingleReference(elementType, _components.Registry))
+        if (SceneReferenceTypes.IsSingleReference(elementType, Components.Registry))
             return BuildSequenceReferenceEditor(component, member, index, elementType, elementName);
         if (elementType == typeof(string))
             return BuildSequenceStringBox(component, member, index, elementName);
@@ -711,7 +734,7 @@ public partial class MainWindow
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var rows = new StackPanel { Spacing = 4 };
-        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, _collapsedMembers,
+        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => rows.IsVisible = nowExpanded);
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
@@ -724,7 +747,7 @@ public partial class MainWindow
         void refresh()
         {
             foreach (var box in rows.GetVisualDescendants().OfType<TextBox>())
-                _invalidFields.Remove(box);
+                ClearInputError(box);
             rows.Children.Clear();
             var value = GetMemberValue(component, member);
             if (value is not IDictionary dictionary)
@@ -737,7 +760,7 @@ public partial class MainWindow
             {
                 nullHeader.IsVisible = false;
                 header.IsVisible = true;
-                rows.IsVisible = !_collapsedMembers.TryGetValue(automationName, out var rowsCollapsed) || !rowsCollapsed;
+                rows.IsVisible = !ViewModel.Inspector.CollapsedMembers.TryGetValue(automationName, out var rowsCollapsed) || !rowsCollapsed;
                 var keys = dictionary.Keys.Cast<string>().OrderBy(key => key, StringComparer.Ordinal).ToList();
                 count.Text = $"{keys.Count} entries";
                 for (var i = 0; i < keys.Count; i++)
@@ -842,7 +865,7 @@ public partial class MainWindow
     private Control BuildDictionaryValueEditor(object component, MemberInfo member, Type valueType, string key, string automationName, int rowIndex)
     {
         var valueName = $"{automationName}.Value[{rowIndex}]";
-        if (SceneReferenceTypes.IsSingleReference(valueType, _components.Registry))
+        if (SceneReferenceTypes.IsSingleReference(valueType, Components.Registry))
             return BuildDictionaryReferenceEditor(component, member, key, valueType, valueName);
         if (valueType == typeof(string))
         {
@@ -1040,7 +1063,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             SetMemberValue(component, member, null);
             foreach (var box in root.GetVisualDescendants().OfType<TextBox>())
-                _invalidFields.Remove(box);
+                ClearInputError(box);
             UpdateErrorBadge();
             refresh();
         };
@@ -1194,7 +1217,7 @@ public partial class MainWindow
 
     private object? DefaultElementValue(Type elementType)
     {
-        if (SceneReferenceTypes.IsSingleReference(elementType, _components.Registry))
+        if (SceneReferenceTypes.IsSingleReference(elementType, Components.Registry))
             return null;
         if (elementType == typeof(string)) return "";
         if (elementType == typeof(int)) return 0;

@@ -18,7 +18,7 @@ static class EditorOwnershipChecks
         (T)(typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public) is { } field
             ? field.GetValue(window) : typeof(MainWindow).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(window))!;
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", Private)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Private)!.GetValue(window)!;
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
     private static void Dirty(MainWindow window, bool value)
     {
@@ -34,7 +34,7 @@ static class EditorOwnershipChecks
     public static void Run(string root)
     {
         var editor = new MainWindow();
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         owner.Registry.Register<OwnershipProbe>("checks.ownership");
         editor.Show();
         var scene = EditScene(editor);
@@ -99,7 +99,7 @@ static class EditorOwnershipChecks
         Check(EditStore(editor).IsDirty && cards.Children.Count == 1
             && editor.FindControl<TextBlock>("ComponentsHeader")!.Text == "Components (1)",
             "Remove must update the Inspector and dirty state.");
-        Check(siblingInput.Text == "unfinished" && Field<HashSet<TextBox>>(editor, "_invalidFields").SetEquals([siblingInput]),
+        Check(siblingInput.Text == "unfinished" && editor.ViewModel.Inspector.InvalidCount == 1 && (bool)Call(editor, "IsInvalidInput", siblingInput)!,
             "Remove must clear only its own input errors and preserve sibling edits.");
         siblingInput.Text = "123";
         Dispatcher.UIThread.RunJobs();
@@ -141,7 +141,7 @@ static class EditorOwnershipChecks
         Check(OwnershipProbe.Created.All(probe => probe.Disposes == 1 && probe.Destroys == 0),
             "Every editing copy must be released once without game Destroy callbacks.");
         var failingEditor = new MainWindow();
-        var failingOwner = Field<ProjectComponents>(failingEditor, "_components");
+        var failingOwner = failingEditor.ViewModel.Components;
         failingOwner.Registry.Register<OwnershipProbe>("checks.ownership");
         failingEditor.Show();
         var failingServices = Field<GameSession>(failingEditor, "EditSession");

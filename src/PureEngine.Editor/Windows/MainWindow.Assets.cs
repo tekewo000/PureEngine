@@ -16,7 +16,7 @@ public partial class MainWindow
     /// <summary>Scans the project asset index and refreshes the image bytes used for rendering. Creates no files.</summary>
     internal void RefreshProjectAssets()
     {
-        if (_project is null)
+        if (Project is null)
         {
             _projectAssets = ProjectAssets.Scan(Path.GetTempPath());
             _previewImages = [];
@@ -24,7 +24,7 @@ public partial class MainWindow
             _gameViewport?.InvalidateImageCache();
             return;
         }
-        _projectAssets = ProjectAssets.Scan(_project.RootDirectory);
+        _projectAssets = ProjectAssets.Scan(Project.RootDirectory);
         _previewImages = _projectAssets.LoadImageBytes();
         _sceneViewport?.InvalidateImageCache();
         _gameViewport?.InvalidateImageCache();
@@ -63,7 +63,7 @@ public partial class MainWindow
 
     private async Task ImportImageAsync()
     {
-        if (_project is null) return;
+        if (Project is null) return;
         if (RejectWhenPlaying("Import")) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -78,7 +78,7 @@ public partial class MainWindow
         var source = files[0].TryGetLocalPath() ?? throw new IOException("Select a local image.");
         await RunFileOperation(async () =>
         {
-            var entry = ProjectAssets.ImportImage(_project.RootDirectory, source);
+            var entry = ProjectAssets.ImportImage(Project.RootDirectory, source);
             RefreshProjectAssets();
             RefreshProjectExplorer();
             RefreshComponents();

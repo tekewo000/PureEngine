@@ -9,6 +9,38 @@ public sealed class UserCodeReloadCoordinator
 {
     public bool IsReloading { get; private set; }
 
+    /// <summary>Prepares all open asset documents before replacing the scene, registry, or services.</summary>
+    public UserCodeReloadOutcome Apply(EditorDocuments documents, ProjectComponents components, UserCodeCompileResult compiled, ProjectFile? project)
+    {
+        DataAssetEditState? asset = null;
+        List<DataAssetEditState>? rows = null;
+        Action<IServiceCollection>? configure = null;
+        try
+        {
+            if (compiled.Success)
+            {
+                var registry = components.CreateCandidateRegistry(compiled);
+                asset = documents.Asset?.Migrate(components.Registry, registry);
+                rows = documents.Table.PrepareReload(components.Registry, registry);
+                var store = EditorDocuments.BuildAssetStore(project, registry);
+                if (store is not null) configure = services => services.AddSingleton(store);
+            }
+        }
+        catch (Exception error)
+        {
+            ProjectComponents.Release(compiled);
+            return new(false, compiled.Diagnostics, error);
+        }
+        var outcome = Apply(documents.Current, components, compiled, configure);
+        if (outcome.Adopted)
+        {
+            documents.Asset = asset;
+            documents.Table.AdoptReload(rows, components);
+            documents.RefreshAssetOwnership();
+        }
+        return outcome;
+    }
+
     // Takes ownership of compiled, whether preparation succeeds or fails.
     // extraConfigure registers reload-scoped extras (such as the data asset snapshot) into the new service set.
     public UserCodeReloadOutcome Apply(EditSceneStore state, ProjectComponents components, UserCodeCompileResult compiled, Action<IServiceCollection>? extraConfigure = null)

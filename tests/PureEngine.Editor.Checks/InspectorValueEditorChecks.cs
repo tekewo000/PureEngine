@@ -55,7 +55,7 @@ static class InspectorValueEditorChecks
             typeof(MainWindow).GetMethod("SelectSceneObjectForTest",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!
                 .Invoke(window, [item]);
-        var editStore = (EditSceneStore)typeof(MainWindow).GetField("_editScene", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
+        var editStore = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
         var scene = editStore.Current;
 
         var valueObject = scene.AddEmpty();

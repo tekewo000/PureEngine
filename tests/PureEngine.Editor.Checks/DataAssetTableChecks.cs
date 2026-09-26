@@ -25,7 +25,8 @@ static class DataAssetTableChecks
             .Any(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
         static void Click(Button button)
         {
-            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if (button.Command is { } command) command.Execute(button.CommandParameter);
+            else button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
         }
         static void Answer(string title, string answer)
@@ -76,7 +77,7 @@ static class DataAssetTableChecks
         {
             var types = Control<ComboBox>(editor, "DataAssetTableTypes");
             Check(types.Items.Count == 1, "The table type picker must list the [DataAsset] type.");
-            types.SelectedItem = types.Items.OfType<ComboBoxItem>().Single();
+            types.SelectedItem = types.Items.OfType<DataAssetDescriptor>().Single();
             Control<TabControl>(editor, "ViewportTabs").SelectedIndex = 2;
             Dispatcher.UIThread.RunJobs();
             Program.Until(() => HasBox(editor, "Table.SwordData.Sword.Attack"),

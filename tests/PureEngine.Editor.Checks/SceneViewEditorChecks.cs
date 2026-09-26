@@ -26,7 +26,7 @@ internal static class SceneViewEditorChecks
         (T)(typeof(MainWindow).GetField(name, AnyInstance)!.GetValue(window)!);
 
     private static EditSceneStore EditStore(MainWindow window) =>
-        (EditSceneStore)typeof(MainWindow).GetField("_editScene", AnyInstance)!.GetValue(window)!;
+        (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", AnyInstance)!.GetValue(window)!;
 
     private static Scene EditScene(MainWindow window) => EditStore(window).Current;
 
@@ -179,7 +179,7 @@ internal static class SceneViewEditorChecks
             var saving = (Task<bool>)Call(editor, "SaveSceneAsync", false)!;
             Program.Wait(saving);
             Check(saving.Result && pointer!.Captured is null && transform.LocalPosition == new Vector3(80, 70, 7), "Save must cancel before serializing.");
-            var serializer = new SceneSerializer(Field<ProjectComponents>(editor, "_components").Registry);
+            var serializer = new SceneSerializer(editor.ViewModel.Components.Registry);
             Check(serializer.Deserialize(File.ReadAllText(savePath)).Objects.First(o => o.Id == item.Id)
                 .GetComponent<Transform>()!.LocalPosition == new Vector3(80, 70, 7), "Saved position must exclude the unconfirmed drag and preserve Z.");
             Up();

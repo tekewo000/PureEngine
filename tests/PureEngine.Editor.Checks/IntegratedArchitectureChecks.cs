@@ -9,7 +9,8 @@ static class IntegratedArchitectureChecks
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private static T Field<T>(MainWindow editor, string name) =>
-        (T)typeof(MainWindow).GetField(name, Private)!.GetValue(editor)!;
+        (T)(typeof(MainWindow).GetField(name, Private) is { } field
+            ? field.GetValue(editor) : typeof(MainWindow).GetProperty(name, Private)!.GetValue(editor))!;
     private static object? Call(MainWindow editor, string name, params object[] args) =>
         typeof(MainWindow).GetMethod(name, Private)!.Invoke(editor, args);
     private static void Check(bool condition, string message)
@@ -54,7 +55,7 @@ static class IntegratedArchitectureChecks
         var rules = component.GetType().GetField("Rules")!.GetValue(component)!;
         return (int)rules.GetType().GetProperty("Version")!.GetValue(rules)!;
     }
-    private static object Player(MainWindow editor) => Field<EditSceneStore>(editor, "_editScene").Current.Objects.Single().Components.Single();
+    private static object Player(MainWindow editor) => Field<EditSceneStore>(editor, "EditSceneStore").Current.Objects.Single().Components.Single();
     private static TreeView SceneObjects(MainWindow editor) => editor.FindControl<TreeView>("SceneObjects")!;
     private static void Select(MainWindow editor, SceneObject item) =>
         Call(editor, "SelectSceneObjectForTest", [item]);
@@ -86,7 +87,6 @@ static class IntegratedArchitectureChecks
         // File watcher delivery is covered separately; control compilation completions deterministically here.
         Field<UserCodeWatcher>(editor, "_userCodeWatcher").Dispose();
         typeof(MainWindow).GetField("_userCodeWatcher", Private)!.SetValue(editor, null);
-        Field<UserCodeCompileTracker>(editor, "_compileTracker").Dispose();
         var gates = Enumerable.Range(0, 6).Select(_ =>
             new TaskCompletionSource<UserCodeCompileResult>(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
         var calls = 0;
@@ -97,8 +97,8 @@ static class IntegratedArchitectureChecks
             workerThread = Environment.CurrentManagedThreadId;
             return gates[Interlocked.Increment(ref calls) - 1].Task;
         });
-        typeof(MainWindow).GetField("_compileTracker", Private)!.SetValue(editor, tracker);
-        var store = Field<EditSceneStore>(editor, "_editScene");
+        editor.ViewModel.Compilation.ReplaceTracker(tracker);
+        var store = Field<EditSceneStore>(editor, "EditSceneStore");
         Task Reload() => (Task)Call(editor, "ReloadUserCode")!;
         try
         {
@@ -152,11 +152,11 @@ static class IntegratedArchitectureChecks
             var whileBusy = Compile(project, 5);
             var fourth = Reload();
             Program.Until(() => Volatile.Read(ref calls) == 4);
-            typeof(MainWindow).GetField("_fileBusy", Private)!.SetValue(editor, true);
+            editor.ViewModel.FileBusy = true;
             gates[3].SetResult(whileBusy);
             Program.Wait(fourth);
             Check(Version(Player(editor)) == 4, "File operations must defer completed results.");
-            typeof(MainWindow).GetField("_fileBusy", Private)!.SetValue(editor, false);
+            editor.ViewModel.FileBusy = false;
             Call(editor, "FlushPendingUserCodeReload");
             Check(Version(Player(editor)) == 5, "Ending a file operation must allow adoption.");
 
