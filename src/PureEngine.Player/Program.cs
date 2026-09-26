@@ -19,6 +19,7 @@ internal static class Program
     {
         try
         {
+            PlayerLog.Current.Write($"Smoke testing game package from {AppContext.BaseDirectory}");
             using var package = GamePackage.Open(AppContext.BaseDirectory);
             using var session = package.CreateSession();
             session.Start();
@@ -26,12 +27,14 @@ internal static class Program
             session.Stop();
             if (session.Runtime.Errors.Count != 0)
                 throw new AggregateException("Packaged game lifecycle failed.", session.Runtime.Errors.Select(error => error.Exception));
+            PlayerLog.Current.Drain();
             Console.WriteLine("PASS: Packaged game loaded, started, stepped, and stopped.");
             return 0;
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine(error);
+            PlayerLog.Current.Report(error);
+            Console.Error.WriteLine(error.GetBaseException().Message + "\n" + PlayerLog.Current.LocationDescription);
             return 1;
         }
     }

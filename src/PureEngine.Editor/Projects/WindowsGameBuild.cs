@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
+using PureEngine.Rendering;
 using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
@@ -27,9 +29,9 @@ public static class WindowsGameBuild
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
+        ValidateDestination(project.RootDirectory, engineRoot, destination);
         destination = Path.GetFullPath(destination);
         engineRoot = Path.GetFullPath(engineRoot);
-        ValidateDestination(project.RootDirectory, engineRoot, destination);
         var parent = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(parent);
         var staging = Path.Combine(parent, ".pure-build-" + Guid.NewGuid().ToString("N"));
@@ -50,7 +52,7 @@ public static class WindowsGameBuild
                 var manifest = new GamePackageManifest
                 {
                     Version = 1,
-                    Name = project.Document.Name,
+                    Name = project.Document.Name ?? throw new InvalidDataException("The project requires a name."),
                     StartupScene = project.Document.StartupScene!,
                     GameAssembly = compiled.AssemblyBytes is null ? null : "Game.dll",
                     Types = compiled.TypeIds.ToDictionary(pair => pair.Value, pair => pair.Key.FullName!),
@@ -59,7 +61,11 @@ public static class WindowsGameBuild
                     JsonSerializer.Serialize(manifest, ManifestJsonOptions), cancellationToken);
                 WriteNotices(engineRoot, staging);
                 ValidatePublishedFiles(staging);
-                using (var package = GamePackage.Open(staging)) package.Validate();
+                using (var package = GamePackage.Open(staging))
+                {
+                    package.Validate();
+                    ValidateImages(package.Assets);
+                }
                 // Persist new identities only after successful validation, before publishing the package.
                 UserCodeIdentity.Save(compiled);
                 await File.WriteAllTextAsync(Path.Combine(staging, OwnershipFile), "PureEngine Windows x64 folder build, version 1\n", cancellationToken);
@@ -78,19 +84,66 @@ public static class WindowsGameBuild
 
     public static void ValidateDestination(string projectRoot, string engineRoot, string destination)
     {
+        ValidateWindowsRelativePaths([destination[(Path.GetPathRoot(destination)?.Length ?? 0)..]]);
+        // On Windows GetFullPath also expands existing 8.3 aliases (including the existing prefix
+        // of a new destination), so containment compares long paths rather than caller spelling.
         destination = Path.GetFullPath(destination);
+        ValidateWindowsRelativePaths([destination[Path.GetPathRoot(destination)!.Length..]]);
+        RejectLinkedAncestors(destination);
         foreach (var protectedRoot in new[] { projectRoot, engineRoot })
         {
             var root = Path.GetFullPath(protectedRoot);
+            RejectLinkedAncestors(root);
             if (Contains(root, destination) || Contains(destination, root))
                 throw new InvalidDataException("Build output must be outside both the game project and the engine checkout.");
         }
-        for (var directory = new DirectoryInfo(destination); directory is not null; directory = directory.Parent)
-            if (directory.Exists && directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                throw new InvalidDataException("Build output cannot use symbolic links or junctions.");
         if (File.Exists(destination)) throw new IOException("The build destination is a file.");
         if (Directory.Exists(destination) && !File.Exists(Path.Combine(destination, OwnershipFile)))
             throw new IOException("Choose a new folder or an existing PureEngine build folder; unrelated folders are never replaced.");
+    }
+
+    private static void RejectLinkedAncestors(string path)
+    {
+        for (var directory = new DirectoryInfo(path); directory is not null; directory = directory.Parent)
+            if (directory.Exists && directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                throw new InvalidDataException($"Build paths cannot use symbolic links or junctions: {directory.FullName}");
+    }
+
+    /// <summary>Applies Windows component rules regardless of the producer's operating system.</summary>
+    public static void ValidateWindowsName(string name)
+    {
+        if (string.IsNullOrEmpty(name) || name.EndsWith('.') || name.EndsWith(' ')
+            || name.Any(character => character < 32 || "<>:\"/\\|?*".Contains(character)))
+            throw new InvalidDataException($"Not a valid Windows file or folder name: {name}");
+        var stem = name.Split('.')[0].TrimEnd(' ').ToUpperInvariant();
+        if (stem is "CON" or "PRN" or "AUX" or "NUL" or "CLOCK$" or "CONIN$" or "CONOUT$"
+            || (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.Ordinal)
+                || stem.StartsWith("LPT", StringComparison.Ordinal)) && "123456789¹²³".Contains(stem[3])))
+            throw new InvalidDataException($"Windows device names cannot be used for build files or folders: {name}");
+    }
+
+    /// <summary>Rejects names and case-aliased directory components that cannot survive Windows extraction.</summary>
+    public static void ValidateWindowsRelativePaths(IEnumerable<string> paths)
+    {
+        Dictionary<string, string> spellings = [with(StringComparer.OrdinalIgnoreCase)];
+        foreach (var path in paths)
+        {
+            var prefix = "";
+            foreach (var name in path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            {
+                ValidateWindowsName(name);
+                prefix = prefix.Length == 0 ? name : Path.Combine(prefix, name);
+                if (spellings.TryGetValue(prefix, out var previous) && previous != prefix)
+                    throw new InvalidDataException($"Package paths collide on Windows: {previous} and {prefix}");
+                spellings[prefix] = prefix;
+            }
+        }
+    }
+
+    private static void ValidatePackagePaths(string root)
+    {
+        var entries = Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories);
+        ValidateWindowsRelativePaths(entries.Select(entry => Path.GetRelativePath(root, entry)));
     }
 
     private static bool Contains(string root, string path) =>
@@ -100,10 +153,11 @@ public static class WindowsGameBuild
     /// <summary>Copies only supported runtime formats; source, editor metadata, and caches never enter a package.</summary>
     public static void CollectContent(string projectRoot, string destination)
     {
+        RejectLinkedAncestors(projectRoot);
         Directory.CreateDirectory(destination);
         var pending = new Stack<string>();
         pending.Push(projectRoot);
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new List<string>();
         while (pending.TryPop(out var directory))
         {
             foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
@@ -116,12 +170,15 @@ public static class WindowsGameBuild
                     throw new InvalidDataException($"Runtime content cannot use links: {entry}");
                 if (attributes.HasFlag(FileAttributes.Directory)) { pending.Push(entry); continue; }
                 if (!IsRuntimeContent(name)) continue;
-                var relative = Path.GetRelativePath(projectRoot, entry);
-                if (!paths.Add(relative)) throw new InvalidDataException($"Content paths collide on Windows: {relative}");
-                var output = Path.Combine(destination, relative);
-                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-                File.Copy(entry, output);
+                files.Add(entry);
             }
+        }
+        ValidateWindowsRelativePaths(files.Select(entry => Path.GetRelativePath(projectRoot, entry)));
+        foreach (var entry in files)
+        {
+            var output = Path.Combine(destination, Path.GetRelativePath(projectRoot, entry));
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            File.Copy(entry, output);
         }
     }
 
@@ -132,6 +189,25 @@ public static class WindowsGameBuild
         || name.EndsWith(".pure.loc.yaml", StringComparison.OrdinalIgnoreCase)
         || name.EndsWith(".pureasset.yaml", StringComparison.OrdinalIgnoreCase)
         || ProjectAssets.IsSupportedImage(name);
+
+    /// <summary>Uses the actual renderer's decoder and atlas rules, without a GPU or game callbacks.</summary>
+    public static void ValidateImages(ProjectAssets assets)
+    {
+        using var draw = new DrawList();
+        foreach (var image in assets.Images.Values)
+        {
+            try
+            {
+                draw.ResetAtlas();
+                draw.Image(image.Id.ToString("N"), File.ReadAllBytes(image.FullPath), Vector2.One,
+                    Matrix3x2.Identity, Vector4.One, new Vector4(0, 0, 1, 1));
+            }
+            catch (Exception error) when (error is ArgumentException or InvalidOperationException or IOException)
+            {
+                throw new InvalidDataException($"Packaged image cannot be rendered: {image.FullPath}: {error.Message}", error);
+            }
+        }
+    }
 
     private static async Task PublishPlayer(string engineRoot, string staging, CancellationToken cancellationToken)
     {
@@ -156,20 +232,46 @@ public static class WindowsGameBuild
 
     public static void ValidatePublishedFiles(string root)
     {
+        ValidatePackagePaths(root);
         foreach (var file in new[] { ExecutableName, "PureEngine.Player.dll", "PureEngine.Player.deps.json",
             "PureEngine.Player.runtimeconfig.json", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll" })
             if (!File.Exists(Path.Combine(root, file))) throw new InvalidDataException($"Incomplete self-contained Windows package: {file}");
-        foreach (var file in Directory.EnumerateFiles(root, "*.dll"))
+        // The SDK's resolved deployment graph is authoritative for the Player and its dependencies.
+        // Framework facades can carry optional type forwarders to assemblies outside that graph.
+        using var dependencies = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "PureEngine.Player.deps.json")));
+        var targetName = dependencies.RootElement.GetProperty("runtimeTarget").GetProperty("name").GetString()!;
+        var target = dependencies.RootElement.GetProperty("targets").GetProperty(targetName);
+        foreach (var library in target.EnumerateObject())
         {
-            using var stream = File.OpenRead(file);
+            foreach (var kind in new[] { "runtime", "native", "resources" })
+            {
+                if (!library.Value.TryGetProperty(kind, out var entries)) continue;
+                foreach (var asset in entries.EnumerateObject())
+                {
+                    var name = Path.GetFileName(asset.Name);
+                    if (name == "_._") continue;
+                    var path = kind == "resources"
+                        ? Path.Combine(root, asset.Value.GetProperty("locale").GetString()!, name)
+                        : Path.Combine(root, name);
+                    if (!File.Exists(path))
+                        throw new InvalidDataException($"Missing packaged {kind} dependency: {library.Name} requires {asset.Name}.");
+                }
+            }
+        }
+        // Roslyn's game DLL is intentionally not an MSBuild input, so its direct dependencies need
+        // an explicit check in addition to the SDK graph. Never allow Editor-only references.
+        var gameAssembly = Path.Combine(root, "Game.dll");
+        if (File.Exists(gameAssembly))
+        {
+            using var stream = File.OpenRead(gameAssembly);
             using var image = new PEReader(stream);
-            if (!image.HasMetadata) continue;
+            if (!image.HasMetadata) throw new InvalidDataException("The game assembly has no managed metadata.");
             var metadata = image.GetMetadataReader();
             foreach (var handle in metadata.AssemblyReferences)
             {
                 var reference = metadata.GetString(metadata.GetAssemblyReference(handle).Name);
                 if (!File.Exists(Path.Combine(root, reference + ".dll")))
-                    throw new InvalidDataException($"Missing packaged dependency: {Path.GetFileName(file)} requires {reference}.");
+                    throw new InvalidDataException($"Missing packaged dependency: Game.dll requires {reference}.");
             }
         }
     }
@@ -202,7 +304,7 @@ public static class WindowsGameBuild
         var assetsPath = Path.Combine(engineRoot, "src", "PureEngine.Player", "obj", "project.assets.json");
         using var assets = JsonDocument.Parse(File.ReadAllText(assetsPath));
         string[] folders = [.. assets.RootElement.GetProperty("packageFolders").EnumerateObject().Select(item => item.Name)];
-        var notices = new StringBuilder("PureEngine Windows Player\n\nThird-party package notices and license metadata follow. Original license/notice files are included under Licenses/.\n\n");
+        var notices = new StringBuilder("PureEngine Windows Player\n\nThird-party package notices and license metadata follow. Original license/notice files are included under licenses/.\n\n");
         var packages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var library in assets.RootElement.GetProperty("libraries").EnumerateObject())
         {
@@ -217,7 +319,7 @@ public static class WindowsGameBuild
             var source = folders.Select(folder => Path.Combine(folder, relative)).FirstOrDefault(Directory.Exists)
                 ?? throw new FileNotFoundException($"License metadata not found for {relative}.");
             notices.AppendLine(relative);
-            var target = Path.Combine(staging, "Licenses", relative);
+            var target = Path.Combine(staging, "licenses", relative);
             Directory.CreateDirectory(target);
             foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
             {

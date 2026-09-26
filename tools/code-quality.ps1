@@ -28,7 +28,7 @@ try {
 
     dotnet build PureEngine.slnx --no-restore --warnaserror
     if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
-    foreach ($project in @('tests/PureEngine.Core.Checks', 'tests/PureEngine.Editor.Checks')) {
+    foreach ($project in @('tests/PureEngine.Core.Checks', 'tests/PureEngine.Editor.Checks', 'tests/PureEngine.Player.Checks')) {
         dotnet run --project $project --no-build
         if ($LASTEXITCODE -ne 0) { throw "$project failed." }
     }

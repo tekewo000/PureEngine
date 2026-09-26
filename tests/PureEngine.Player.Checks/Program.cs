@@ -19,6 +19,7 @@ internal static class Program
         AppBuilder.Configure<Application>().UseHeadless(new AvaloniaHeadlessPlatformOptions()).SetupWithoutStarting();
         InputChecks();
         PackageChecks();
+        LogChecks();
         Console.WriteLine("PASS: Player queued pointer/keyboard input, cancellation, clipping, package relocation, invalid packages, window lifecycle, and Editor assembly separation.");
     }
 
@@ -149,7 +150,7 @@ internal static class Program
     {
         var rejected = false;
         try { using var package = GamePackage.Open(root); }
-        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException or JsonException)
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or ArgumentException or JsonException)
         {
             rejected = true;
         }
@@ -176,5 +177,48 @@ internal static class Program
         window.Close();
         Dispatcher.UIThread.RunJobs();
         Check(!session.Runtime.IsRunning, "Closing the Player window must stop its runtime.");
+    }
+
+    private static void LogChecks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PureEngine-PlayerLogChecks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var log = new PlayerLog(root);
+            Check(log.Failure is null && log.FilePath == Path.Combine(root, "PureEngine", "Player", "player.log"),
+                "Player logs must use the per-user data root, never the package directory.");
+            Log.Engine.Error("Engine diagnostic check", new InvalidOperationException("Engine failure detail"));
+            log.Drain();
+            log.Report(new InvalidOperationException("Package failure detail"));
+            var text = File.ReadAllText(log.FilePath!);
+            Check(text.Contains("Engine diagnostic check") && text.Contains("Engine failure detail") && text.Contains("Package failure detail")
+                && log.LocationDescription.Contains(log.FilePath!), "Logs must retain engine errors, exceptions, and their discoverable location.");
+            for (var index = 0; index < 100; index++)
+                log.Write(new string('x', 40_000));
+            var files = Directory.GetFiles(Path.GetDirectoryName(log.FilePath!)!);
+            Check(files.Length == 2 && files.All(file => new FileInfo(file).Length <= PlayerLog.MaxFileBytes),
+                "Log rotation and oversized entry truncation must bound retained disk usage.");
+            var blocked = Path.Combine(root, "blocked");
+            File.WriteAllText(blocked, "Not a directory");
+            var failed = new PlayerLog(blocked);
+            failed.Report(new IOException("Failure still reportable"));
+            Check(failed.Failure is not null && failed.LocationDescription.Contains("Log file unavailable")
+                && failed.LocationDescription.Contains(failed.FilePath!),
+                "An unwritable log location must not throw and must explain the attempted path.");
+            var missing = new PlayerLog("");
+            Check(missing.FilePath is null && missing.Failure is not null,
+                "Unavailable user data must not fall back to writing into the working directory.");
+        }
+        finally
+        {
+#pragma warning disable CA2219 // Fail closed before deleting any temporary test data.
+            if (Path.GetDirectoryName(root) != Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)
+                || !Path.GetFileName(root).StartsWith("PureEngine-PlayerLogChecks-", StringComparison.Ordinal))
+                throw new InvalidOperationException("Unsafe Player log cleanup path.");
+#pragma warning restore CA2219
+            Directory.Delete(root, recursive: true);
+        }
+        Console.WriteLine("PASS: Player per-user log location, engine errors, exception details, bounded rotation, and unavailable-file fallback.");
     }
 }

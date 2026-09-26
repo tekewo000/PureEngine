@@ -66,6 +66,7 @@ public sealed class PlayerWindow : Window
         try
         {
             _session.Start();
+            PlayerLog.Current.Drain();
             if (_session.Runtime.Errors.Count != 0)
             {
                 Fail(new AggregateException("Game startup failed.", _session.Runtime.Errors.Select(error => error.Exception)));
@@ -86,6 +87,7 @@ public sealed class PlayerWindow : Window
             var dt = (float)Stopwatch.GetElapsedTime(_lastTick, now).TotalSeconds;
             _lastTick = now;
             _session.Step(Math.Min(dt, 0.1f));
+            PlayerLog.Current.Drain();
             if (_session.Runtime.Errors.Count != 0)
                 Fail(new AggregateException("Game lifecycle failed.", _session.Runtime.Errors.Select(error => error.Exception)));
             else if (!_session.Runtime.IsRunning)
@@ -190,28 +192,30 @@ public sealed class PlayerWindow : Window
             _session.Dispose();
             foreach (var error in _session.Runtime.Errors)
             {
-                Console.Error.WriteLine(error.Exception);
+                PlayerLog.Current.Report(error.Exception);
                 SetFailureExitCode();
             }
         }
-        catch (Exception error) { Console.Error.WriteLine(error); SetFailureExitCode(); }
+        catch (Exception error) { PlayerLog.Current.Report(error); SetFailureExitCode(); }
         finally
         {
             try { _package.Dispose(); }
-            catch (Exception error) { Console.Error.WriteLine(error); SetFailureExitCode(); }
+            catch (Exception error) { PlayerLog.Current.Report(error); SetFailureExitCode(); }
+            PlayerLog.Current.Drain();
         }
     }
 
     private void Fail(Exception error)
     {
         if (_stopped) return;
-        Console.Error.WriteLine(error);
+        PlayerLog.Current.Report(error);
         SetFailureExitCode();
         Stop();
         // Dispatch after a failing renderer releases its submission gate.
         Dispatcher.UIThread.Post(() => Content = new TextBlock
         {
-            Text = "The game stopped because an error occurred.\n\n" + error.GetBaseException().Message,
+            Text = "The game stopped because an error occurred.\n\n" + error.GetBaseException().Message
+                + "\n\n" + PlayerLog.Current.LocationDescription,
             Margin = new Thickness(24),
             TextWrapping = TextWrapping.Wrap,
         });

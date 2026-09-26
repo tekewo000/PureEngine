@@ -636,6 +636,16 @@ Core.Checksへ既存機能の境界を跨ぐチェックを追加し、Editor.Ch
 - 入力は配置計算・座標変換・Orderによる順序を描画と共有する（`SceneViewMath.SortForRender`／`HitTest`、`UiLayout`）。Gameにパン／ズームはなく、Scene Viewの視点は影響しない。親の回転・拡縮は逆行列で戻し、DPIは論理座標とGPUターゲット寸法の境界で一度だけ適用する。表示領域のクリップ（領域外は対象外）を考慮し、見た目と判定を一致させる。重なったButtonは手前（Order降順、同値は後方が手前）の1つだけが入力を受ける。左ボタンで押し始めたButton上で離したときだけ1回通知し、外で離した場合はキャンセルする。ポインターキャプチャを使い、フォーカス喪失・キャプチャ喪失・タブ切替・無効化・削除・Stopで押下状態を解除する。Tab／Shift+TabはOrder昇順（描画順の背→手前）で移動し、Enter／Spaceでも操作できる。キーボードの長押しリピートは抑止する。他の起動キーの解放やTab移動では再発火させず、ポインター押下中のキー起動は受け付けない。Tab候補から画面外・退化変換・描画失敗のButtonを除き、無効化・削除時の押下とフォーカスは更新後に解除する。`Interactable=false`・0サイズ・判定不能な変換は対象外にする。親Buttonの無効化だけで子Buttonを無効化しない。ImageのないButtonも操作でき、ButtonでないImageはGame入力を遮らない。未実装のVisible／ClipChildren等は考慮せず、実装済みとして扱わない。
 - Button自身が `IUiButtonHandler.OnClick(UiClickContext context)` を実装し、`event Action<UiClickContext>? Clicked` を発火する。Runtimeは同じSceneObjectから別のhandlerを検索せず、Button自身へ入力を届ける。購読なしは何もしない。複数の購読は通常のC#イベントとして登録順に呼び、解除は `-=` を使う。イベントの購読・メソッド名・デリゲートは保存・Cloneせず、Playごとに実行用Buttonへ登録する。入力は `SceneRuntime.Step` 内のStart済みバッチの後・Updateの前で処理し、Start前や停止後のEnqueueは捨てる。購読先の初期化と解除は登録側が管理し、別オブジェクトの購読先が削除される場合はDestroy等で解除する。購読先のStart待ちや自動検出は行わない。クリック中のButton削除・Stopは残りの入力を捨てるが、実行中のイベント通知は通常どおり完了する。購読処理が例外を投げると後続の購読は呼ばず、`Button.OnClick` のエラーとしてConsoleへ報告して安全に停止する。contextには実行用SceneとButtonのSceneObjectを渡す。
 
+## 単体実行とゲーム配布
+
+- 初回の配布対象はWindows x64のself-containedフォルダ。Playerと.NETランタイム、描画のネイティブ依存、ゲームDLL、データ、ライセンス表記をまとめる。単一exe化・Native AOT・トリミングは行わない。操作・制作側の前提は[README](../README.md#ゲームのbuildと配布)を正本とする。
+- PlayerはEditorアセンブリに依存せず、配布データとコンパイル済みゲームDLLから起動シーンを復元する。実行時コンパイルや元プロジェクトへの参照は行わない。作業ディレクトリではなく、配布物の位置を基準にデータを解決する。
+- Coreの保存形式・型ID・ライフサイクルを維持し、Runtimeのサービス寿命とPlaySession、RenderingのGame描画を再利用する。組み込み型・ゲーム側のサービス登録・画像IDの解決規則をEditorとPlayerで共有し、既存のサンプル型も互換性を保つ。
+- 配布用manifestはゲーム名、起動シーン、ゲームDLL、安定した型IDから型名への対応を保持する。画像の登録情報、Prefab・DataAsset・LocalizationのIDも保持する。ゲームDLLと対応表は同じコンパイル結果から生成する。
+- Buildは保存した制作データのスナップショットから行う。ソースコードや制作キャッシュは配布せず、対応するゲームデータを明示的に収集する。初回は参照到達性による未使用データの除去を行わない。コンパイル・データ検証・publishが失敗した場合は成功扱いにしない。
+- 出力は専用の一時フォルダで完成させてから確定する。出力先と入力側の重複やリンクを拒否し、前回の正常な配布物と無関係な既存フォルダを保護する。Build & Runもこの配布経路の成果物を起動する。
+- 実装・自動検証・実GPU・.NET未導入環境での確認は区別し、結果を[実装計画](ImplementationPlan.md)に記録する。
+
 ## マルチプレイ・Steam：将来の構想
 
 ### 複数インスタンスでの検証

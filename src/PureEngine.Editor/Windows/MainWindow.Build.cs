@@ -30,6 +30,11 @@ public partial class MainWindow
         }
         if (Documents.IsDirty)
         {
+            if (Documents.BuildSaveConflict() is { } conflict)
+            {
+                SetFileStatus(conflict, true);
+                return;
+            }
             if (!await ConfirmBuildSave()) return;
             if (Documents.Asset is { Dirty: true } && !ViewModel.SaveDataAsset()) return;
             if (Documents.Table.IsDirty && !ViewModel.SaveTable()) return;
@@ -45,9 +50,8 @@ public partial class MainWindow
         });
         if (folders.Count == 0) return;
         var parent = folders[0].TryGetLocalPath() ?? throw new IOException("Choose a local build folder.");
-        var name = Project.Document.Name;
-        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name is "." or "..")
-            throw new InvalidDataException("The project name must be a valid folder name before building.");
+        var name = Project.Document.Name ?? throw new InvalidDataException("The project requires a name.");
+        WindowsGameBuild.ValidateWindowsName(name);
         var destination = Path.Combine(parent, name + "-Windows-x64");
         var engineRoot = WindowsGameBuild.FindEngineRoot();
         SetFileStatus("Building Windows x64 self-contained folder. The previous successful build is preserved until validation succeeds.");

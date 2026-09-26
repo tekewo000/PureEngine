@@ -6,7 +6,7 @@ C#で作る、UI中心の2Dマルチプレイゲーム向けエディター。
 設計方針・Attribute・Priority・保存データ・将来の構想は [EngineArchitecture.md](docs/EngineArchitecture.md) にまとめています。
 実装済みの範囲・制限・次の作業・検証状況は [実装計画・進捗](docs/ImplementationPlan.md) にまとめています。
 
-C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のSceneをImage・Sprite・UiLayoutで描きます（Start／Updateは呼びません）。GameにはPlay中の実行用Sceneを表示し、Button操作を接続しています。保存プロジェクトの単体実行は後続です。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
+C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のSceneをImage・Sprite・UiLayoutで描きます（Start／Updateは呼びません）。GameにはPlay中の実行用Sceneを表示し、Button操作を接続しています。Windows x64向けの単体実行・配布手順は下記の「ゲームのBuildと配布」を参照してください。[描画の実装計画](docs/VulkanRenderingPlan.md)と[検証記録](docs/ImplementationPlan.md#vulkan-v0v2の検証2026-09-22)を参照してください。
 
 ## 現在できること
 
@@ -40,6 +40,20 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - GameタブはPlay中の実行用Sceneを描く。実行用Buttonの `Clicked` へ登録した処理を、クリック・Tab移動後のEnter／Spaceで呼ぶ。`Interactable` は保存され、押下・ホバー・フォーカスは保存しない。`Text` の内容・色・サイズも描く。`LocalizedEntry` を付けたTextはプレビュー言語・実行言語で解決した文言を描く。
 - 文言の多言語化はプロジェクト直下の文言テーブルで行う。Game横のLocalizationタブで行（キー）と言語列を編集し、`Text` の `LocalizedEntry` 欄でキーを選ぶだけで、改名・本文編集はタブに集約する。ツールバーの言語選択でScene View／Gameの表示を切り替え、ゲームコードは `LocalizationService` と `LocalizationStore` のコンストラクタ注入で取得・切替する。
 - .NET 11 RC1とAvaloniaでビルドし、Windows上で表示を確認済み。
+
+## ゲームのBuildと配布
+
+- 対象はWindows x64。File → **Build Windows x64…** で配布フォルダを作成し、**Build & Run…** は同じ成果物を作成してから起動する。Editorで現在表示しているSceneではなく、Projectの起動シーンから実行する。
+- 未保存のScene・Prefab・DataAsset・Localizationがあれば、**Save All & Build** または **Cancel** を選ぶ。入力エラー・保存失敗・Play中・別のファイル操作中はビルドしない。同じDataAssetをInspectorとテーブルの両方で変更した場合は、上書きを避けるため保存前に止める。
+- 出力先の親フォルダを選ぶと、その下の `<ProjectName>-Windows-x64` に出力する。ゲーム制作プロジェクトやエンジンのソースと重なる場所、リンク、他の用途の既存フォルダは指定できない。失敗時は前回の正常な配布物を保持する。
+- **制作側**には、このリポジトリと `global.json` で固定したSDKが必要。Playerは `dotnet publish` により `win-x64` のself-containedとして作る。必要なパッケージの復元にはネットワーク接続が必要になることがある。
+- **受け取る側**にはEditor・エンジンのソース・.NET SDK・.NETランタイムの別途インストールは不要。ただし対応するWindows環境とGPU／ドライバーは必要。出力フォルダ全体をZIPなどで渡し、展開後にPlayerのexeを起動する。exeだけを取り出して配布しない。
+- ゲームのC#はBuild時にDLL化する。配布先ではコンパイルしない。対応するシーン・画像と登録情報・Prefab・DataAsset・Localizationを同梱し、ソースコードや制作キャッシュは含めない。初回は未使用アセットの削減を行わない。
+- 古い保存形式やC#メンバー変更によって再保存が必要なScene／Prefabは、対象ファイルをEditorで開いて確認・保存してから再Buildする。壊れた画像や描画上限を超える画像もBuild時に拒否する。
+- 単一exe化・Native AOT・トリミング・インストーラー・署名・他OS向けの出力は対象外。生成されたライセンス表記も配布フォルダに残す。
+- Playerのログは `%LOCALAPPDATA%\PureEngine\Player\player.log` に保存する。前回分の `player.log.previous` と合わせて各256 KiBまで保持し、起動／実行失敗の画面にも場所を表示する。書き込み不能な場合はその理由を表示し、配布フォルダには書き込まない。
+
+検証済みの範囲と未確認事項は [実装計画・進捗](docs/ImplementationPlan.md) を参照する。
 
 ## 技術
 

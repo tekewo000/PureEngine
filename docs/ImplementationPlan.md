@@ -4,6 +4,15 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 
+## Windows x64のBuild・単体実行・配布
+
+- FileメニューのBuild／Build & Run、全編集文書の保存確認、保存済みC#からのDLL生成、型ID対応表、ゲームデータとライセンス表記の同梱、self-contained publish、専用出力先への段階的な確定を追加する。
+- PlayerはEditorなしで配布フォルダから起動シーンを読み、既存Runtime・描画・Button入力を使う。配布先でのC#コンパイルは行わない。操作・前提は[README](../README.md#ゲームのbuildと配布)、責務と対象外は[設計書](EngineArchitecture.md#単体実行とゲーム配布)を正本とする。
+- 統合後の `./tools/code-quality.ps1 -Check` は通過。Playerの入力・キャンセル・クリップ・パッケージ移動／拒否・Headlessウィンドウのライフサイクル・Editorアセンブリ非依存・上限付きログと書き込み失敗時の処理を確認した。Coreにはコンパイル済みDLLの安定IDとDIの型同一性、サービス分離、破棄、壊れたPrefab等のチェックを追加した。
+- `dotnet run --project tests/PureEngine.Editor.Checks --no-build -- --build-package-smoke` は通過。実際のself-contained publish、改名後の型ID維持、最新保存コードの採用、コンパイル失敗時の前回成果物保持、出力移動・元プロジェクト削除後のPlayer起動を確認した。
+- 追加レビュー後、同じDataAssetの独立した未保存編集の競合、Windows名／大小文字衝突、junction・8.3別名を経由する出力先保護、移行が必要なScene／Prefabの拒否、画像のデコードと描画上限の検証を追加した。品質ゲートと上記smokeを再実行して通過。壊れた画像・上限超過画像による再Build失敗でも前回の正常な成果物を保持することを確認した。
+- 実画面／実GPUと、.NETが本当に未導入のWindows環境での確認は未実施。無効な`DOTNET_ROOT`を指定した自己完結パッケージの起動テストは、クリーンマシンでの確認とは区別する。
+
 ## Localization（2026-09-26実装、2026-09-27に単一テーブルへ移行）
 
 - 文言はプロジェクト直下の `Localization.pure.loc.yaml` に1表で持つ。言語列はテーブル全体で統一し、行ごとの言語差は持たせない。行は不変ID・表示キー名・言語ごとの本文・言語ごとのボイス欄からなり、言語キーは小文字BCP47式（`ja`・`en`・`ko`等）。空欄は未翻訳扱いで既定言語（`ja`）→表順の最初の可用言語の順に代替する。当初のファイル分割案（文言ごとのデータアセット）は廃止し、単一テーブルのみを正本とする。
@@ -292,13 +301,13 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 
 ## まだできないこと・制限
 
-- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。Game表示とButton操作は実装・自動検証済み（下記）。単体実行・配布は未実装。
+- Start／Update／DestroyはCoreでPriority順に実行できる。EditorのPlay／Stopで開始・停止できる。Game表示とButton操作、Windows x64の単体実行・フォルダ配布を実装。配布の検証範囲は冒頭のBuild節を参照する。
 - 親子関係・兄弟順・Sprite参照・描画順（`Order`）・Buttonの`Interactable`・Textの内容と色・サイズの保存は実装済み。Stuffsのツリー表示とドラッグ＆ドロップの子付け・前後並べ替え・ルート化、`Scene.SetRootSiblingIndex` によるルート並べ替えも実装・自動検証済み。オブジェクト参照（ObjectRef）・フォント素材・SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。
 - Projectの自作C#を自動コンパイル・登録する。独自csproj設定、外部NuGet依存の復元、Play中の実行状態を維持した差し替えは未対応。コンパイルはバックグラウンドで行い、Scene移行と採用はUIスレッドで行う。
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節を正本とする。自作struct／Nullable、対応コンテナの任意入れ子、ゼロ下限の多次元配列を含む。非string辞書キー、非ゼロ下限配列、任意ポリモーフィズム、structのComponentアタッチ、サービス参照は対象外。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
-- ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置と文言参照の解決まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoと文言のボイス再生・音声基盤は未実装。
+- ゲーム内UIのInputField等の追加、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置と文言参照の解決まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoと文言のボイス再生・音声基盤は未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
 ## 仕様整理と次の実装順
@@ -362,8 +371,8 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 | V2 | 2D画像・日本語の文字・クリップ・GPU資源管理 | 実装・ローカル／実機確認済み |
 | V3 | 親子・素材参照・UIデータの保存 | Image向けの素材・Inspector・version 2保存／Clone、Text／Buttonを実装。フォント素材・ObjectRef等は後続 |
 | V4 | Scene Viewでの配置・Inspector連動 | 編集SceneとInspectorの反映に加え、V4前半（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）を実装・自動検証済み。サイズ変更・回転ハンドル等は未実装 |
-| V5 | Game表示・入力・Play／Stop接続 | Game表示とButton操作まで実装・自動検証済み（下記）。単体実行・配布は未着手 |
-| V6 | 同じプロジェクトの単体実行・配布確認 | 未着手 |
+| V5 | Game表示・入力・Play／Stop接続 | Game表示とButton操作まで実装・自動検証済み（下記） |
+| V6 | 同じプロジェクトの単体実行・配布確認 | Windows x64のself-containedフォルダ出力を実装。検証結果と未確認事項は冒頭のBuild節 |
 
 V1が成立する前にUI本実装へ進まない。最終目標は、カード画像・日本語の得点表示・ボタンを編集保存し、Playと単体実行の両方で操作できること。各段階の完了条件と対象外は上記計画に集約する。
 

@@ -19,6 +19,16 @@ public sealed class EditorDocuments : IDisposable
     public HashSet<object> AssetOwned { get; } = [with(ReferenceEqualityComparer.Instance)];
     public bool IsDirty => Scene.IsDirty || Prefab is { IsDirty: true } || Asset is { Dirty: true } || Table.IsDirty || Localization.IsDirty;
 
+    /// <summary>Build cannot choose between independent unsaved edits of the same asset.</summary>
+    public string? BuildSaveConflict()
+    {
+        if (Asset is not { Dirty: true } asset) return null;
+        var path = Path.GetFullPath(asset.Path);
+        return Table.Rows.Any(row => row.Dirty && string.Equals(Path.GetFullPath(row.Path), path, StringComparison.OrdinalIgnoreCase))
+            ? $"Cannot build: {Path.GetFileName(path)} has independent unsaved edits in its asset editor and table. Save or discard one view, reload the other, and reconcile its changes before building."
+            : null;
+    }
+
     public void ActivatePrefab(bool active)
     {
         if (active && Prefab is null) throw new InvalidOperationException("No prefab document is open.");

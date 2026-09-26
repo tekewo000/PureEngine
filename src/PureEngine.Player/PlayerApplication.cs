@@ -15,6 +15,7 @@ public sealed class PlayerApplication : Application
             GamePackage? package = null;
             try
             {
+                PlayerLog.Current.Write($"Loading game package from {AppContext.BaseDirectory}");
                 // The executable's directory is the package root, regardless of the launcher's working directory.
                 package = GamePackage.Open(AppContext.BaseDirectory);
                 desktop.MainWindow = new PlayerWindow(package);
@@ -23,7 +24,7 @@ public sealed class PlayerApplication : Application
             {
                 try { package?.Dispose(); }
                 catch (Exception cleanup) { error = new AggregateException(error, cleanup); }
-                Console.Error.WriteLine(error);
+                PlayerLog.Current.Report(error);
                 desktop.MainWindow = new Window
                 {
                     Title = "Game could not start",
@@ -31,7 +32,8 @@ public sealed class PlayerApplication : Application
                     Height = 240,
                     Content = new TextBlock
                     {
-                        Text = "The game package could not be loaded.\n\n" + error.GetBaseException().Message,
+                        Text = "The game package could not be loaded.\n\n" + error.GetBaseException().Message
+                            + "\n\n" + PlayerLog.Current.LocationDescription,
                         Margin = new Thickness(24),
                         TextWrapping = TextWrapping.Wrap,
                     },
