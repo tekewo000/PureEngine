@@ -177,7 +177,8 @@ static class DataAssetChecks
             using var owner = new ProjectComponents();
             owner.Adopt(compiled);
             var descriptors = DataAssetDescriptor.DescribeAll(owner.Registry, out var diagnostics, owner.DataAssetTypes);
-            if (descriptors.Count != 1 || diagnostics.Count != 2)
+            if (descriptors.Count(descriptor => descriptor.TypeId.StartsWith("user.", StringComparison.Ordinal)) != 1
+                || diagnostics.Count != 2)
                 throw new InvalidOperationException("Invalid declarations must be diagnosed even when they cannot be registered.");
         }
         finally { Directory.Delete(root, recursive: true); }

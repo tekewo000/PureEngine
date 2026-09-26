@@ -22,6 +22,7 @@ public partial class MainWindow
             _previewImages = [];
             _sceneViewport?.InvalidateImageCache();
             _gameViewport?.InvalidateImageCache();
+            RefreshPreviewLanguages();
             return;
         }
         _projectAssets = ProjectAssets.Scan(Project.RootDirectory);
@@ -35,6 +36,7 @@ public partial class MainWindow
         // The Sprite Inspector resolves IDs against this index; keep the displayed selection and warnings consistent.
         if (GetSelectedSceneObject() is { } selected)
             RefreshUiWarnings(selected);
+        RefreshPreviewLanguages();
     }
 
     internal IReadOnlyList<ProjectAssets.AssetEntry> AssetImageEntries() =>

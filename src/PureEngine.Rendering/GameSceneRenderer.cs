@@ -14,7 +14,7 @@ public static class GameSceneRenderer
     /// <summary>Refills the DrawList with the runtime scene and returns diagnostics for targets that could not be drawn. Never throws.</summary>
     public static IReadOnlyList<Diagnostic> Build(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
-        IReadOnlyDictionary<Guid, ButtonVisual>? states = null)
+        IReadOnlyDictionary<Guid, ButtonVisual>? states = null, LocalizationService? localization = null)
     {
         ArgumentNullException.ThrowIfNull(draw);
         ArgumentNullException.ThrowIfNull(scene);
@@ -23,7 +23,7 @@ public static class GameSceneRenderer
         draw.Clear();
         if (!IsDrawableViewport(viewportSize))
             return diagnostics;
-        DrawOrdered(draw, scene, images, viewportSize, states, diagnostics);
+        DrawOrdered(draw, scene, images, viewportSize, states, localization, diagnostics);
         return diagnostics;
     }
 
@@ -33,7 +33,7 @@ public static class GameSceneRenderer
 
     private static void DrawOrdered(
         DrawList draw, Scene scene, IReadOnlyDictionary<Guid, byte[]> images, Vector2 viewportSize,
-        IReadOnlyDictionary<Guid, ButtonVisual>? states, List<Diagnostic> diagnostics)
+        IReadOnlyDictionary<Guid, ButtonVisual>? states, LocalizationService? localization, List<Diagnostic> diagnostics)
     {
         var clip = new Vector4(0, 0, viewportSize.X, viewportSize.Y);
         List<SceneViewMath.LayoutEntry> collected = [];
@@ -53,7 +53,7 @@ public static class GameSceneRenderer
             }
             try
             {
-                UiTextRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, clip, null);
+                UiTextRenderer.DrawEntry(draw, entry.Object, entry.Size, entry.WorldScene, clip, null, localization);
             }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
             {

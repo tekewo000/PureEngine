@@ -146,6 +146,7 @@ SceneComposableReferenceChecks.Run();
 UiComponentChecks.Run();
 UiButtonChecks.Run();
 UiTextChecks.Run();
+LocalizationChecks.Run();
 SceneViewChecks.Run();
 HierarchyLifetimeChecks.Run();
 ProjectPersistenceChecks.Run();

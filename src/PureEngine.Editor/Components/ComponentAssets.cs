@@ -30,6 +30,7 @@ public static class ComponentAssets
         registry.Register<Image>("core.image");
         registry.Register<Button>("core.button");
         registry.Register<Text>("core.text");
+        registry.Register<LocalizedText>("core.localized-text");
         registry.Register<Samples.PlayerStats>("sample.player-stats");
         registry.Register<Samples.RoundSettings>("sample.round-settings");
         registry.Register<Samples.InjectedPlayer>("sample.injected-player");

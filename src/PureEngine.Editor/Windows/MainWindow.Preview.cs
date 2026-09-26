@@ -45,7 +45,7 @@ public partial class MainWindow
         var layouts = EditSceneRenderer.CollectLayouts(Documents.Current.Current, viewportSize, layoutDiagnostics);
         draw.Clear();
         SceneViewOverlay.DrawGrid(draw, viewportSize, _scenePan, _sceneZoom);
-        var diagnostics = EditSceneRenderer.AppendWithLayouts(draw, layouts, _previewImages, viewportSize, view);
+        var diagnostics = EditSceneRenderer.AppendWithLayouts(draw, layouts, _previewImages, viewportSize, view, ViewModel.Localization.PreviewService);
         _sceneDrawFailures.Clear();
         foreach (var diagnostic in layoutDiagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);
         foreach (var diagnostic in diagnostics) _sceneDrawFailures.Add(diagnostic.ObjectId);

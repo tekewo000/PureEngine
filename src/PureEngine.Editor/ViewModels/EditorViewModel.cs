@@ -48,6 +48,7 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
     public ConsoleViewModel Console { get; } = new();
     public PlayViewModel Play { get; }
     public CompilationViewModel Compilation { get; }
+    public LocalizationViewModel Localization { get; } = new();
     public EditorCommand StartPlayCommand { get; }
     public EditorCommand StopPlayCommand { get; }
     public EditorCommand SaveDataAssetCommand { get; }
