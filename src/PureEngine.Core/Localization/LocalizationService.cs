@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace PureEngine.Core;
 
-/// <summary>Resolves localized text and voice slots for one preview or run language with a shared fallback chain.</summary>
+/// <summary>Resolves localization table rows for one preview or run language with a shared fallback chain.</summary>
 /// <remarks>
 /// Editing and each Play run own independent instances through constructor injection, so a settings screen
 /// can switch <see cref="CurrentLanguage"/> at runtime without touching files or other runs.
@@ -39,57 +39,45 @@ public sealed partial class LocalizationService
         return LanguageCodePattern().IsMatch(code.Trim().ToLowerInvariant());
     }
 
-    /// <summary>Resolves the entry for <see cref="CurrentLanguage"/> with the shared fallback chain.</summary>
-    public string ResolveText(LocalizedText? entry, string? fallback) =>
-        ResolveText(entry, fallback, _currentLanguage);
+    /// <summary>Resolves the row for <see cref="CurrentLanguage"/> with the shared fallback chain.</summary>
+    public string ResolveText(LocalizationStore? store, LocalizedTextId? id, string? fallback) =>
+        ResolveText(store, id, fallback, _currentLanguage);
 
     /// <summary>Resolves the voice slot for <see cref="CurrentLanguage"/>. Null means silence.</summary>
-    public string? ResolveVoice(LocalizedText? entry) => ResolveVoice(entry, _currentLanguage);
+    public string? ResolveVoice(LocalizationStore? store, LocalizedTextId? id) =>
+        ResolveVoice(store, id, _currentLanguage);
 
     /// <summary>Resolves without a service instance for renderers and checks. A null language uses the default.</summary>
-    public static string ResolveText(LocalizedText? entry, string? fallback, string? language)
+    public static string ResolveText(LocalizationStore? store, LocalizedTextId? id, string? fallback, string? language)
     {
-        if (entry is null) return fallback ?? "";
+        if (store is null || id is null || id.IsEmpty
+            || !store.TryGetEntry(id.Id, out var entry) || entry is null) return fallback ?? "";
         var current = string.IsNullOrWhiteSpace(language) ? DefaultLanguage : language.Trim().ToLowerInvariant();
         if (TryUsableText(entry.Texts, current, out var text)) return text;
         if (!string.Equals(current, DefaultLanguage, StringComparison.Ordinal)
             && TryUsableText(entry.Texts, DefaultLanguage, out text)) return text;
-        foreach (var code in entry.Texts.Keys.Order(StringComparer.Ordinal))
+        foreach (var code in store.Languages)
             if (TryUsableText(entry.Texts, code, out text)) return text;
         return fallback ?? "";
     }
 
     /// <summary>Resolves a voice slot without a service instance. A null language uses the default.</summary>
-    public static string? ResolveVoice(LocalizedText? entry, string? language)
+    public static string? ResolveVoice(LocalizationStore? store, LocalizedTextId? id, string? language)
     {
-        if (entry is null) return null;
+        if (store is null || id is null || id.IsEmpty
+            || !store.TryGetEntry(id.Id, out var entry) || entry is null) return null;
         var current = string.IsNullOrWhiteSpace(language) ? DefaultLanguage : language.Trim().ToLowerInvariant();
         if (TryUsableVoice(entry.Voices, current, out var voice)) return voice;
         if (!string.Equals(current, DefaultLanguage, StringComparison.Ordinal)
             && TryUsableVoice(entry.Voices, DefaultLanguage, out voice)) return voice;
-        foreach (var code in entry.Voices.Keys.Order(StringComparer.Ordinal))
+        foreach (var code in store.Languages)
             if (TryUsableVoice(entry.Voices, code, out voice)) return voice;
         return null;
     }
 
-    /// <summary>Language columns for editors: every language used by any entry plus the default, sorted.</summary>
-    public static IReadOnlyList<string> AvailableLanguages(DataAssetStore store)
-    {
-        ArgumentNullException.ThrowIfNull(store);
-        HashSet<string> found = [DefaultLanguage];
-        foreach (var id in store.Ids)
-        {
-            if (!store.TryGet<object>(id, out var asset) || asset is not LocalizedText entry) continue;
-            foreach (var code in entry.Texts.Keys.Concat(entry.Voices.Keys))
-            {
-                var normalized = code.Trim().ToLowerInvariant();
-                if (IsValidLanguageCode(normalized)) found.Add(normalized);
-            }
-        }
-        List<string> ordered = [.. found];
-        ordered.Sort(StringComparer.Ordinal);
-        return ordered;
-    }
+    /// <summary>Language columns for editors: the table languages, defaulting to the default language.</summary>
+    public static IReadOnlyList<string> AvailableLanguages(LocalizationStore? store) =>
+        store?.Languages ?? [DefaultLanguage];
 
     private static bool TryUsableText(Dictionary<string, string> texts, string code, out string text)
     {

@@ -15,8 +15,9 @@ public sealed class EditorDocuments : IDisposable
     public bool IsPrefabActive { get; private set; }
     public DataAssetEditState? Asset { get; set; }
     public DataAssetTableDocument Table { get; } = new();
+    public LocalizationDocument Localization { get; } = new();
     public HashSet<object> AssetOwned { get; } = [with(ReferenceEqualityComparer.Instance)];
-    public bool IsDirty => Scene.IsDirty || Prefab is { IsDirty: true } || Asset is { Dirty: true } || Table.IsDirty;
+    public bool IsDirty => Scene.IsDirty || Prefab is { IsDirty: true } || Asset is { Dirty: true } || Table.IsDirty || Localization.IsDirty;
 
     public void ActivatePrefab(bool active)
     {
@@ -97,6 +98,23 @@ public sealed class EditorDocuments : IDisposable
         }
     }
 
+    /// <summary>Loads the project localization table file. A missing file loads as an empty table, never null.</summary>
+    public static LocalizationStore BuildLocalizationStore(ProjectFile? project)
+    {
+        if (project is null) return new LocalizationStore();
+        try
+        {
+            var (store, diagnostics) = LocalizationStore.LoadFile(project.LocalizationPath);
+            foreach (var diagnostic in diagnostics) Log.Engine.Warning(diagnostic);
+            return store;
+        }
+        catch (Exception error)
+        {
+            Log.Engine.Error("Cannot scan localization.", error);
+            return new LocalizationStore();
+        }
+    }
+
     public void SaveScene(string path, string yaml, ProjectFile? project)
     {
         project?.ValidateScenePath(path);
@@ -107,7 +125,7 @@ public sealed class EditorDocuments : IDisposable
     public Scene ReadScene(string path, ProjectFile? project, ComponentRegistry registry, out bool changed)
     {
         project?.ValidateScenePath(path);
-        var serializer = new SceneSerializer(registry, BuildAssetStore(project, registry), BuildPrefabCatalog(project));
+        var serializer = new SceneSerializer(registry, BuildAssetStore(project, registry), BuildPrefabCatalog(project), BuildLocalizationStore(project));
         return serializer.Deserialize(File.ReadAllText(path), out changed, Current.Services.Factory);
     }
 
@@ -124,13 +142,15 @@ public sealed class EditorDocuments : IDisposable
         try
         {
             var assets = BuildAssetStore(project, components.Registry);
+            var localization = BuildLocalizationStore(project);
             candidate.ReplaceServices(GameSession.Create(services =>
             {
                 GameServices.ForProject(components)(services);
                 if (assets is not null) services.AddSingleton(assets);
+                services.AddSingleton(localization);
             })).Dispose();
             var restored = PrefabFile.OpenForEditing(path, components.Registry, out var id, out var changed,
-                assets, BuildPrefabCatalog(project), candidate.Services.Factory);
+                assets, BuildPrefabCatalog(project), candidate.Services.Factory, localization);
             candidate.Replace(restored, Path.GetFullPath(path), changed);
             return (candidate, id);
         }
@@ -167,6 +187,7 @@ public sealed class EditorDocuments : IDisposable
         _disposed = true;
         Asset = null;
         AssetOwned.Clear();
+        Localization.Clear();
         Table.Clear();
         Table.Type = null;
         var errors = new List<Exception>();
@@ -183,4 +204,5 @@ public enum EditedDocumentKind
     Scene,
     DataAsset,
     Table,
+    Localization,
 }

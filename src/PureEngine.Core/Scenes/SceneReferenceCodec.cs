@@ -58,6 +58,8 @@ internal static class SceneReferenceCodec
         {
             if (PrefabReferenceStore.TryGetIdentity(value, out var prefab))
                 return EncodePrefab(prefab!.PrefabId, prefab.TargetId);
+            if (declaredType == typeof(LocalizedTextId))
+                return EncodeLocalization(value, ownerId, path, scene, forSave);
             var targetId = ResolveTargetId(value, declaredType, componentToId, scene);
             scene.References.ClearMissing(ownerId, path);
             scene.References.ClearLegacy(ownerId, path);
@@ -258,6 +260,8 @@ internal static class SceneReferenceCodec
     {
         if (raw is null)
             return null;
+        if (declaredType == typeof(LocalizedTextId))
+            return DecodeLocalization(raw, ownerId, path, scene, version, displayPath, ref membersChanged);
         if (raw is IDictionary mapping && mapping.Contains("prefab"))
         {
             if (mapping.Count != 2 || mapping["prefab"] is not string prefabText || !Guid.TryParse(prefabText, out var prefabId)
@@ -305,6 +309,60 @@ internal static class SceneReferenceCodec
             return null;
         }
         throw new InvalidDataException($"{displayPath}: a reference {{ ref: <id> }} or null is required.");
+    }
+
+    private static Dictionary<string, object?>? EncodeLocalization(
+        object? value,
+        Guid ownerId,
+        string path,
+        Scene scene,
+        bool forSave)
+    {
+        if (value is LocalizedTextId empty && empty.IsEmpty) value = null;
+        if (value is not null)
+        {
+            if (value is not LocalizedTextId localizationId)
+                throw new InvalidDataException($"{path}: reference type mismatch.");
+            scene.References.ClearMissing(ownerId, path);
+            scene.References.ClearLegacy(ownerId, path);
+            return new Dictionary<string, object?> { ["loc"] = localizationId.Id.ToString("D") };
+        }
+        if (scene.References.TryGetMissing(ownerId, path, out var missing))
+            return new Dictionary<string, object?> { ["loc"] = missing.ToString("D") };
+        if (scene.References.TryGetLegacy(ownerId, path, out _))
+        {
+            if (forSave)
+                throw new InvalidDataException($"{path}: legacy inline values must be reassigned or explicitly discarded before saving.");
+            return null;
+        }
+        return null;
+    }
+
+    private static LocalizedTextId? DecodeLocalization(
+        object raw,
+        Guid ownerId,
+        string path,
+        Scene scene,
+        int version,
+        string displayPath,
+        ref bool membersChanged)
+    {
+        if (raw is IDictionary mapping && mapping.Contains("loc")
+            && mapping["loc"] is string text && Guid.TryParse(text, out var id) && id != Guid.Empty)
+        {
+            if (scene.Localization.TryGetEntry(id, out _))
+                scene.References.ClearMissing(ownerId, path);
+            else
+                scene.References.SetMissing(ownerId, path, id);
+            return new LocalizedTextId(id);
+        }
+        if (version is 1 or 2)
+        {
+            scene.References.SetLegacy(ownerId, path, raw);
+            membersChanged = true;
+            return null;
+        }
+        throw new InvalidDataException($"{displayPath}: a reference {{ loc: <id> }} or null is required.");
     }
 
     private static object? DecodeSequence(
@@ -426,6 +484,8 @@ internal static class SceneReferenceCodec
         {
             if (scene.References.TryGetMissing(ownerId, path, out var missing))
             {
+                if (declaredType == typeof(LocalizedTextId))
+                    return new LocalizedTextId(missing);
                 if (DataAssetStore.IsAssetType(declaredType))
                     return scene.DataAssets.Find(missing, declaredType);
                 if (objectsById.TryGetValue(missing, out var targetObject) && declaredType == typeof(SceneObject))
@@ -434,6 +494,12 @@ internal static class SceneReferenceCodec
                     return targetComponent;
             }
             return null;
+        }
+        if (declaredType == typeof(LocalizedTextId))
+        {
+            if (liveValue is not LocalizedTextId localizationId)
+                throw new InvalidDataException($"{displayPath}: reference type mismatch.");
+            return new LocalizedTextId(localizationId.Id);
         }
         if (DataAssetStore.IsAssetType(declaredType))
         {

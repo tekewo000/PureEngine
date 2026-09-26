@@ -7,7 +7,7 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace PureEngine.Core;
 
 /// <summary>Version 3 saves component IDs and ID references. Version 1/2 remain readable with migration protection. Restoring never mutates the caller's current scene.</summary>
-public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? assets = null, PrefabCatalog? prefabs = null)
+public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? assets = null, PrefabCatalog? prefabs = null, LocalizationStore? localization = null)
 {
     private static readonly ConditionalWeakTable<Type, MemberInfo[]> InspectorMembers = [];
     private readonly Lazy<ISerializer> _writer = new(static () => new SerializerBuilder()
@@ -22,7 +22,7 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
 
     /// <summary>Copies current authoring data without YAML or file I/O. Unmarked members keep their initializers.</summary>
     public Scene Clone(Scene scene, Func<Type, object>? factory = null) =>
-        new SceneSerializer(registry, assets ?? scene.DataAssets.Clone(registry), prefabs ?? scene.Prefabs.Catalog)
+        new SceneSerializer(registry, assets ?? scene.DataAssets.Clone(registry), prefabs ?? scene.Prefabs.Catalog, localization ?? scene.Localization.Clone())
             .Restore(Capture(scene, forSave: false), factory, out _);
 
     private SceneDocument Capture(Scene scene, bool forSave)
@@ -133,7 +133,7 @@ public sealed class SceneSerializer(ComponentRegistry registry, DataAssetStore? 
             throw new InvalidDataException($"Unsupported scene version: {document.Version}");
         if (document.Objects is null) throw new InvalidDataException("objects is required.");
 
-        var scene = new Scene { DataAssets = assets ?? new DataAssetStore(), Prefabs = references ?? new PrefabReferenceStore(prefabs, factory) };
+        var scene = new Scene { DataAssets = assets ?? new DataAssetStore(), Prefabs = references ?? new PrefabReferenceStore(prefabs, factory), Localization = localization ?? new LocalizationStore() };
         var created = new List<object>();
         try
         {

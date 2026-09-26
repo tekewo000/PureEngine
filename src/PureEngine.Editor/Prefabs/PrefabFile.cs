@@ -39,11 +39,11 @@ public static class PrefabFile
 
     /// <summary>Restores an isolated authoring scene with the prefab's original object and component identities.</summary>
     public static Scene OpenForEditing(string path, ComponentRegistry registry, out Guid prefabId, out bool membersChanged,
-        DataAssetStore? assets = null, PrefabCatalog? prefabs = null, Func<Type, object>? factory = null)
+        DataAssetStore? assets = null, PrefabCatalog? prefabs = null, Func<Type, object>? factory = null, LocalizationStore? localization = null)
     {
         ArgumentNullException.ThrowIfNull(registry);
         var document = Load(path);
-        var scene = new PrefabSerializer(registry).RestoreForEditing(document, out membersChanged, assets, prefabs, factory);
+        var scene = new PrefabSerializer(registry).RestoreForEditing(document, out membersChanged, assets, prefabs, factory, localization);
         prefabId = document.Id;
         return scene;
     }

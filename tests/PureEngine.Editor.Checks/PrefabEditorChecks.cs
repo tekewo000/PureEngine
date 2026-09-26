@@ -103,7 +103,7 @@ static class PrefabEditorChecks
             Program.Wait((Task)Call(editor, "OpenSelectedExplorerEntry")!);
             Check(store.Current.Objects.Count == before && store.IsDirty == dirtyBeforeOpen
                 && !ReferenceEquals(ActiveStore(editor), store)
-                && editor.FindControl<TabControl>("ViewportTabs")!.SelectedIndex == 3,
+                && editor.FindControl<TabControl>("ViewportTabs")!.SelectedIndex == 4,
                 "Double-clicking a prefab must open an isolated editor without placing or dirtying the main scene.");
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
@@ -384,7 +384,7 @@ static class PrefabEditorChecks
             Check(!ReferenceEquals(prefab, main) && prefabRoot.Id == source.Id
                 && !ReferenceEquals(prefabRoot, source) && main.Current.Objects.Count == 2
                 && !main.IsDirty && !prefab.IsDirty, "Opening must isolate objects and preserve clean documents.");
-            Check(tabs.SelectedIndex == 3 && editor.Title!.Contains("Editable.pure.prefab.yaml")
+            Check(tabs.SelectedIndex == 4 && editor.Title!.Contains("Editable.pure.prefab.yaml")
                 && editor.FindControl<TextBlock>("StuffsContext")!.IsVisible
                 && editor.FindControl<TextBlock>("StuffsContext")!.Text!.Contains("Editable.pure.prefab.yaml")
                 && Equals(editor.FindControl<MenuItem>("SaveSceneMenu")!.Header, "Save Prefab"),
@@ -419,7 +419,7 @@ static class PrefabEditorChecks
             editor.FindControl<TextBox>("ObjectName")!.Text = "Changed main only";
             Dispatcher.UIThread.RunJobs();
             Check(main.IsDirty && prefab.IsDirty, "Both documents must retain independent unsaved edits.");
-            tabs.SelectedIndex = 3;
+            tabs.SelectedIndex = 4;
             Dispatcher.UIThread.RunJobs();
             Check(ReferenceEquals(Call(editor, "GetSelectedSceneObject"), prefabRoot)
                 && Equals(pan.GetValue(editor), new Vector2(-12, 88)) && Equals(zoom.GetValue(editor), 2f),
@@ -460,7 +460,7 @@ static class PrefabEditorChecks
             Check(!main.IsDirty && File.ReadAllBytes(prefabPath).SequenceEqual(savedPrefabBytes)
                 && !File.ReadAllBytes(scenePath).SequenceEqual(sceneBytes),
                 "Scene Save must write only the main scene.");
-            tabs.SelectedIndex = 3;
+            tabs.SelectedIndex = 4;
             Dispatcher.UIThread.RunJobs();
 
             Check(!editor.FindControl<MenuItem>("DeleteObjectMenuItem")!.IsEnabled,
@@ -541,7 +541,7 @@ static class PrefabEditorChecks
                 && File.ReadAllBytes(prefabPath).SequenceEqual(savedPrefabBytes),
                 "After Play, Ctrl+S must still save the open data asset, not either scene document.");
             Call(editor, "CloseDataAssetForEdit");
-            tabs.SelectedIndex = 3;
+            tabs.SelectedIndex = 4;
             Check(ReferenceEquals(ActiveStore(editor), prefab) && prefab.IsDirty,
                 "Stop must leave prefab edits available and unsaved.");
 

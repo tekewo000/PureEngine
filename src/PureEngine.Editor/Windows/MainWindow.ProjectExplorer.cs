@@ -214,6 +214,12 @@ public partial class MainWindow
             OpenCSharpInZed(entry.FullPath);
             return;
         }
+        if (entry.FullPath is not null && ProjectFile.IsLocalizationFileName(entry.FullPath))
+        {
+            if (RejectWhenPlaying("Open localization")) return;
+            ActivateEditorViewport(LocalizationViewportIndex);
+            return;
+        }
         if (IsPlaying)
         {
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
@@ -408,6 +414,7 @@ public partial class MainWindow
         RefreshProjectExplorer();
         RefreshComponents();
         if (await ConfirmTableRowsClose(closeOnConfirm: false)) RescanTableRows();
+        await RescanLocalizationRows();
         SetFileStatus(Project is null ? "No project is open." : $"Refreshed: {Project.Document.Name}");
         await Task.CompletedTask;
     });
@@ -467,6 +474,7 @@ public partial class MainWindow
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
             if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
             if (ContainsOpenTable(oldFull!) && !await ConfirmCloseTableRows()) return;
+            if (ContainsOpenLocalization(oldFull!) && !await ConfirmLocalizationClose()) return;
             if (ContainsOpenPrefab(oldFull!, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Move(oldFull!, newFull);
             else File.Move(oldFull!, newFull);
@@ -482,6 +490,7 @@ public partial class MainWindow
             }
             RefreshProjectExplorer();
             RescanTableRows();
+            await RescanLocalizationRows();
             SetFileStatus($"Renamed to: {name}");
         });
 
@@ -506,6 +515,7 @@ public partial class MainWindow
 
             if (ContainsOpenDataAsset(target) && !await ConfirmCloseDataAsset()) return;
             if (ContainsOpenTable(target) && !await ConfirmCloseTableRows()) return;
+            if (ContainsOpenLocalization(target) && !await ConfirmLocalizationClose()) return;
             var startup = Project.StartupScenePath;
             var targetRelative = Path.GetRelativePath(Project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))
@@ -544,6 +554,7 @@ public partial class MainWindow
             }
             RefreshProjectExplorer();
             RescanTableRows();
+            await RescanLocalizationRows();
             SetFileStatus($"Deleted: {display}");
         });
 

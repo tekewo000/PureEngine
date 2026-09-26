@@ -52,6 +52,7 @@ public partial class MainWindow : Window
             // Rebuild before showing the window; the initial Inspector used the placeholder asset index.
             RefreshComponents();
             RefreshDataAssetTableTypes();
+            LoadLocalizationForProject();
             if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
             StartUserCodeWatching();

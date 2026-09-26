@@ -628,6 +628,31 @@
                 </ScrollViewer>
               </Grid>
             </TabItem>
+            <TabItem x:Name="LocalizationTab" Classes="paneTab" Header="{Binding Localization.Title}" AutomationProperties.Name="Localization">
+              <Grid RowDefinitions="Auto,Auto,*">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8">
+                  <Button x:Name="SaveLocalizationButton" IsEnabled="{Binding Localization.CanSave}" Content="Save" FontSize="11" Padding="8,2"
+                          VerticalAlignment="Center" AutomationProperties.Name="Save localization table"
+                          ToolTip.Tip="Save table (Ctrl+S)" Command="{Binding SaveLocalizationCommand}" />
+                  <Button x:Name="AddLocalizationKeyButton" IsEnabled="{Binding Localization.IsEnabled}" Content="Add Key" FontSize="11" Padding="8,2"
+                          VerticalAlignment="Center" AutomationProperties.Name="Add localization key"
+                          Click="OnAddLocalizationKey" />
+                  <TextBox x:Name="AddLocalizationLanguageBox" MinWidth="64" VerticalAlignment="Center"
+                           AutomationProperties.Name="New language code" ToolTip.Tip="Language code, e.g. ko" />
+                  <Button x:Name="AddLocalizationLanguageButton" IsEnabled="{Binding Localization.IsEnabled}" Content="Add Language" FontSize="11" Padding="8,2"
+                          VerticalAlignment="Center" AutomationProperties.Name="Add localization language"
+                          Click="OnAddLocalizationLanguage" />
+                  <TextBlock x:Name="LocalizationError" Classes="errorBadge" IsVisible="False"
+                             VerticalAlignment="Center" />
+                  <TextBlock x:Name="LocalizationStatus" Text="{Binding Localization.Status}" Classes="hint" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Separator Grid.Row="1" Classes="divider" Margin="12,0" />
+                <ScrollViewer Grid.Row="2" Margin="8" HorizontalScrollBarVisibility="Auto">
+                  <StackPanel x:Name="LocalizationRows" IsEnabled="{Binding Localization.IsEnabled}" Spacing="8" Grid.IsSharedSizeScope="True" />
+                </ScrollViewer>
+              </Grid>
+            </TabItem>
             <TabItem x:Name="PrefabEditorTab" IsEnabled="{Binding CanEdit}" Classes="paneTab" Header="{Binding PrefabTabTitle}" AutomationProperties.Name="Prefab Editor" IsVisible="{Binding HasPrefab}">
               <Grid RowDefinitions="Auto,*">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,8">

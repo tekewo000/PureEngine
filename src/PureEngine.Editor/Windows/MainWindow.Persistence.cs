@@ -40,6 +40,13 @@ public partial class MainWindow
     private void OnDocumentSaved(EditedDocumentKind kind)
     {
         if (kind == EditedDocumentKind.DataAsset) RefreshDataAssetInspector();
+        else if (kind == EditedDocumentKind.Localization)
+        {
+            SyncSceneLocalization();
+            RebuildLocalizationRows();
+            RefreshObjectInspector();
+            RefreshProjectExplorer();
+        }
         else
         {
             if (kind == EditedDocumentKind.Table) UpdateDataAssetTableChrome();
@@ -259,6 +266,7 @@ public partial class MainWindow
             // Do not discard any document until every confirmation accepts closing the window.
             if (!await ConfirmTableRowsClose(closeOnConfirm: false)) return;
             if (!await ConfirmDataAssetClose(closeOnConfirm: false)) return;
+            if (!await ConfirmLocalizationClose()) return;
             if (!await ConfirmPrefabEditorClose(closeOnConfirm: false)) return;
             if (!await ConfirmUnsavedChanges()) return;
             _allowClose = true;
@@ -274,6 +282,8 @@ public partial class MainWindow
             e.Handled = true;
             if (ViewportTabs.SelectedIndex == DataAssetTableViewportIndex && Documents.Table.Type is not null)
                 await RunFileOperation(SaveDataAssetTableAsync);
+            else if (ViewportTabs.SelectedIndex == LocalizationViewportIndex)
+                await RunFileOperation(SaveLocalizationTableAsync);
             else if (Documents.Asset is not null && GetSelectedSceneObject() is null)
                 await RunFileOperation(SaveDataAssetAsync);
             else

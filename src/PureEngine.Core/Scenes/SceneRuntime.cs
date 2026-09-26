@@ -70,7 +70,7 @@ public sealed class SceneRuntime : IDisposable
     /// IDisposable instances are released by the serializer in reverse creation order,
     /// and components already cloned for this runtime are disposed here without Destroy.
     /// </remarks>
-    public SceneRuntime(Scene source, ComponentRegistry registry, Func<Type, object>? factory = null, DataAssetStore? assets = null, PrefabCatalog? prefabs = null)
+    public SceneRuntime(Scene source, ComponentRegistry registry, Func<Type, object>? factory = null, DataAssetStore? assets = null, PrefabCatalog? prefabs = null, LocalizationStore? localization = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(registry);
@@ -80,7 +80,7 @@ public sealed class SceneRuntime : IDisposable
 
         // Component creation point (for Play): creates runtime instances via a copy of the authoring data.
         // Without a factory, uses the legacy parameterless creation; with a factory, uses it for constructor injection.
-        Scene = new SceneSerializer(registry, assets, prefabs).Clone(source, factory);
+        Scene = new SceneSerializer(registry, assets, prefabs, localization).Clone(source, factory);
         Errors = _errors.AsReadOnly();
         try
         {

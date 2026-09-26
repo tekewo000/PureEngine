@@ -23,7 +23,13 @@ public sealed class UserCodeReloadCoordinator
                 asset = documents.Asset?.Migrate(components.Registry, registry);
                 rows = documents.Table.PrepareReload(components.Registry, registry);
                 var store = EditorDocuments.BuildAssetStore(project, registry);
-                if (store is not null) configure = services => services.AddSingleton(store);
+                var localization = EditorDocuments.BuildLocalizationStore(project);
+                if (store is not null) configure = services =>
+                {
+                    services.AddSingleton(store);
+                    services.AddSingleton(localization);
+                };
+                else configure = services => services.AddSingleton(localization);
             }
         }
         catch (Exception error)

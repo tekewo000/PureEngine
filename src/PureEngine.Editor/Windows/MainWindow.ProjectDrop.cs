@@ -335,6 +335,7 @@ public partial class MainWindow
         }
         if (ContainsOpenDataAsset(sourceFull) && !await ConfirmCloseDataAsset()) return;
         if (ContainsOpenTable(sourceFull) && !await ConfirmCloseTableRows()) return;
+        if (ContainsOpenLocalization(sourceFull) && !await ConfirmLocalizationClose()) return;
         if (ContainsOpenPrefab(sourceFull, isDirectory) && !await ConfirmClosePrefabEditor()) return;
 
         var fileName = Path.GetFileName(sourceFull);
@@ -363,6 +364,7 @@ public partial class MainWindow
         ViewModel.Project.SelectedFile = destination;
         RefreshProjectExplorer();
         RescanTableRows();
+        await RescanLocalizationRows();
         var displayTarget = string.IsNullOrEmpty(targetRelative) ? "(root)" : targetRelative;
         SetFileStatus($"Moved {fileName} -> {displayTarget}");
     }

@@ -28,7 +28,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
     {
         BeforeStart?.Invoke();
         if (Session is not null) return;
-        var playBlock = EditorOperationGate.PlayBlockReason(alreadyPlaying: false, editor.FileBusy, editor.Inspector.HasInputErrors);
+        var playBlock = EditorOperationGate.PlayBlockReason(alreadyPlaying: false, editor.FileBusy, editor.Inspector.HasInputErrors, editor.Documents.Localization.IsDirty);
         if (playBlock is not null)
         {
             var message = editor.FileBusy ? "Cannot play during file operations."
@@ -57,6 +57,7 @@ public sealed class PlayViewModel(EditorViewModel editor) : EditorObservable, ID
                 if (assets is not null) services.AddSingleton(assets);
                 services.AddSingleton(prefabs);
                 services.AddSingleton(localization);
+                services.AddSingleton(EditorDocuments.BuildLocalizationStore(editor.ProjectFile));
             });
         }
         catch (Exception error)

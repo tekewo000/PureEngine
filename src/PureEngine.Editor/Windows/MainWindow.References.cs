@@ -44,6 +44,12 @@ public partial class MainWindow
     private List<(SceneObject? Owner, object? Component, Guid Id, string Display, string Detail)> ReferenceCandidates(Type declaredType)
     {
         List<(SceneObject? Owner, object? Component, Guid Id, string Display, string Detail)> found = [];
+        if (declaredType == typeof(LocalizedTextId))
+        {
+            foreach (var entry in Documents.Current.Current.Localization.OrderedEntries())
+                found.Add((null, new LocalizedTextId(entry.Id), entry.Id, entry.Key, $"{entry.Key} ({entry.Id:D})"));
+            return found;
+        }
         if (DataAssetStore.IsAssetType(declaredType))
         {
             RefreshReferenceAssets();
@@ -460,7 +466,9 @@ public partial class MainWindow
             string? note = null;
             if (current is not null)
             {
-                var match = options.FirstOrDefault(option => ReferenceEquals(option.Value, current));
+                var match = declaredType == typeof(LocalizedTextId) && current is LocalizedTextId currentLoc
+                    ? options.FirstOrDefault(option => option.Value is LocalizedTextId optionLoc && optionLoc.Id == currentLoc.Id)
+                    : options.FirstOrDefault(option => ReferenceEquals(option.Value, current));
                 if (match is not null)
                 {
                     selected = match;
@@ -470,6 +478,12 @@ public partial class MainWindow
                     var display = $"Prefab: {BuildPrefabCatalog().DisplayName(prefab!.PrefabId)}";
                     selected = new ReferenceOption(current, display, $"{display} ({prefab.TargetId:D})");
                     options.Add(selected);
+                }
+                else if (declaredType == typeof(LocalizedTextId) && current is LocalizedTextId missingLoc && !missingLoc.IsEmpty)
+                {
+                    selected = new ReferenceOption(current, $"Missing: {ShortId(missingLoc.Id)}", $"Missing: {missingLoc.Id:D}");
+                    options.Add(selected);
+                    note = $"Missing {missingLoc.Id:D}. ID is kept.";
                 }
                 else if (DataAssetStore.IsAssetType(declaredType) && Documents.Current.Current.DataAssets.TryGetId(current, out var assetId))
                 {
@@ -502,7 +516,8 @@ public partial class MainWindow
                 combo.SelectedItem = selected;
             }
             finally { refreshing = false; }
-            var source = DataAssetStore.IsAssetType(declaredType)
+            var source = declaredType == typeof(LocalizedTextId) ? "the Localization tab"
+                : DataAssetStore.IsAssetType(declaredType)
                 ? "a project asset file" : "a Stuffs row or matching prefab";
             ToolTip.SetTip(combo, $"{storePath} : {FriendlyTypeName(declaredType)} — {selected.Detail}. Select, clear, or drop {source}");
         }

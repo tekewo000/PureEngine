@@ -4,13 +4,13 @@
 
 この文書を「どこまでできたか」「次に何をするか」の一覧として使う。
 
-## Localization（2026-09-26実装）
+## Localization（2026-09-26実装、2026-09-27に単一テーブルへ移行）
 
-- 文言共有は専用形式を作らず、`LocalizedText`（`core.localized-text`・作成メニュー `Localization/Text`）というデータアセットで行う。表示キー名・言語ごとの本文・言語ごとのボイス欄を持ち、言語キーは小文字BCP47式（`ja`・`en`・`ko`等）。空欄は未翻訳扱いで既定言語（`ja`）→最初の可用言語の順に代替する。
-- `Text.LocalizedEntry` 参照で解決文を描き、直書き `Content` は代替に残る。Inspectorは既存の名前選択・Clear・Missing表示・D&Dだけで、本文・改名の編集は単体InspectorとData Assets表の一括編集に集約する。言語列の専用グリッドは同じファイル形式の表示切替として後続。
-- 解決の正本はCoreの `LocalizationService`（現在言語→既定→最初→呼び出し側代替、小文字正規化・不正値拒否）。編集・各Playは独立インスタンスをコンストラクタ注入で受け、Play開始時はプレビュー言語を引き継ぎ、実行中の切替はその実行だけに効く。プレビュー言語はツールバー選択でScene View／Gameに反映し、保存しない。
-- 保存は文言ファイルの不変IDのみで、表示キー名の改名では壊れない。欠落はID保持＋診断、Clone・Playはスナップショット分離（データアセット参照と同じ規則）。ボイス欄は音声基盤までの予約で文字列のまま保存・編集し、`ResolveVoice`（空は無音）までを提供する。
-- `LocalizationChecks`（記述子・保存往復・解決行列・言語検証・シーン保存/Clone・Play分離・欠落/復旧）と `LocalizationEditorChecks`（ツールバー選択・言語一覧更新・プレビュー/Game解決・空描画）を追加。`Text` のInspector順とデータアセット表の型一覧・無効宣言診断の既存検査を新形式に合わせて更新した。
+- 文言はプロジェクト直下の `Localization.pure.loc.yaml` に1表で持つ。言語列はテーブル全体で統一し、行ごとの言語差は持たせない。行は不変ID・表示キー名・言語ごとの本文・言語ごとのボイス欄からなり、言語キーは小文字BCP47式（`ja`・`en`・`ko`等）。空欄は未翻訳扱いで既定言語（`ja`）→表順の最初の可用言語の順に代替する。当初のファイル分割案（文言ごとのデータアセット）は廃止し、単一テーブルのみを正本とする。
+- Game横のLocalizationタブで行の追加・改名・削除と言語列の追加・削除、各セルの本文・ボイス編集を行う。重複・空キーがある間は保存と終了を止める。`Text.LocalizedEntry` 参照で解決文を描き、直書き `Content` は代替に残る。Inspectorはキー一覧からの選択・Clear・Missing表示だけで、本文・改名の編集は置かない。
+- 解決の正本はCoreの `LocalizationService`（現在言語→既定→最初→呼び出し側代替、小文字正規化・不正値拒否）。編集・各Playは独立した `LocalizationStore` スナップショットを持ち、ゲームコードはサービスとストアのコンストラクタ注入で受ける。Play開始時はプレビュー言語を引き継ぎ、実行中の切替はその実行だけに効く。未保存の表がある間はPlayを開始しない。プレビュー言語はツールバー選択でScene View／Gameに反映し、保存しない。
+- 保存するのは行の不変ID（`{loc: id}`）のみで、表示キー名の改名では壊れない。欠落はID保持＋診断、Clone・Playはスナップショット分離。ボイス欄は音声基盤までの予約で文字列のまま保存・編集し、`ResolveVoice`（空は無音）までを提供する。
+- `LocalizationChecks`（表の保存往復・正規化診断・解決行列・言語検証・シーン保存/Clone・Play分離・欠落/復旧・不正形式拒否）と `LocalizationEditorChecks`（ツールバー選択・タブ編集/保存/再読込・未保存Play抑止・キー選択・プレビュー/Game解決・空描画）を追加。Prefabタブの固定indexを使う既存検査をタブ挿入に合わせて更新した。
 - ローカルの `./tools/code-quality.ps1 -Check`（提案レベル解析・警告をエラー扱いにしたビルド・Core/Editorチェック）は通過。実画面・実GPU・CIは未確認として区別する。設計は[UIコンポーネント](EngineArchitecture.md#uiコンポーネント)と[Localization](EngineArchitecture.md#localizationtextvoiceの下地実装済み)を参照。
 
 ## Editor MVVM移行（2026-09-26実装）
@@ -277,7 +277,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 | Game表示 | GameタブをPlaySessionの実行用Sceneへ接続し、親子配置を済ませてから`Order`昇順へ並べ替えて描く。Scene Viewは編集用Sceneのまま維持し、Play中の編集禁止を守る。実行中のTransform・Image変更を次のフレームに反映し、描画からStart／Updateを呼ばない。非表示時は描画・入力を止めて進行は維持する。読み取りと更新はUIスレッドで直列化する | [GameSceneRenderer](../src/PureEngine.Rendering/GameSceneRenderer.cs)、[MainWindow.Game](../src/PureEngine.Editor/Windows/MainWindow.Game.cs)、[MainWindow.Play](../src/PureEngine.Editor/Windows/MainWindow.Play.cs) |
 | Button操作 | `Button`（`core.button`・`Interactable`）を普通のComponentとしてTransform＋UiElementの領域で判定し、見た目は同じオブジェクトのImageを使う。通常・ホバー・押下・無効・キーボードフォーカスを重ね表示で区別し、保存済み`Image.Color`を書き換えない。一時状態は保存・Cloneしない。重なり前面のみ・押上一致の単発・外し取消・キャプチャ・Tab／Shift+Tab・Enter／Space（リピート抑止）・無効／0サイズ／不能変換の除外・親無効の非波及・Imageなし可・非Button非遮蔽。`IUiButtonHandler`を実装するButton自身から`Clicked`へ更新境界で通知し（購読なしは無反応・複数購読可）、例外・削除・停止をRuntime規則へ接続する | [Button](../src/PureEngine.Core/Components/Button.cs)、[IUiButtonHandler](../src/PureEngine.Core/Components/IUiButtonHandler.cs)、[UiButtonVisuals](../src/PureEngine.Core/Components/UiButtonVisuals.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[GameSceneRenderer](../src/PureEngine.Rendering/GameSceneRenderer.cs)、[MainWindow.Game](../src/PureEngine.Editor/Windows/MainWindow.Game.cs) |
 | Text表示 | `Text`（`core.text`・`Content`・`Color`・`FontSize`・`LineSpacing`）を普通のComponentとしてTransform＋UiElementの領域を起点に同梱フォントで描く。左寄せ・上起点で幅折り返し、空文字は描画なし。高さクリップは未実装。保存・Clone・欠落メンバーの既定値読み込み、Scene View／Gameの描画とScene Viewの矩形選択に対応。同じオブジェクトのImage＋Textは一単位として大きい方のOrderで並べ替え、Image→Textの順に描く。寄せ・フォント素材の指定は後続 | [Text](../src/PureEngine.Core/Components/Text.cs)、[UiTextRenderer](../src/PureEngine.Rendering/UiTextRenderer.cs)、[EditSceneRenderer](../src/PureEngine.Rendering/EditSceneRenderer.cs)、[GameSceneRenderer](../src/PureEngine.Rendering/GameSceneRenderer.cs) |
-| Localization | 文言の表示キー名・言語ごとの本文・言語ごとのボイス欄を持つ `LocalizedText`（`core.localized-text`・作成メニュー `Localization/Text`）。`Text.LocalizedEntry` 参照でプレビュー・実行言語に解決して描き、直書き `Content` は代替。ツールバーの言語選択、編集・Play別の `LocalizationService` 解決、ID保存・Missing保持・Clone分離 | [LocalizedText](../src/PureEngine.Core/DataAssets/LocalizedText.cs)、[LocalizationService](../src/PureEngine.Core/DataAssets/LocalizationService.cs)、[Text](../src/PureEngine.Core/Components/Text.cs)、[UiTextRenderer](../src/PureEngine.Rendering/UiTextRenderer.cs)、[LocalizationViewModel](../src/PureEngine.Editor/ViewModels/LocalizationViewModel.cs) |
+| Localization | プロジェクト直下の1表（`Localization.pure.loc.yaml`）。テーブル全体で統一した言語列、行の表示キー名・言語ごとの本文・ボイス欄。Localizationタブのグリッド編集、`Text.LocalizedEntry` 参照の解決描画、ツールバーの言語選択、編集・Play別の `LocalizationStore` スナップショット、ID保存・Missing保持・Clone分離、未保存Play抑止 | [LocalizationTable](../src/PureEngine.Core/Localization/LocalizationTable.cs)、[LocalizationService](../src/PureEngine.Core/Localization/LocalizationService.cs)、[Text](../src/PureEngine.Core/Components/Text.cs)、[UiTextRenderer](../src/PureEngine.Rendering/UiTextRenderer.cs)、[LocalizationViewModel](../src/PureEngine.Editor/ViewModels/LocalizationViewModel.cs) |
 | シーン保存 | YAML version 2、ID・名前・parentId・siblingIndex・typeId・Inspector値・Priorityの保存と復元、固定IDのクラス登録表。`Image.Order`もInspector値として保存・Cloneし、旧データは`Order = 0`として読み込む。`version: 1` は読み込みのみ | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentRegistry](../src/PureEngine.Core/Components/ComponentRegistry.cs) |
 | Inspectorメンバー改名 | 属性なしで改名・削除可能。新名は初期値、同名の値は維持し、保存時に古いYAML項目を削除。値を引き継ぐ旧名属性は任意。仕様は [EngineArchitecture.md](EngineArchitecture.md) のInspector節 | [SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs)、[ComponentSchema](../src/PureEngine.Core/Components/ComponentSchema.cs) |
 | Priority | アタッチごとのStart／Update／Destroy保持、Inspector表示、YAML保存・Clone、実行順適用、変更可能期間の拒否 | [SceneObject](../src/PureEngine.Core/Scenes/SceneObject.cs)、[SceneRuntime](../src/PureEngine.Core/Scenes/SceneRuntime.cs)、[SceneSerializer](../src/PureEngine.Core/Scenes/SceneSerializer.cs) |
@@ -298,7 +298,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節を正本とする。自作struct／Nullable、対応コンテナの任意入れ子、ゼロ下限の多次元配列を含む。非string辞書キー、非ゼロ下限配列、任意ポリモーフィズム、structのComponentアタッチ、サービス参照は対象外。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
-- ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置と文言参照の解決まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoと文言のボイス再生・言語列グリッド・音声基盤は未実装。
+- ゲーム内UIのInputField等の追加、ゲーム実行ファイル、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置と文言参照の解決まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoと文言のボイス再生・音声基盤は未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
 ## 仕様整理と次の実装順
@@ -381,10 +381,10 @@ Steamなど設計書で保留している内容は、ここに載せたことを
 
 ## 検証状況
 
-### Localization（2026-09-26）
+### Localization（2026-09-26、単一テーブルへ移行）
 
-- `LocalizationChecks` で記述子（作成メニュー `Localization/Text`・`core.localized-text`）・保存往復（キー・多言語本文・ボイス欄・Unicode）・解決行列（現在→既定→最初→代替、空欄スキップ、大文字キー許容）・言語検証（BCP47式・不正値拒否・正規化）・シーン保存（IDのみ）／復元（同一インスタンス）／Clone分離・Play分離（実行中変更の非漏洩）・欠落（null解決＋ID保持）／復旧を確認。
-- `LocalizationEditorChecks` でツールバー選択の初期値・無効状態・言語一覧の更新と選択保持・プレビューサービスへの反映・プレビュー/Game描画の言語解決と代替・空描画を確認。新規文言アセットの作成メニュー表示は記述子検査と手動操作で確認し、言語列グリッド・ボイス再生・実画面・実GPU・CIは未確認として区別する。
+- `LocalizationChecks` で表の保存往復（キー・多言語本文・ボイス欄・Unicode）・正規化診断（不正言語・重複行・表外セル言語の破棄）・解決行列（現在→既定→表順最初→代替、空欄スキップ）・言語検証（BCP47式・不正値拒否・正規化）・シーン保存（IDのみ）／復元（ID保持）／Clone分離・Play分離・欠落（ID保持）／復旧・不正形式拒否を確認。
+- `LocalizationEditorChecks` でツールバー選択の初期値・無効状態・タブの行/言語追加とセル編集・保存と再読込・未保存Play抑止・保存後Playと言語引継ぎ・キー選択候補・シーン保存のID記録・プレビュー/Game解決と代替・空描画を確認。タブ挿入に伴うPrefabタブindexの既存検査を更新した。新規文言の手動作成フロー・言語列グリッドの実画面・ボイス再生・実GPU・CIは未確認として区別する。
 
 ### Text Component（2026-09-24）
 

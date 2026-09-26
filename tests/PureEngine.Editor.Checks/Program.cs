@@ -126,7 +126,6 @@ internal static class Program
             launcher.Show();
             Dispatcher.UIThread.RunJobs();
             UiTextEditorChecks.Run();
-            LocalizationEditorChecks.Run();
             PlayConnectionChecks.Run();
             ProjectDropChecks.Run();
             UiMenuChecks.Run();
@@ -145,6 +144,7 @@ internal static class Program
             DataAssetTableChecks.Run(root);
             DirectAssetEditorChecks.Run(root);
             DataAssetMenuChecks.Run(root);
+            LocalizationEditorChecks.Run(root);
             PrefabEditorChecks.Run(root);
             UiEndToEndChecks.Run(root);
             SpriteReopenChecks.Run(root);
