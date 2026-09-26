@@ -44,7 +44,7 @@ public partial class MainWindow
         if (ownerId is { } id) Documents.Current.Current.References.RemovePathsForMember(id, path);
     }
 
-    private Control BuildBoundValueEditor(InspectorValueBinding binding, string name, Guid? ownerId, string path, bool element = false)
+    private Control BuildBoundValueEditor(InspectorValueBinding binding, string name, Guid? ownerId, string path, bool element = false, string? indexLabel = null, string? outerRemoveName = null, Action? outerRemove = null)
     {
         var type = binding.ValueType;
         if (ShouldShowReferenceEditorFor(type, binding.Owner))
@@ -63,12 +63,12 @@ public partial class MainWindow
                 return new TextBlock { Text = "Non-zero array bounds are unsupported.", Classes = { "memberType" } };
             // New nested containers start folded; expanding creates only one bounded page.
             if (element) ViewModel.Inspector.CollapsedMembers.TryAdd(name, true);
-            return BuildBoundContainer(binding, name, ownerId, path);
+            return BuildBoundContainer(binding, name, ownerId, path, indexLabel, outerRemoveName, outerRemove);
         }
         var underlying = Nullable.GetUnderlyingType(type);
         if (InspectorValueTypes.IsCustomInspectorObject(underlying ?? type)
             || SceneReferenceTypes.ContainsReference(underlying ?? type, Components.Registry))
-            return BuildBoundObject(binding, name, ownerId, path, element);
+            return BuildBoundObject(binding, name, ownerId, path, element, indexLabel, outerRemoveName, outerRemove);
         if (element && type == typeof(Color))
             return BuildBoundColor(binding, name);
         return BuildMemberEditor(binding, binding.ValueMember, name);
@@ -104,7 +104,7 @@ public partial class MainWindow
         return BuildAxisGrid(channels, boxes);
     }
 
-    private StackPanel BuildBoundObject(InspectorValueBinding binding, string name, Guid? ownerId, string path, bool deferContainers)
+    private StackPanel BuildBoundObject(InspectorValueBinding binding, string name, Guid? ownerId, string path, bool deferContainers, string? indexLabel = null, string? outerRemoveName = null, Action? outerRemove = null)
     {
         var type = Nullable.GetUnderlyingType(binding.ValueType) ?? binding.ValueType;
         var root = new StackPanel { Spacing = 6 };
@@ -114,6 +114,13 @@ public partial class MainWindow
         ToolTip.SetTip(create, "Create a new instance.");
         var clear = BuildHeaderIconButton("Icon.BorderNone", $"{name}.Null");
         ToolTip.SetTip(clear, "Set to null.");
+        Avalonia.Controls.Button? outerRemoveButton = null;
+        if (outerRemoveName is not null && outerRemove is not null)
+        {
+            outerRemoveButton = BuildRemoveButton(outerRemoveName);
+            ToolTip.SetTip(outerRemoveButton, "Remove this row.");
+            outerRemoveButton.Click += (_, _) => outerRemove();
+        }
         Action refresh = () => { };
         var toggle = BuildCollapseToggle($"{name}.Collapse", name, ViewModel.Inspector.CollapsedMembers, expanded =>
         {
@@ -121,9 +128,11 @@ public partial class MainWindow
             if (expanded && body.Children.Count == 0) refresh();
         });
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        if (indexLabel is not null)
+            left.Children.Add(new TextBlock { Text = indexLabel, Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center });
         left.Children.Add(toggle);
         left.Children.Add(count);
-        root.Children.Add(BuildSplitHeader(left, create, clear));
+        root.Children.Add(outerRemoveButton is null ? BuildSplitHeader(left, create, clear) : BuildSplitHeader(left, create, clear, outerRemoveButton));
         root.Children.Add(body);
         refresh = () =>
         {
@@ -175,9 +184,9 @@ public partial class MainWindow
         UpdateErrorBadge();
     }
 
-    /// <summary>Whether a sequence or dictionary element renders as its own collapsible panel (nested collection or object card).
-    /// Such elements span the full body width under their own index bar so the left index and right remove columns
-    /// stay fixed at each list header position instead of indenting with every nesting depth.</summary>
+    /// <summary>Whether a sequence element renders as its own collapsible panel (nested collection or object card).
+    /// Such elements span the full body width with the index merged into their own header
+    /// instead of a separate index bar above the panel.</summary>
     private bool IsNestedBoundElement(Type elementType, object? owner)
     {
         if (ShouldShowReferenceEditorFor(elementType, owner)) return false;
@@ -187,25 +196,7 @@ public partial class MainWindow
             || SceneReferenceTypes.ContainsReference(effective, Components.Registry);
     }
 
-    /// <summary>Full-width block for a nested element: its index and remove bar on top, its own panel below.</summary>
-    private static StackPanel BuildNestedElementBlock(string labelText, Control nested, string removeName, bool showRemove, Action onRemove)
-    {
-        var block = new StackPanel { Spacing = 4 };
-        var bar = new Grid { ColumnDefinitions = [with("Auto,*,Auto")], ColumnSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        bar.Children.Add(new TextBlock { Text = labelText, Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center });
-        if (showRemove)
-        {
-            var remove = BuildRemoveButton(removeName);
-            Grid.SetColumn(remove, 2);
-            remove.Click += (_, _) => onRemove();
-            bar.Children.Add(remove);
-        }
-        block.Children.Add(bar);
-        block.Children.Add(nested);
-        return block;
-    }
-
-    private StackPanel BuildBoundContainer(InspectorValueBinding binding, string name, Guid? ownerId, string path)
+    private StackPanel BuildBoundContainer(InspectorValueBinding binding, string name, Guid? ownerId, string path, string? indexLabel = null, string? outerRemoveName = null, Action? outerRemove = null)
     {
         var type = binding.ValueType;
         var dictionaryType = type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
@@ -222,6 +213,13 @@ public partial class MainWindow
         ToolTip.SetTip(setNull, "Set the collection to null.");
         var create = BuildHeaderIconButton("Icon.Compose", $"{name}.Create");
         ToolTip.SetTip(create, "Create an empty collection.");
+        Avalonia.Controls.Button? outerRemoveButton = null;
+        if (outerRemoveName is not null && outerRemove is not null)
+        {
+            outerRemoveButton = BuildRemoveButton(outerRemoveName);
+            ToolTip.SetTip(outerRemoveButton, "Remove this row.");
+            outerRemoveButton.Click += (_, _) => outerRemove();
+        }
         var page = 0;
         Action refresh = () => { };
         var toggle = BuildCollapseToggle($"{name}.Collapse", name, ViewModel.Inspector.CollapsedMembers, expanded =>
@@ -230,9 +228,11 @@ public partial class MainWindow
             if (expanded && body.Children.Count == 0) refresh();
         });
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        if (indexLabel is not null)
+            left.Children.Add(new TextBlock { Text = indexLabel, Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center });
         left.Children.Add(toggle);
         left.Children.Add(count);
-        root.Children.Add(BuildSplitHeader(left, add, create, setNull, clear));
+        root.Children.Add(outerRemoveButton is null ? BuildSplitHeader(left, add, create, setNull, clear) : BuildSplitHeader(left, add, create, setNull, clear, outerRemoveButton));
         root.Children.Add(body);
         refresh = () =>
         {
@@ -266,18 +266,21 @@ public partial class MainWindow
                     var child = binding.Element(elementType, indices);
                     var childName = $"{name}{suffix}";
                     var childPath = $"{path}{suffix}";
-                    var editor = BuildBoundValueEditor(child, childName, ownerId, childPath, element: true);
                     if (IsNestedBoundElement(elementType, binding.Owner))
                     {
-                        body.Children.Add(BuildNestedElementBlock(suffix, editor, $"{name}.Remove[{index}]", !multidimensional, () =>
-                        {
-                            if (IsPlaying) return;
-                            RemoveBoundSequenceElement(binding, elementType, slot);
-                            if (ownerId is { } id) Documents.Current.Current.References.RemoveSequenceElement(id, path, slot);
-                            refresh();
-                        }));
+                        var nestedRemoveName = $"{name}.Remove[{index}]";
+                        body.Children.Add(BuildBoundValueEditor(child, childName, ownerId, childPath, element: true, indexLabel: suffix,
+                            outerRemoveName: multidimensional ? null : nestedRemoveName,
+                            outerRemove: multidimensional ? null : () =>
+                            {
+                                if (IsPlaying) return;
+                                RemoveBoundSequenceElement(binding, elementType, slot);
+                                if (ownerId is { } id) Documents.Current.Current.References.RemoveSequenceElement(id, path, slot);
+                                refresh();
+                            }));
                         continue;
                     }
+                    var editor = BuildBoundValueEditor(child, childName, ownerId, childPath, element: true);
                     var row = new Grid { ColumnDefinitions = [with("Auto,*,Auto")], ColumnSpacing = 6 };
                     row.Children.Add(new TextBlock { Text = suffix, Classes = { "memberType" } });
                     Grid.SetColumn(editor, 1);

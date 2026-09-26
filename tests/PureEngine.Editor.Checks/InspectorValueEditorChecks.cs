@@ -275,7 +275,7 @@ static class InspectorValueEditorChecks
         Click(countsClear);
         Check(probe.Counts.Count == 0, "Dictionary Clear must remove all entries and keep the dictionary.");
 
-        // Nested lists fix the index and remove columns at each header and stay editable.
+        // Nested lists merge the index and row remove into the child header and stay editable.
         Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Matrix[0].Collapse"));
         Dispatcher.UIThread.RunJobs();
         var matrixCell = Box(editor, $"{nameof(InspectorValueProbe)}.Matrix[0][0]");
