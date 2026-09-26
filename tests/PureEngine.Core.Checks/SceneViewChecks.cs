@@ -13,9 +13,12 @@ internal static class SceneViewChecks
         ParentMove();
         BareTransformParent();
         GizmoHit();
+        ResizeHit();
+        ResizeMath();
+        RotateMath();
         DegenerateSelection();
         Fit();
-        Console.WriteLine("PASS: scene view coordinates, cursor zoom, overlap order, render order, parent-aware move, bare-transform parents, gizmo hit, and fit.");
+        Console.WriteLine("PASS: scene view coordinates, cursor zoom, overlap order, render order, parent-aware move, bare-transform parents, gizmo hit, resize hit and math, rotate math, and fit.");
     }
 
     private static void Roundtrip()
@@ -337,6 +340,106 @@ internal static class SceneViewChecks
             "Points beyond the arrow tip must miss.");
         Check(SceneViewMath.HitGizmo(pivot, x, y, pivot + new Vector2(SceneViewMath.GizmoLength + 5, 5)) == SceneViewMath.GizmoKind.None,
             "Points beyond the arrow tip must miss even near the old square head.");
+    }
+
+    private static void ResizeHit()
+    {
+        Vector2[] corners = [new(100, 50), new(200, 50), new(200, 110), new(100, 110)];
+        Check(SceneViewMath.HitResizeHandle(corners, new(100, 50)) == SceneViewMath.ResizeHandle.TopLeft, "Top-left corner must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(200, 50)) == SceneViewMath.ResizeHandle.TopRight, "Top-right corner must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(100, 110)) == SceneViewMath.ResizeHandle.BottomLeft, "Bottom-left corner must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(200, 110)) == SceneViewMath.ResizeHandle.BottomRight, "Bottom-right corner must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(150, 50)) == SceneViewMath.ResizeHandle.Top, "Top edge midpoint must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(200, 80)) == SceneViewMath.ResizeHandle.Right, "Right edge midpoint must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(150, 110)) == SceneViewMath.ResizeHandle.Bottom, "Bottom edge midpoint must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(100, 80)) == SceneViewMath.ResizeHandle.Left, "Left edge midpoint must hit.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(150, 80)) == SceneViewMath.ResizeHandle.None, "Frame interior must miss.");
+        Check(SceneViewMath.HitResizeHandle(corners, new(150, 22)) == SceneViewMath.ResizeHandle.None, "Rotate handle area must miss resize.");
+        Check(SceneViewMath.TryGetRotateCenter(corners, out var rotate) && rotate == new Vector2(150, 22),
+            $"Rotate handle must sit above the top edge, got {rotate}.");
+        Check(SceneViewMath.HitRotateHandle(corners, rotate), "Rotate handle center must hit.");
+        Check(!SceneViewMath.HitRotateHandle(corners, new(150, 50)), "Top edge must miss the rotate handle.");
+        Vector2[] tiny = [new(100, 100), new(104, 100), new(104, 104), new(100, 104)];
+        Check(SceneViewMath.HitResizeHandle(tiny, new(100, 100)) == SceneViewMath.ResizeHandle.TopLeft,
+            "Corners must win over edges on overlap.");
+        Check(SceneViewMath.HitResizeHandle([], new(100, 100)) == SceneViewMath.ResizeHandle.None, "Bare parents expose no resize handle.");
+        Check(!SceneViewMath.HitRotateHandle([], new(100, 100)), "Bare parents expose no rotate handle.");
+        Check(SceneViewMath.HitResizeHandle(corners, new Vector2(float.NaN, 0)) == SceneViewMath.ResizeHandle.None,
+            "Non-finite points must miss resize.");
+    }
+
+    private static void ResizeMath()
+    {
+        var pivot = new Vector2(0.5f, 0.5f);
+        Check(SceneViewMath.TrySceneDeltaToResize(new(10, 20), Matrix4x4.Identity, pivot, SceneViewMath.ResizeHandle.BottomRight, out var corner)
+            && corner == new Vector2(20, 40), $"Center-pivot corner must double the delta, got {corner}.");
+        Check(SceneViewMath.TrySceneDeltaToResize(new(10, 20), Matrix4x4.Identity, Vector2.Zero, SceneViewMath.ResizeHandle.BottomRight, out var origin)
+            && origin == new Vector2(10, 20), $"Top-left pivot must pass the delta through, got {origin}.");
+        Check(SceneViewMath.TrySceneDeltaToResize(new(10, 20), Matrix4x4.Identity, pivot, SceneViewMath.ResizeHandle.TopLeft, out var opposite)
+            && opposite == new Vector2(-20, -40), $"Opposite corner must negate the doubled delta, got {opposite}.");
+        Check(SceneViewMath.TrySceneDeltaToResize(new(10, 7), Matrix4x4.Identity, pivot, SceneViewMath.ResizeHandle.Right, out var edge)
+            && edge == new Vector2(20, 0), $"Edges must leave the other axis at zero, got {edge}.");
+        Check(!SceneViewMath.TrySceneDeltaToResize(new(10, 20), Matrix4x4.Identity, Vector2.Zero, SceneViewMath.ResizeHandle.TopLeft, out _),
+            "Locked pivot sides must refuse.");
+        Check(!SceneViewMath.TrySceneDeltaToResize(new(10, 20), Matrix4x4.Identity, pivot, SceneViewMath.ResizeHandle.None, out _),
+            "An empty handle must refuse.");
+        Check(!SceneViewMath.TrySceneDeltaToResize(new Vector2(float.NaN, 0), Matrix4x4.Identity, pivot, SceneViewMath.ResizeHandle.BottomRight, out _),
+            "Non-finite deltas must refuse.");
+        var scaled = Matrix4x4.CreateScale(2, 2, 1);
+        Check(SceneViewMath.TrySceneDeltaToResize(new(10, 20), scaled, pivot, SceneViewMath.ResizeHandle.BottomRight, out var unscaled)
+            && unscaled == new Vector2(10, 20), $"Scale must divide out of the size change, got {unscaled}.");
+        var rotated = Matrix4x4.CreateRotationZ(MathF.PI / 2);
+        Check(SceneViewMath.TrySceneDeltaToResize(new(0, 10), rotated, pivot, SceneViewMath.ResizeHandle.BottomRight, out var turned)
+            && Vector2.Distance(turned, new Vector2(20, 0)) < 0.001f, $"Rotation must reroute the delta, got {turned}.");
+        Check(!SceneViewMath.TrySceneDeltaToResize(new(10, 20), new Matrix4x4(), pivot, SceneViewMath.ResizeHandle.BottomRight, out _),
+            "Singular worlds must refuse.");
+        Check(SceneViewMath.TryApplyResize(new(100, 40), Vector2.Zero, new(20, 12), pivot, SceneViewMath.ResizeHandle.BottomRight, out var grown)
+            && grown == new Vector2(120, 52), $"Resize must add the change, got {grown}.");
+        Check(SceneViewMath.TryApplyResize(new(100, 40), Vector2.Zero, new(5, 99), pivot, SceneViewMath.ResizeHandle.Right, out var edged)
+            && edged == new Vector2(105, 40), $"Edges must ignore the cross-axis change, got {edged}.");
+        Check(SceneViewMath.TryApplyResize(new(100, 40), Vector2.Zero, new(-500, -500), pivot, SceneViewMath.ResizeHandle.TopLeft, out var clamped)
+            && clamped == Vector2.Zero, $"Shrinks must clamp the resolved size at zero, got {clamped}.");
+        Check(SceneViewMath.TryApplyResize(new(10, 10), new(100, 100), new(-50, -50), pivot, SceneViewMath.ResizeHandle.TopLeft, out var anchored)
+            && anchored == new Vector2(-40, -40), $"Stretched anchors may keep negative SizeDelta, got {anchored}.");
+        Check(!SceneViewMath.TryApplyResize(new(100, 40), Vector2.Zero, new(1, 1), pivot, SceneViewMath.ResizeHandle.None, out _),
+            "An empty handle must not apply.");
+        Check(!SceneViewMath.TryApplyResize(new Vector2(float.NaN, 0), Vector2.Zero, new(1, 1), pivot, SceneViewMath.ResizeHandle.BottomRight, out _),
+            "Non-finite sizes must not apply.");
+        SceneViewMath.ResizeAxes(new(0.5f, 0.5f), SceneViewMath.ResizeHandle.BottomRight, out var bothX, out var bothY);
+        Check(bothX && bothY, "Corners must adjust both axes.");
+        SceneViewMath.ResizeAxes(Vector2.Zero, SceneViewMath.ResizeHandle.Left, out var lockedX, out _);
+        Check(!lockedX, "Sides on the Pivot must not adjust.");
+        SceneViewMath.ResizeAxes(Vector2.Zero, SceneViewMath.ResizeHandle.Right, out var freeX, out var freeY);
+        Check(freeX && !freeY, "Edges must adjust one axis.");
+    }
+
+    private static void RotateMath()
+    {
+        var pivot = Vector2.Zero;
+        Check(SceneViewMath.TryRotateAngle(pivot, new(100, 0), new(0, 100), out var quarter)
+            && Math.Abs(quarter - (MathF.PI / 2)) < 1e-5f, $"Right-to-down must measure +90 degrees, got {quarter}.");
+        Check(SceneViewMath.TryRotateAngle(pivot, new(100, 0), new(100, 0), out var none) && none == 0,
+            "A stationary pointer must measure zero.");
+        var almostFull = (MathF.PI * 170f) / 180f;
+        Check(SceneViewMath.TryRotateAngle(pivot,
+                new Vector2(MathF.Cos(almostFull), MathF.Sin(almostFull)),
+                new Vector2(MathF.Cos(-almostFull), MathF.Sin(-almostFull)), out var wrapped)
+            && Math.Abs(wrapped - ((MathF.PI * 20f) / 180f)) < 1e-4f, $"Cross-branch drags must wrap, got {wrapped}.");
+        Check(!SceneViewMath.TryRotateAngle(pivot, pivot, new(10, 0), out _), "Zero start radius must refuse.");
+        Check(!SceneViewMath.TryRotateAngle(pivot, new(10, 0), pivot, out _), "Zero current radius must refuse.");
+        Check(!SceneViewMath.TryRotateAngle(pivot, new Vector2(float.NaN, 0), new(10, 0), out _), "Non-finite points must refuse.");
+        Check(SceneViewMath.TryApplyRotation(Quaternion.Identity, MathF.PI / 2, out var quarterRotation),
+            "Quarter turns must apply.");
+        var mapped = Vector3.Transform(Vector3.UnitX, quarterRotation);
+        Check(Math.Abs(mapped.X) < 1e-5f && Math.Abs(mapped.Y - 1) < 1e-5f && Math.Abs(mapped.Z) < 1e-5f,
+            $"A quarter turn must map +X to +Y, got {mapped}.");
+        Check(Math.Abs(quarterRotation.Length() - 1) < 1e-6f, "Applied rotations must stay normalized.");
+        var tilted = Quaternion.CreateFromAxisAngle(Vector3.UnitX, MathF.PI / 2);
+        Check(SceneViewMath.TryApplyRotation(tilted, 0.1f, out var kept)
+            && Math.Abs(kept.Length() - 1) < 1e-6f && kept != tilted,
+            "Existing tilt must survive the drag instead of resetting.");
+        Check(!SceneViewMath.TryApplyRotation(Quaternion.Identity, float.NaN, out _), "Non-finite angles must refuse.");
+        Check(!SceneViewMath.TryApplyRotation(new Quaternion(), 0.1f, out _), "Zero rotations must refuse.");
     }
 
     private static void DegenerateSelection()

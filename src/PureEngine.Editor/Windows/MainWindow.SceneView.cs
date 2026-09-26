@@ -17,6 +17,8 @@ public partial class MainWindow
     private Vector2 _panStartPan;
     private Vector2 _panStartView;
     private SceneViewMath.GizmoKind _sceneMoveKind = SceneViewMath.GizmoKind.None;
+    private SceneViewMath.ResizeHandle _sceneResizeHandle = SceneViewMath.ResizeHandle.None;
+    private bool _sceneRotating;
     private Scene? _dragScene;
     private SceneObject? _dragTarget;
     private Transform? _dragTransform;
@@ -29,14 +31,24 @@ public partial class MainWindow
     private UiElement? _dragElement;
     private Vector2 _dragParentSize, _dragViewportSize;
     private (Vector2 Min, Vector2 Max, Vector2 Pivot, Vector2 Size, Quaternion Rotation, Vector3 Scale) _dragGeometry;
+    private Vector2 _dragStartSizeDelta;
+    private Vector2 _dragAnchorSpan;
+    private Vector2 _dragPivot;
+    private Quaternion _dragStartRotation;
+    private Vector2 _dragPivotScene;
     private TextBox? _dragPosXBox, _dragPosYBox, _dragPosZBox;
+    private TextBox? _dragRotXBox, _dragRotYBox, _dragRotZBox, _dragRotWBox;
+    private TextBox? _dragSizeXBox, _dragSizeYBox;
     private readonly HashSet<Guid> _sceneDrawFailures = [];
 
     internal Vector2 ScenePan => _scenePan;
 
     internal float SceneZoom => _sceneZoom;
 
-    internal bool IsSceneDragging => _scenePanning || _sceneMoveKind is not SceneViewMath.GizmoKind.None;
+    internal bool IsSceneDragging => _scenePanning
+        || _sceneMoveKind is not SceneViewMath.GizmoKind.None
+        || _sceneResizeHandle is not SceneViewMath.ResizeHandle.None
+        || _sceneRotating;
 
     private void InitSceneView()
     {
@@ -160,14 +172,37 @@ public partial class MainWindow
         if (IsPlaying) { RejectWhenPlaying("Select"); return; }
         var entries = SceneLayouts(viewportSize);
         if (GetSelectedSceneObject() is SceneObject selected
-            && TrySceneFrameWithLayouts(selected, entries, viewportSize, out _, out var pivot, out var xAxis, out var yAxis, out var gizmoValid)
-            && gizmoValid
-            && BeginSceneMove(selected, SceneViewMath.HitGizmo(pivot, xAxis, yAxis, viewPoint), viewPoint))
+            && TrySceneFrameWithLayouts(selected, entries, viewportSize, out var corners, out var pivot, out var xAxis, out var yAxis, out var gizmoValid)
+            && gizmoValid)
         {
-            _scenePointer = e.Pointer;
-            e.Pointer.Capture(SceneViewport);
-            e.Handled = true;
-            return;
+            // Resize and rotate need a UiElement frame; bare group parents keep move only.
+            if (corners.Length == 4 && selected.GetComponent<UiElement>() is not null)
+            {
+                if (SceneViewMath.HitRotateHandle(corners, viewPoint)
+                    && BeginSceneRotate(selected, viewPoint))
+                {
+                    _scenePointer = e.Pointer;
+                    e.Pointer.Capture(SceneViewport);
+                    e.Handled = true;
+                    return;
+                }
+                var resizeHandle = SceneViewMath.HitResizeHandle(corners, viewPoint);
+                if (resizeHandle is not SceneViewMath.ResizeHandle.None
+                    && BeginSceneResize(selected, resizeHandle, viewPoint))
+                {
+                    _scenePointer = e.Pointer;
+                    e.Pointer.Capture(SceneViewport);
+                    e.Handled = true;
+                    return;
+                }
+            }
+            if (BeginSceneMove(selected, SceneViewMath.HitGizmo(pivot, xAxis, yAxis, viewPoint), viewPoint))
+            {
+                _scenePointer = e.Pointer;
+                e.Pointer.Capture(SceneViewport);
+                e.Handled = true;
+                return;
+            }
         }
         SelectSceneObject(SceneViewMath.HitTest(entries, viewportSize, _scenePan, _sceneZoom, viewPoint, IsDrawableUi), focus: false);
         e.Handled = true;
@@ -207,14 +242,94 @@ public partial class MainWindow
         _dragElement = element;
         _dragParent = target.Parent;
         _dragStartLocal = transform.LocalPosition;
+        _dragStartSizeDelta = element?.SizeDelta ?? Vector2.Zero;
+        _dragAnchorSpan = element is null ? Vector2.Zero : _dragParentSize * (element.AnchorMax - element.AnchorMin);
+        _dragPivot = element?.Pivot ?? Vector2.Zero;
+        _dragStartRotation = transform.LocalRotation;
         _dragViewportSize = viewportSize;
         _dragStartScene = SceneViewMath.ViewToScene(viewPoint, _scenePan, _sceneZoom);
         return true;
     }
 
-    private bool ValidateSceneMove()
+    private bool BeginSceneResize(SceneObject target, SceneViewMath.ResizeHandle handle, Vector2 viewPoint)
     {
-        if (_sceneMoveKind is SceneViewMath.GizmoKind.None) return false;
+        if (IsPlaying || IsSceneDragging || handle is SceneViewMath.ResizeHandle.None
+            || !IsDrawableSceneViewport(out var viewportSize)
+            || !float.IsFinite(viewPoint.X) || !float.IsFinite(viewPoint.Y)
+            || !Documents.Current.Current.Objects.Contains(target)) return false;
+        if (target.GetComponent<Transform>() is not { } transform) return false;
+        if (target.GetComponent<UiElement>() is not { } element) return false;
+        var entry = FindLayout(SceneLayouts(viewportSize), target);
+        if (entry is null || !SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out _, out _)) return false;
+        // Refuses fully locked pivot sides outright; basis-vector probes stay strict per axis so half-locked corners still begin.
+        SceneViewMath.ResizeAxes(element.Pivot, handle, out var adjustsX, out var adjustsY);
+        if (!adjustsX && !adjustsY) return false;
+        var world = entry.WorldScene;
+        var liveX = !adjustsX
+            || SceneViewMath.TrySceneDeltaToResize(new Vector2(world.M11, world.M12), world, element.Pivot, handle, out _);
+        var liveY = !adjustsY
+            || SceneViewMath.TrySceneDeltaToResize(new Vector2(world.M21, world.M22), world, element.Pivot, handle, out _);
+        if (!liveX || !liveY) return false;
+        _sceneResizeHandle = handle;
+        _dragScene = Documents.Current.Current;
+        _dragTarget = target;
+        _dragTransform = transform;
+        _dragElement = element;
+        _dragParent = target.Parent;
+        _dragStartLocal = transform.LocalPosition;
+        _dragStartSizeDelta = element.SizeDelta;
+        _dragAnchorSpan = entry.ParentSize * (element.AnchorMax - element.AnchorMin);
+        _dragPivot = element.Pivot;
+        _dragStartRotation = transform.LocalRotation;
+        _dragParentWorld = entry.ParentWorld;
+        _dragParentSize = entry.ParentSize;
+        _dragGeometry = (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, transform.LocalRotation, transform.LocalScale);
+        _dragViewportSize = viewportSize;
+        _dragStartScene = SceneViewMath.ViewToScene(viewPoint, _scenePan, _sceneZoom);
+        return true;
+    }
+
+    private bool BeginSceneRotate(SceneObject target, Vector2 viewPoint)
+    {
+        if (IsPlaying || IsSceneDragging
+            || !IsDrawableSceneViewport(out var viewportSize)
+            || !float.IsFinite(viewPoint.X) || !float.IsFinite(viewPoint.Y)
+            || !Documents.Current.Current.Objects.Contains(target)) return false;
+        if (target.GetComponent<Transform>() is not { } transform) return false;
+        if (target.GetComponent<UiElement>() is not { } element) return false;
+        var entry = FindLayout(SceneLayouts(viewportSize), target);
+        if (entry is null || !SceneViewMath.TryGetSelectionFrame(entry, _scenePan, _sceneZoom, out var corners, out var pivotView)) return false;
+        if (!SceneViewMath.HitRotateHandle(corners, viewPoint)) return false;
+        var pivotScene = SceneViewMath.ViewToScene(pivotView, _scenePan, _sceneZoom);
+        var startScene = SceneViewMath.ViewToScene(viewPoint, _scenePan, _sceneZoom);
+        if ((startScene - pivotScene).LengthSquared() <= 1e-6f) return false;
+        _sceneRotating = true;
+        _dragScene = Documents.Current.Current;
+        _dragTarget = target;
+        _dragTransform = transform;
+        _dragElement = element;
+        _dragParent = target.Parent;
+        _dragStartLocal = transform.LocalPosition;
+        _dragStartSizeDelta = element.SizeDelta;
+        _dragAnchorSpan = entry.ParentSize * (element.AnchorMax - element.AnchorMin);
+        _dragPivot = element.Pivot;
+        _dragStartRotation = transform.LocalRotation;
+        _dragPivotScene = pivotScene;
+        _dragParentWorld = entry.ParentWorld;
+        _dragParentSize = entry.ParentSize;
+        _dragGeometry = (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, transform.LocalRotation, transform.LocalScale);
+        _dragViewportSize = viewportSize;
+        _dragStartScene = startScene;
+        return true;
+    }
+
+    /// <summary>Shared drag checks for move, resize, and rotate. Structural loss aborts; changed conditions cancel and restore the start.</summary>
+    private bool ValidateSceneDragCommon(out Vector2 viewportSize)
+    {
+        viewportSize = SceneViewportSize();
+        if (_sceneMoveKind is SceneViewMath.GizmoKind.None
+            && _sceneResizeHandle is SceneViewMath.ResizeHandle.None
+            && !_sceneRotating) return false;
         if (_dragScene is null || _dragTarget is null || _dragTransform is null
             || !ReferenceEquals(_dragScene, Documents.Current.Current) || !Documents.Current.Current.Objects.Contains(_dragTarget)
             || !ReferenceEquals(_dragTarget.GetComponent<Transform>(), _dragTransform))
@@ -223,18 +338,33 @@ public partial class MainWindow
             return false;
         }
         var element = _dragTarget.GetComponent<UiElement>();
-        var viewportSize = SceneViewportSize();
         if (IsPlaying || !IsDrawableSceneViewport(out _) || viewportSize != _dragViewportSize
             || !ReferenceEquals(_dragTarget.Parent, _dragParent) || !ReferenceEquals(element, _dragElement))
         {
             CancelSceneViewDrag();
             return false;
         }
+        return true;
+    }
+
+    private bool ValidateSceneDrag()
+    {
+        if (_sceneMoveKind is not SceneViewMath.GizmoKind.None) return ValidateSceneMove();
+        if (_sceneResizeHandle is not SceneViewMath.ResizeHandle.None) return ValidateSceneResize(out _, out _);
+        if (_sceneRotating) return ValidateSceneRotate(out _, out _);
+        return true;
+    }
+
+    private bool ValidateSceneMove()
+    {
+        if (_sceneMoveKind is SceneViewMath.GizmoKind.None) return false;
+        if (!ValidateSceneDragCommon(out var viewportSize)) return false;
+        var element = _dragTarget!.GetComponent<UiElement>();
         if (_dragElement is not null)
         {
             var entry = FindLayout(SceneLayouts(viewportSize), _dragTarget);
             if (element is null
-                || (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, _dragTransform.LocalRotation, _dragTransform.LocalScale) != _dragGeometry
+                || (element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, _dragTransform!.LocalRotation, _dragTransform.LocalScale) != _dragGeometry
                 || entry is null || entry.ParentSize != _dragParentSize || entry.ParentWorld != _dragParentWorld)
             {
                 CancelSceneViewDrag();
@@ -243,7 +373,7 @@ public partial class MainWindow
         }
         else
         {
-            if ((_dragTransform.LocalRotation, _dragTransform.LocalScale) != (_dragGeometry.Rotation, _dragGeometry.Scale))
+            if ((_dragTransform!.LocalRotation, _dragTransform.LocalScale) != (_dragGeometry.Rotation, _dragGeometry.Scale))
             {
                 CancelSceneViewDrag();
                 return false;
@@ -255,6 +385,56 @@ public partial class MainWindow
                 return false;
             }
         }
+        return true;
+    }
+
+    private bool ValidateSceneResize(out Vector2 viewportSize, out SceneViewMath.LayoutEntry entry)
+    {
+        entry = null!;
+        viewportSize = default;
+        if (_sceneResizeHandle is SceneViewMath.ResizeHandle.None) return false;
+        if (!ValidateSceneDragCommon(out viewportSize)) return false;
+        var element = _dragElement!;
+        var transform = _dragTransform!;
+        // SizeDelta is the drag output; anchors, Pivot, rotation, and scale must stay at the start.
+        if ((element.AnchorMin, element.AnchorMax, element.Pivot, transform.LocalRotation, transform.LocalScale)
+            != (_dragGeometry.Min, _dragGeometry.Max, _dragGeometry.Pivot, _dragGeometry.Rotation, _dragGeometry.Scale))
+        {
+            CancelSceneViewDrag();
+            return false;
+        }
+        var found = FindLayout(SceneLayouts(viewportSize), _dragTarget!);
+        if (found is null || found.ParentSize != _dragParentSize || found.ParentWorld != _dragParentWorld)
+        {
+            CancelSceneViewDrag();
+            return false;
+        }
+        entry = found;
+        return true;
+    }
+
+    private bool ValidateSceneRotate(out Vector2 viewportSize, out SceneViewMath.LayoutEntry entry)
+    {
+        entry = null!;
+        viewportSize = default;
+        if (!_sceneRotating) return false;
+        if (!ValidateSceneDragCommon(out viewportSize)) return false;
+        var element = _dragElement!;
+        var transform = _dragTransform!;
+        // LocalRotation is the drag output; anchors, Pivot, size, and scale must stay at the start.
+        if ((element.AnchorMin, element.AnchorMax, element.Pivot, element.SizeDelta, transform.LocalScale)
+            != (_dragGeometry.Min, _dragGeometry.Max, _dragGeometry.Pivot, _dragGeometry.Size, _dragGeometry.Scale))
+        {
+            CancelSceneViewDrag();
+            return false;
+        }
+        var found = FindLayout(SceneLayouts(viewportSize), _dragTarget!);
+        if (found is null || found.ParentSize != _dragParentSize || found.ParentWorld != _dragParentWorld)
+        {
+            CancelSceneViewDrag();
+            return false;
+        }
+        entry = found;
         return true;
     }
 
@@ -275,8 +455,16 @@ public partial class MainWindow
             e.Handled = true;
             return;
         }
-        UpdateSceneMove(viewPoint);
+        UpdateSceneDrag(viewPoint);
         e.Handled = true;
+    }
+
+    private bool UpdateSceneDrag(Vector2 viewPoint)
+    {
+        if (_sceneMoveKind is not SceneViewMath.GizmoKind.None) return UpdateSceneMove(viewPoint);
+        if (_sceneResizeHandle is not SceneViewMath.ResizeHandle.None) return UpdateSceneResize(viewPoint);
+        if (_sceneRotating) return UpdateSceneRotate(viewPoint);
+        return false;
     }
 
     private bool UpdateSceneMove(Vector2 viewPoint)
@@ -294,12 +482,74 @@ public partial class MainWindow
         return true;
     }
 
+    private bool UpdateSceneResize(Vector2 viewPoint)
+    {
+        if (!ValidateSceneResize(out _, out var entry)) return false;
+        var delta = SceneViewMath.ViewToScene(viewPoint, _scenePan, _sceneZoom) - _dragStartScene;
+        if (!SceneViewMath.TrySceneDeltaToResize(delta, entry.WorldScene, _dragPivot, _sceneResizeHandle, out var resizeDelta)
+            || !SceneViewMath.TryApplyResize(_dragStartSizeDelta, _dragAnchorSpan, resizeDelta, _dragPivot, _sceneResizeHandle, out var next))
+        {
+            CancelSceneViewDrag();
+            return false;
+        }
+        _dragElement!.SizeDelta = next;
+        SyncInspectorToDrag();
+        return true;
+    }
+
+    private bool UpdateSceneRotate(Vector2 viewPoint)
+    {
+        if (!ValidateSceneRotate(out _, out _)) return false;
+        var currentScene = SceneViewMath.ViewToScene(viewPoint, _scenePan, _sceneZoom);
+        if (!SceneViewMath.TryRotateAngle(_dragPivotScene, _dragStartScene, currentScene, out var radians)
+            || !SceneViewMath.TryApplyRotation(_dragStartRotation, radians, out var next))
+        {
+            CancelSceneViewDrag();
+            return false;
+        }
+        _dragTransform!.LocalRotation = next;
+        SyncInspectorToDrag();
+        return true;
+    }
+
     private bool ConfirmSceneMove(Vector2 viewPoint)
     {
         if (!UpdateSceneMove(viewPoint)) return false;
         var target = _dragTarget!;
         var transform = _dragTransform!;
         var changed = transform.LocalPosition != _dragStartLocal;
+        AbortSceneDrag();
+        if (changed) MarkSceneChanged();
+        SyncInspectorToDragTarget(target, transform);
+        return changed;
+    }
+
+    private bool ConfirmSceneDrag(Vector2 viewPoint)
+    {
+        if (_sceneMoveKind is not SceneViewMath.GizmoKind.None) return ConfirmSceneMove(viewPoint);
+        if (_sceneResizeHandle is not SceneViewMath.ResizeHandle.None) return ConfirmSceneResize(viewPoint);
+        if (_sceneRotating) return ConfirmSceneRotate(viewPoint);
+        return false;
+    }
+
+    private bool ConfirmSceneResize(Vector2 viewPoint)
+    {
+        if (!UpdateSceneResize(viewPoint)) return false;
+        var target = _dragTarget!;
+        var transform = _dragTransform!;
+        var changed = _dragElement!.SizeDelta != _dragStartSizeDelta;
+        AbortSceneDrag();
+        if (changed) MarkSceneChanged();
+        SyncInspectorToDragTarget(target, transform);
+        return changed;
+    }
+
+    private bool ConfirmSceneRotate(Vector2 viewPoint)
+    {
+        if (!UpdateSceneRotate(viewPoint)) return false;
+        var target = _dragTarget!;
+        var transform = _dragTransform!;
+        var changed = transform.LocalRotation != _dragStartRotation;
         AbortSceneDrag();
         if (changed) MarkSceneChanged();
         SyncInspectorToDragTarget(target, transform);
@@ -313,7 +563,7 @@ public partial class MainWindow
         if (_scenePanning ? properties.IsMiddleButtonPressed : properties.IsLeftButtonPressed) return;
         var point = e.GetPosition(SceneViewport);
         if (_scenePanning) AbortSceneDrag();
-        else ConfirmSceneMove(new Vector2((float)point.X, (float)point.Y));
+        else ConfirmSceneDrag(new Vector2((float)point.X, (float)point.Y));
         e.Handled = true;
     }
 
@@ -375,12 +625,16 @@ public partial class MainWindow
         _scenePointer = null;
         _scenePanning = false;
         _sceneMoveKind = SceneViewMath.GizmoKind.None;
+        _sceneResizeHandle = SceneViewMath.ResizeHandle.None;
+        _sceneRotating = false;
         _dragScene = null;
         _dragTarget = null;
         _dragTransform = null;
         _dragParent = null;
         _dragElement = null;
         _dragPosXBox = _dragPosYBox = _dragPosZBox = null;
+        _dragRotXBox = _dragRotYBox = _dragRotZBox = _dragRotWBox = null;
+        _dragSizeXBox = _dragSizeYBox = null;
         // Clear state before CaptureLost is raised; never release capture stolen by another control.
         if (ReferenceEquals(pointer?.Captured, SceneViewport)) pointer!.Capture(null);
     }
@@ -391,11 +645,17 @@ public partial class MainWindow
         var target = _dragTarget;
         var transform = _dragTransform;
         var start = _dragStartLocal;
+        var startSize = _dragStartSizeDelta;
+        var startRotation = _dragStartRotation;
+        var element = _dragElement;
         var scene = _dragScene;
         AbortSceneDrag();
         if (target is null || transform is null || !ReferenceEquals(scene, Documents.Current.Current)
             || !Documents.Current.Current.Objects.Contains(target) || !ReferenceEquals(target.GetComponent<Transform>(), transform)) return;
         transform.LocalPosition = start;
+        transform.LocalRotation = startRotation;
+        if (element is not null && ReferenceEquals(target.GetComponent<UiElement>(), element))
+            element.SizeDelta = startSize;
         SyncInspectorToDragTarget(target, transform);
     }
 
@@ -410,14 +670,26 @@ public partial class MainWindow
     {
         if (!ReferenceEquals(GetSelectedSceneObject(), target))
             return;
-        if (!TryGetDragPositionBoxes(transform, out var xBox, out var yBox, out var zBox))
-            return;
         _sceneViewSyncing = true;
         try
         {
-            SyncDragPositionBox(xBox, transform.LocalPosition.X);
-            SyncDragPositionBox(yBox, transform.LocalPosition.Y);
-            SyncDragPositionBox(zBox, transform.LocalPosition.Z);
+            if (TryGetDragTransformBoxes(transform, out var posX, out var posY, out var posZ,
+                out var rotX, out var rotY, out var rotZ, out var rotW))
+            {
+                SyncDragNumberBox(posX, transform.LocalPosition.X);
+                SyncDragNumberBox(posY, transform.LocalPosition.Y);
+                SyncDragNumberBox(posZ, transform.LocalPosition.Z);
+                SyncDragNumberBox(rotX, transform.LocalRotation.X);
+                SyncDragNumberBox(rotY, transform.LocalRotation.Y);
+                SyncDragNumberBox(rotZ, transform.LocalRotation.Z);
+                SyncDragNumberBox(rotW, transform.LocalRotation.W);
+            }
+            if (target.GetComponent<UiElement>() is { } element
+                && TryGetDragSizeBoxes(element, out var sizeX, out var sizeY))
+            {
+                SyncDragNumberBox(sizeX, element.SizeDelta.X);
+                SyncDragNumberBox(sizeY, element.SizeDelta.Y);
+            }
         }
         finally
         {
@@ -425,44 +697,97 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Resolves the cached LocalPosition boxes by automation name. Reuses them across moves when still attached.</summary>
-    private bool TryGetDragPositionBoxes(Transform transform, out TextBox xBox, out TextBox yBox, out TextBox zBox)
+    /// <summary>Resolves the cached LocalPosition and LocalRotation boxes by automation name. Reuses them across drags when still attached.</summary>
+    private bool TryGetDragTransformBoxes(Transform transform,
+        out TextBox posX, out TextBox posY, out TextBox posZ,
+        out TextBox rotX, out TextBox rotY, out TextBox rotZ, out TextBox rotW)
     {
-        xBox = _dragPosXBox!;
-        yBox = _dragPosYBox!;
-        zBox = _dragPosZBox!;
-        if (xBox is not null && yBox is not null && zBox is not null
-            && IsDragPositionBoxAttached(xBox, "X") && IsDragPositionBoxAttached(yBox, "Y") && IsDragPositionBoxAttached(zBox, "Z"))
+        posX = _dragPosXBox!;
+        posY = _dragPosYBox!;
+        posZ = _dragPosZBox!;
+        rotX = _dragRotXBox!;
+        rotY = _dragRotYBox!;
+        rotZ = _dragRotZBox!;
+        rotW = _dragRotWBox!;
+        if (posX is not null && posY is not null && posZ is not null
+            && rotX is not null && rotY is not null && rotZ is not null && rotW is not null
+            && IsDragBoxAttached(posX, "Transform.LocalPosition.X")
+            && IsDragBoxAttached(posY, "Transform.LocalPosition.Y")
+            && IsDragBoxAttached(posZ, "Transform.LocalPosition.Z")
+            && IsDragBoxAttached(rotX, "Transform.LocalRotation.X")
+            && IsDragBoxAttached(rotY, "Transform.LocalRotation.Y")
+            && IsDragBoxAttached(rotZ, "Transform.LocalRotation.Z")
+            && IsDragBoxAttached(rotW, "Transform.LocalRotation.W"))
             return true;
-        xBox = yBox = zBox = null!;
+        posX = posY = posZ = rotX = rotY = rotZ = rotW = null!;
         _dragPosXBox = _dragPosYBox = _dragPosZBox = null;
+        _dragRotXBox = _dragRotYBox = _dragRotZBox = _dragRotWBox = null;
         var card = ComponentEditors.Children.OfType<Border>()
             .FirstOrDefault(candidate => ReferenceEquals(candidate.Tag, transform));
         if (card is null)
             return false;
-        TextBox? x = null, y = null, z = null;
+        TextBox? px = null, py = null, pz = null, rx = null, ry = null, rz = null, rw = null;
         foreach (var box in card.GetVisualDescendants().OfType<TextBox>())
         {
             var name = box.GetValue(AutomationProperties.NameProperty) as string;
-            if (name == "Transform.LocalPosition.X") x = box;
-            else if (name == "Transform.LocalPosition.Y") y = box;
-            else if (name == "Transform.LocalPosition.Z") z = box;
-            if (x is not null && y is not null && z is not null) break;
+            if (name == "Transform.LocalPosition.X") px = box;
+            else if (name == "Transform.LocalPosition.Y") py = box;
+            else if (name == "Transform.LocalPosition.Z") pz = box;
+            else if (name == "Transform.LocalRotation.X") rx = box;
+            else if (name == "Transform.LocalRotation.Y") ry = box;
+            else if (name == "Transform.LocalRotation.Z") rz = box;
+            else if (name == "Transform.LocalRotation.W") rw = box;
+            if (px is not null && py is not null && pz is not null
+                && rx is not null && ry is not null && rz is not null && rw is not null) break;
         }
-        if (x is null || y is null || z is null)
+        if (px is null || py is null || pz is null || rx is null || ry is null || rz is null || rw is null)
             return false;
-        _dragPosXBox = xBox = x;
-        _dragPosYBox = yBox = y;
-        _dragPosZBox = zBox = z;
+        _dragPosXBox = posX = px;
+        _dragPosYBox = posY = py;
+        _dragPosZBox = posZ = pz;
+        _dragRotXBox = rotX = rx;
+        _dragRotYBox = rotY = ry;
+        _dragRotZBox = rotZ = rz;
+        _dragRotWBox = rotW = rw;
         return true;
     }
 
-    private bool IsDragPositionBoxAttached(TextBox box, string axis) =>
-        box.GetValue(AutomationProperties.NameProperty) as string == $"Transform.LocalPosition.{axis}"
+    /// <summary>Resolves the cached SizeDelta boxes by automation name. Reuses them across drags when still attached.</summary>
+    private bool TryGetDragSizeBoxes(UiElement element, out TextBox xBox, out TextBox yBox)
+    {
+        xBox = _dragSizeXBox!;
+        yBox = _dragSizeYBox!;
+        if (xBox is not null && yBox is not null
+            && IsDragBoxAttached(xBox, "UiElement.SizeDelta.X")
+            && IsDragBoxAttached(yBox, "UiElement.SizeDelta.Y"))
+            return true;
+        xBox = yBox = null!;
+        _dragSizeXBox = _dragSizeYBox = null;
+        var card = ComponentEditors.Children.OfType<Border>()
+            .FirstOrDefault(candidate => ReferenceEquals(candidate.Tag, element));
+        if (card is null)
+            return false;
+        TextBox? x = null, y = null;
+        foreach (var box in card.GetVisualDescendants().OfType<TextBox>())
+        {
+            var name = box.GetValue(AutomationProperties.NameProperty) as string;
+            if (name == "UiElement.SizeDelta.X") x = box;
+            else if (name == "UiElement.SizeDelta.Y") y = box;
+            if (x is not null && y is not null) break;
+        }
+        if (x is null || y is null)
+            return false;
+        _dragSizeXBox = xBox = x;
+        _dragSizeYBox = yBox = y;
+        return true;
+    }
+
+    private bool IsDragBoxAttached(TextBox box, string automationName) =>
+        box.GetValue(AutomationProperties.NameProperty) as string == automationName
         && box.GetVisualAncestors().Contains(ComponentEditors);
 
     /// <summary>Updates one cached box only when the displayed value differs. Skips validation churn for already valid fields.</summary>
-    private void SyncDragPositionBox(TextBox box, float value)
+    private void SyncDragNumberBox(TextBox box, float value)
     {
         var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (box.Text != text)
@@ -502,9 +827,23 @@ public partial class MainWindow
     internal bool TryBeginMoveForTest(SceneObject target, SceneViewMath.GizmoKind kind, Vector2 viewPoint) =>
         BeginSceneMove(target, kind, viewPoint);
 
+    internal bool TryBeginResizeForTest(SceneObject target, SceneViewMath.ResizeHandle handle, Vector2 viewPoint) =>
+        BeginSceneResize(target, handle, viewPoint);
+
+    internal bool TryBeginRotateForTest(SceneObject target, Vector2 viewPoint) =>
+        BeginSceneRotate(target, viewPoint);
+
     internal bool TryUpdateMoveForTest(Vector2 viewPoint) => UpdateSceneMove(viewPoint);
 
+    internal bool TryUpdateResizeForTest(Vector2 viewPoint) => UpdateSceneResize(viewPoint);
+
+    internal bool TryUpdateRotateForTest(Vector2 viewPoint) => UpdateSceneRotate(viewPoint);
+
     internal bool TryConfirmMoveForTest(Vector2 viewPoint) => ConfirmSceneMove(viewPoint);
+
+    internal bool TryConfirmResizeForTest(Vector2 viewPoint) => ConfirmSceneResize(viewPoint);
+
+    internal bool TryConfirmRotateForTest(Vector2 viewPoint) => ConfirmSceneRotate(viewPoint);
 
     /// <summary>F framing for headless verification. Centers the selection with padding without marking unsaved changes.</summary>
     internal bool TryFitForTest()

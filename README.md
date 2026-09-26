@@ -32,7 +32,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える（`Button`・`Text` も同じ）。`Sprite`がNoneのときは描かない。`Text`は内容が空のときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。Project Explorerの画像ファイルを`Sprite`欄へドラッグ＆ドロップしても同じ割り当てになる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
 - Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・文字・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。
-- Scene Viewの表示中の画像や文字を左クリックで選択すると、Stuffs／Inspectorと連動して選択枠とPivotを表示する。重なりは`Order`の大きい値を手前として同じ並べ替えで判定し、手前から選ぶ。空白クリックで選択を解除する。選択中の有効なUI対象にはX／Y矢印と中央ハンドルが出て、ドラッグでTransform.LocalPositionのX・Yだけを移動する（Zは保持）。ドラッグ中はInspectorへ即時反映し、左ボタンを離したときに変わっていた場合だけ未保存になる。Esc・フォーカス喪失・キャプチャ喪失や、保存・Scene切替・Play開始・コード採用の前には開始位置へ戻し、マウスの捕捉も解除する。ドラッグ中に親・Anchor・サイズ等の配置条件が変わった場合も中断する。Fキーで選択対象を余白付きで中央に表示する（ドラッグ中やInspectorの入力中は無効）。0サイズやXY変換が潰れた対象のGizmoは無効。Play中は配置編集できない。詳細な座標・中断規則は[設計書](docs/EngineArchitecture.md#v4前半scene-viewの編集操作)、検証状況は[実装計画](docs/ImplementationPlan.md#v4前半のscene-view編集操作2026-09-23)を参照する。
+- Scene Viewの表示中の画像や文字を左クリックで選択すると、Stuffs／Inspectorと連動して選択枠とPivotを表示する。重なりは`Order`の大きい値を手前として同じ並べ替えで判定し、手前から選ぶ。空白クリックで選択を解除する。選択中の有効なUI対象にはX／Y矢印と中央ハンドルが出て、ドラッグでTransform.LocalPositionのX・Yだけを移動する（Zは保持）。選択枠の四隅と辺中央にはサイズ変更ハンドル、上辺の上には回転ハンドルが出て、ドラッグでUiElement.SizeDeltaとTransform.LocalRotation（Scene平面のZ合成、位置・サイズは不変）を変更する。Transformのみの親には出ない。ドラッグ中はInspectorへ即時反映し、左ボタンを離したときに変わっていた場合だけ未保存になる。Esc・フォーカス喪失・キャプチャ喪失や、保存・Scene切替・Play開始・コード採用の前には開始値へ戻し、マウスの捕捉も解除する。ドラッグ中に親・Anchor・サイズ等の配置条件が変わった場合も中断する。Fキーで選択対象を余白付きで中央に表示する（ドラッグ中やInspectorの入力中は無効）。0サイズやXY変換が潰れた対象のGizmoは無効。Play中は配置編集できない。詳細な座標・中断規則は[設計書](docs/EngineArchitecture.md#v4前半scene-viewの編集操作)と[サイズ変更・回転ハンドル](docs/EngineArchitecture.md#v4後半サイズ変更回転ハンドル)、検証状況は[実装計画](docs/ImplementationPlan.md#v4前半のscene-view編集操作2026-09-23)と[サイズ変更・回転ハンドル](docs/ImplementationPlan.md#v4後半のサイズ変更回転ハンドル2026-09-26)を参照する。
 - enumはドロップダウン、`[Flags]` はチェックボックスとNoneボタンで編集する。自作enumを含むC#も保存後に自動反映する。互換性のない定義変更はConsoleに理由を表示し、編集中の値を保持する。
 - ゲームのクラスは普通のC#コンストラクタでサービスを受け取れる。保存データは `[Inspector]` に置き、保存値を使う初期化は `Start` に書く。編集時の追加・読み込みと Play 時の複製は、Game側の一箇所の登録から作った独立したサービス群で生成する。
 - ライフサイクルのあるクラスにはアタッチ設定としてStart／Update／Destroy Priorityを表示・編集できる。存在しないライフサイクルは表示しない。
@@ -561,7 +561,7 @@ public sealed class Shop(LocalizationService localization, LocalizationStore str
 
 ## Game表示とButton操作
 
-Play中のGameタブに実行用Sceneを描き、Buttonを押すと自作C#が呼ばれてConsoleにログが出る。Textは上記の別工程で追加済み。ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は対象外。確定した仕様は[設計書](docs/EngineArchitecture.md#v5前半game表示とbutton操作)、検証状況は[実装計画](docs/ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
+Play中のGameタブに実行用Sceneを描き、Buttonを押すと自作C#が呼ばれてConsoleにログが出る。Textは上記の別工程で追加済み。ObjectRef・InputFieldは対象外。確定した仕様は[設計書](docs/EngineArchitecture.md#v5前半game表示とbutton操作)、検証状況は[実装計画](docs/ImplementationPlan.md#game表示とbutton操作2026-09-23)を参照する。
 
 Stuffsで作ったオブジェクトへ `Transform`・`UiElement`・`Image`・`Button` を付け、Inspectorで配置と `Interactable` を設定する。クリック処理はButton自身の `Clicked` イベントへコードから登録する。専用のHandlerコンポーネントは不要。
 

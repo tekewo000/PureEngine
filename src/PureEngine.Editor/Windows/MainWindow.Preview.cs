@@ -24,10 +24,10 @@ public partial class MainWindow
         };
     }
 
-    /// <summary>Draws the grid, images, selection frame, and gizmo with the same layout and view transform. Never changes the Anchor area via the view.</summary>
+    /// <summary>Draws the grid, images, selection frame, and gizmos with the same layout and view transform. Never changes the Anchor area via the view.</summary>
     private void DrawSceneView(DrawList draw, System.Numerics.Vector2 size)
     {
-        if (_sceneMoveKind is not SceneViewMath.GizmoKind.None) ValidateSceneMove();
+        if (IsSceneDragging && !_scenePanning) ValidateSceneDrag();
         var viewportSize = size;
         if (!SceneViewMath.IsValidViewport(viewportSize))
         {
@@ -56,6 +56,13 @@ public partial class MainWindow
         var clip = new System.Numerics.Vector4(0, 0, viewportSize.X, viewportSize.Y);
         SceneViewOverlay.DrawSelection(draw, corners, pivot, clip);
         if (gizmoValid && !IsPlaying)
+        {
             SceneViewOverlay.DrawGizmo(draw, pivot, xAxis, yAxis, clip);
+            if (corners.Length == 4 && selected.GetComponent<UiElement>() is not null)
+            {
+                SceneViewOverlay.DrawResizeHandles(draw, corners, clip);
+                SceneViewOverlay.DrawRotateHandle(draw, corners, clip);
+            }
+        }
     }
 }

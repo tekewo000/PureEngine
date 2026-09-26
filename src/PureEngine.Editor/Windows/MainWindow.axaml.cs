@@ -958,7 +958,7 @@ public partial class MainWindow : Window
             finally { _assetSelectionChanging = false; }
             return;
         }
-        if (_sceneMoveKind is not PureEngine.Core.SceneViewMath.GizmoKind.None
+        if (IsSceneDragging && !_scenePanning
             && !ReferenceEquals(GetSelectedSceneObject(), _dragTarget))
             CancelSceneViewDrag();
         RefreshObjectInspector();

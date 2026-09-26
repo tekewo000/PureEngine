@@ -208,9 +208,9 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 - 名前の重複回避・Scene所有権・保存往復、実際のメニューイベントによる作成・ツリー選択・Play保護・アタッチ失敗時の取り消しをチェックに追加。
 - ローカルの `./tools/code-quality.ps1 -Check` は通過（提案レベルの解析・警告／エラー0のビルド・Core/Editor Checks）。実画面・実GPU・CIは未確認。
 
-**描画順の共通基盤（`RendererComponent.Order`）とGame表示・Button操作は実装・自動検証済み。** Button実装に先立つOrder基盤に続き、Game表示（実行用Sceneの描画）とButton本体（`core.button`・`IUiButtonHandler`・Game入力・更新境界ディスパッチ）を接続した。詳細は[検証状況](#game表示とbutton操作2026-09-23)を参照する。Textは[別工程](#text-component2026-09-24)で追加した。SpriteRenderer本体・SortingLayer・Zによる奥行き制御、ObjectRef・InputField・サイズ変更・回転Gizmo・単体Player配布は対象外として区別する。実画面・実GPU・CIは各工程の検証記録で区別する。
+**描画順の共通基盤（`RendererComponent.Order`）とGame表示・Button操作は実装・自動検証済み。** Button実装に先立つOrder基盤に続き、Game表示（実行用Sceneの描画）とButton本体（`core.button`・`IUiButtonHandler`・Game入力・更新境界ディスパッチ）を接続した。詳細は[検証状況](#game表示とbutton操作2026-09-23)を参照する。Textは[別工程](#text-component2026-09-24)で追加した。SpriteRenderer本体・SortingLayer・Zによる奥行き制御、ObjectRef・InputFieldは対象外として区別する。実画面・実GPU・CIは各工程の検証記録で区別する。
 
-**指定されたV4前半「Scene Viewのグリッド・パン／ズーム・選択・移動Gizmo」は実装・レビュー修正済み。** 背景だけでは位置や縮尺を把握できず、Inspectorの数値入力だけでは配置しづらいため、画像をマウスで選択・移動できる編集面を作った。2026-09-23に下表の5項目の自動検証と実GPUチェックを通過した。実画面は表示を確認済み。一連の手動操作とCIは未確認として区別し、詳細は[検証状況](#v4前半のscene-view編集操作2026-09-23)を参照する。後続の実装候補はサイズ変更・回転Gizmo。
+**指定されたV4前半「Scene Viewのグリッド・パン／ズーム・選択・移動Gizmo」は実装・レビュー修正済み。** 背景だけでは位置や縮尺を把握できず、Inspectorの数値入力だけでは配置しづらいため、画像をマウスで選択・移動できる編集面を作った。2026-09-23に下表の5項目の自動検証と実GPUチェックを通過した。実画面は表示を確認済み。一連の手動操作とCIは未確認として区別し、詳細は[検証状況](#v4前半のscene-view編集操作2026-09-23)を参照する。サイズ変更・回転Gizmoは[V4後半](#v4後半のサイズ変更回転ハンドル2026-09-26)として実装・自動検証済み。
 
 **座標方針：データ・配置計算はXYZを維持し、今回の編集GizmoはXY移動のみとする。** TransformのVector3／Quaternion、UiLayoutのMatrix4x4を維持する。操作でZを0へ戻さず、保存・再Open・Cloneでも保持する。表示はXYへの正投影とし、Zによる描画順の変更は行わない。
 
@@ -307,7 +307,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 - ゲーム用IDE0051抑制は生成csprojのAnalyzer参照で提供する。既存Projectは更新したEditorで再Openする。手動csprojへの参照追加は利用者が行う。CA1822など他の診断の自動抑制や、リポジトリの品質設定一式のゲームへの配布は対象外。
 - Inspectorと保存の対応型は [EngineArchitecture.md](EngineArchitecture.md) のInspector節を正本とする。自作struct／Nullable、対応コンテナの任意入れ子、ゼロ下限の多次元配列を含む。非string辞書キー、非ゼロ下限配列、任意ポリモーフィズム、structのComponentアタッチ、サービス参照は対象外。サービス参照に `[Inspector]` を付けない。
 - YAMLのコメント保持・汎用の自動マイグレーションは未実装。Inspectorメンバーの改名は初期値へリセットして読み込み、保存時に旧項目を削除する。値の引き継ぎは任意の `FormerlySerializedAs` に対応。型変更・enum定数の改名を自動移行するものではない。
-- ゲーム内UIのInputField等の追加、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置と文言参照の解決まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。サイズ変更・回転ハンドル、複数選択、スナップ、汎用Undo／Redoと文言のボイス再生・音声基盤は未実装。
+- ゲーム内UIのInputField等の追加、ゲーム進行のセーブ、通信・Steamは未実装。Scene Viewのドラッグ操作・ハンドルはV4前半の範囲（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）とV4後半の範囲（サイズ変更・回転ハンドル）まで実装済み。描画順は`Order`基盤まで、Game表示とButton操作はV5前半の範囲まで、Text表示は内容・色・UiElement配置と文言参照の解決まで実装済みで、SpriteRenderer本体・SortingLayer・Zによる奥行き制御は未実装。複数選択、スナップ、汎用Undo／Redoと文言のボイス再生・音声基盤は未実装。
 - ペイン配置などのEditor設定の永続化は未実装。最近開いたProjectの履歴は保存済み。
 
 ## 仕様整理と次の実装順
@@ -370,7 +370,7 @@ Play準備はClone＋bind＋Startで、編集Sceneの構築とStopを含まな�
 | V1 | Scene View埋め込みと単体ウィンドウの表示検証 | 実装・実機確認済み（DPI 1.0） |
 | V2 | 2D画像・日本語の文字・クリップ・GPU資源管理 | 実装・ローカル／実機確認済み |
 | V3 | 親子・素材参照・UIデータの保存 | Image向けの素材・Inspector・version 2保存／Clone、Text／Buttonを実装。フォント素材・ObjectRef等は後続 |
-| V4 | Scene Viewでの配置・Inspector連動 | 編集SceneとInspectorの反映に加え、V4前半（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）を実装・自動検証済み。サイズ変更・回転ハンドル等は未実装 |
+| V4 | Scene Viewでの配置・Inspector連動 | 編集SceneとInspectorの反映に加え、V4前半（グリッド・パン／ズーム・単一選択・XY移動Gizmo・F表示）とV4後半（サイズ変更・回転ハンドル）を実装・自動検証済み。複数選択・スナップ等は未実装 |
 | V5 | Game表示・入力・Play／Stop接続 | Game表示とButton操作まで実装・自動検証済み（下記） |
 | V6 | 同じプロジェクトの単体実行・配布確認 | Windows x64のself-containedフォルダ出力を実装。検証結果と未確認事項は冒頭のBuild節 |
 
@@ -499,6 +499,15 @@ StuffsでTransformのみの親（子にTransform＋UiElement＋Image）を選ん
 - ローカル品質：`./tools/code-quality.ps1 -Check` は終了コード0でPASS（警告／エラー0、Core／Editorチェック通過）。
 - Core追加（`SceneViewChecks.BareTransformParent`）：子の配置が素の親へ追従すること、親フレームのワールド位置、Transformなし・Scene外の拒否、入れ子の累積を確認。
 - Editor追加（`SceneViewEditorChecks.BareParentGizmo`）：Stuffs選択したTransformのみの親がGizmo枠（矩形なし・Pivotあり）を出すこと、Gizmoドラッグの確定でZ保持・未保存化・子配置の追従、ドラッグ中の回転編集でキャンセルし開始値へ戻ることを確認。
+- 実画面・実GPU・CIは未確認として区別する。
+
+### V4後半のサイズ変更・回転ハンドル（2026-09-26）
+
+V4前半の移動Gizmoに続け、有効な `UiElement` 枠を持つ選択へサイズ変更ハンドル（四隅＋辺中央の8個）と回転ハンドル（上辺の上）を追加した。サイズ変更は `UiElement.SizeDelta` のみ、回転は `Transform.LocalRotation` のみ（Scene平面のZ合成）を書き換え、対象外の値は維持する。`Transform` のみの親には出さず移動のみのまま残す。ヒット優先度は回転→サイズ変更→移動→選択とする。未保存・中断・禁止の規則は移動ドラッグと共通（確定まで未保存化なし、Esc等で位置・サイズ・回転の開始値へ復元、変更時のみ確定で未保存化、Play中禁止、Inspector即時反映）。仕様は[設計書](EngineArchitecture.md#v4後半サイズ変更回転ハンドル)、操作は[README](../README.md)を参照する。
+
+- ローカルの `./tools/code-quality.ps1 -Check`（提案レベル解析・警告をエラー扱いにしたビルド・Core／Editorチェック）は通過。
+- Core追加（`SceneViewChecks`）：8ハンドルと回転ハンドルの配置・ヒット優先（隅の辺に対する優先、枠内・回転域の miss、枠なしの拒否、非有限の拒否）、サイズ変換（中心／原点Pivotのゲイン、対角・辺の軸分離、拡縮・回転済みワールドの逆変換、特異ワールド・非有限の拒否）、適用（加算・辺の他軸維持・ゼロクランプ・引き伸ばしAnchorの負 `SizeDelta` 保持・不正値拒否）、軸有効判定、回転角度（+90度・静止ゼロ・分岐跨ぎ・ゼロ半径・非有限の拒否）、回転適用（+X→+Y・正規化維持・既存傾きの保持・不正値拒否）を確認。
+- Editor追加（`SceneViewEditorChecks`）：実マウス経路のサイズ変更ハンドルへの振り分け・Esc復元・確定（位置とZ維持）、辺ハンドルの単軸維持とInspectorサイズ欄の即時反映・確定まで非未保存化、無移動クリックの非未保存化、ゼロクランプとキャンセル復元、ロック辺の開始拒否、サイズ変更中のPlay開始による復元とPlay中のサイズ変更・回転の禁止、実マウス経路の回転ハンドル開始・+90度回転（位置・サイズ不変）・確定・正規化維持、フック経路の回転とキャンセル復元、削除後の確定拒否を確認。
 - 実画面・実GPU・CIは未確認として区別する。
 
 ### UI実装レビューの修正

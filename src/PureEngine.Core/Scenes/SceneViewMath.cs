@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace PureEngine.Core;
 
-/// <summary>Shared coordinate and layout math for the first half of V4 Scene View editing. Data keeps XYZ while gizmos handle XY only.</summary>
+/// <summary>Shared coordinate and layout math for V4 Scene View editing. Data keeps XYZ while gizmos handle XY only.</summary>
 /// <remarks>Rendering, selection, and gizmos share the same UiLayout results and view transform. The parent area for anchors is unaffected by pan/zoom.</remarks>
 public static class SceneViewMath
 {
@@ -17,6 +17,9 @@ public static class SceneViewMath
     public const float GizmoShaftHalfWidth = 4f;
     public const float GizmoHeadSize = 12f;
     public const float GizmoCenterSize = 14f;
+    public const float ResizeHandleSize = 10f;
+    public const float RotateHandleOffset = 28f;
+    public const float RotateHandleRadius = 8f;
 
     public sealed record LayoutEntry(
         SceneObject Object,
@@ -31,6 +34,20 @@ public static class SceneViewMath
         X,
         Y,
         XY,
+    }
+
+    /// <summary>Resize handles on the selection frame. Corners adjust both axes, edges adjust one.</summary>
+    public enum ResizeHandle
+    {
+        None,
+        Left,
+        Top,
+        Right,
+        Bottom,
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight,
     }
 
     public static bool IsValidViewport(Vector2 viewportSize) =>
@@ -457,6 +474,204 @@ public static class SceneViewMath
         if (!float.IsFinite(next.X) || !float.IsFinite(next.Y) || !float.IsFinite(next.Z))
             return false;
         nextLocal = next;
+        return true;
+    }
+
+    /// <summary>Returns the screen-space center of one resize handle from view-space frame corners (top-left, top-right, bottom-right, bottom-left).</summary>
+    public static bool TryGetResizeCenter(Vector2[] cornersView, ResizeHandle handle, out Vector2 center)
+    {
+        center = Vector2.Zero;
+        if (handle is ResizeHandle.None || cornersView.Length != 4)
+            return false;
+        foreach (var corner in cornersView)
+        {
+            if (!float.IsFinite(corner.X) || !float.IsFinite(corner.Y))
+                return false;
+        }
+        var topLeft = cornersView[0];
+        var topRight = cornersView[1];
+        var bottomRight = cornersView[2];
+        var bottomLeft = cornersView[3];
+        var resolved = handle switch
+        {
+            ResizeHandle.Left => (bottomLeft + topLeft) / 2,
+            ResizeHandle.Top => (topLeft + topRight) / 2,
+            ResizeHandle.Right => (topRight + bottomRight) / 2,
+            ResizeHandle.Bottom => (bottomRight + bottomLeft) / 2,
+            ResizeHandle.TopLeft => topLeft,
+            ResizeHandle.TopRight => topRight,
+            ResizeHandle.BottomLeft => bottomLeft,
+            ResizeHandle.BottomRight => bottomRight,
+            _ => new Vector2(float.NaN, float.NaN),
+        };
+        if (!float.IsFinite(resolved.X) || !float.IsFinite(resolved.Y))
+            return false;
+        center = resolved;
+        return true;
+    }
+
+    /// <summary>Returns the screen-space rotate handle center above the top edge midpoint.</summary>
+    public static bool TryGetRotateCenter(Vector2[] cornersView, out Vector2 center)
+    {
+        center = Vector2.Zero;
+        if (!TryGetResizeCenter(cornersView, ResizeHandle.Top, out var top))
+            return false;
+        var resolved = top - new Vector2(0, RotateHandleOffset);
+        if (!float.IsFinite(resolved.X) || !float.IsFinite(resolved.Y))
+            return false;
+        center = resolved;
+        return true;
+    }
+
+    /// <summary>Hit-tests the resize squares in screen logical pixels. Corners win over edges on overlap.</summary>
+    public static ResizeHandle HitResizeHandle(Vector2[] cornersView, Vector2 viewPoint)
+    {
+        if (cornersView.Length != 4 || !float.IsFinite(viewPoint.X) || !float.IsFinite(viewPoint.Y))
+            return ResizeHandle.None;
+        ResizeHandle[] order =
+        [
+            ResizeHandle.TopLeft, ResizeHandle.TopRight, ResizeHandle.BottomLeft, ResizeHandle.BottomRight,
+            ResizeHandle.Left, ResizeHandle.Top, ResizeHandle.Right, ResizeHandle.Bottom,
+        ];
+        var half = ResizeHandleSize / 2;
+        foreach (var handle in order)
+        {
+            if (!TryGetResizeCenter(cornersView, handle, out var center))
+                return ResizeHandle.None;
+            if (Math.Abs(viewPoint.X - center.X) <= half && Math.Abs(viewPoint.Y - center.Y) <= half)
+                return handle;
+        }
+        return ResizeHandle.None;
+    }
+
+    /// <summary>Hit-tests the rotate handle circle in screen logical pixels.</summary>
+    public static bool HitRotateHandle(Vector2[] cornersView, Vector2 viewPoint)
+    {
+        if (!float.IsFinite(viewPoint.X) || !float.IsFinite(viewPoint.Y))
+            return false;
+        if (!TryGetRotateCenter(cornersView, out var center))
+            return false;
+        return Vector2.DistanceSquared(center, viewPoint) <= RotateHandleRadius * RotateHandleRadius;
+    }
+
+    /// <summary>Maps a Scene delta to a SizeDelta change for the dragged handle. Inactive axes stay zero; locked pivot sides and singular worlds fail.</summary>
+    /// <remarks>The dragged corner tracks the pointer: the Scene delta passes through the inverse full-world XY transform, then divides by the pivot-relative gain of each active axis. A stationary locked axis reads as zero instead of failing, so axis-aligned drags keep the free axis.</remarks>
+    public static bool TrySceneDeltaToResize(
+        Vector2 sceneDelta, Matrix4x4 world, Vector2 pivot, ResizeHandle handle, out Vector2 resizeDelta)
+    {
+        resizeDelta = Vector2.Zero;
+        if (handle is ResizeHandle.None)
+            return false;
+        if (!float.IsFinite(sceneDelta.X) || !float.IsFinite(sceneDelta.Y))
+            return false;
+        if (!float.IsFinite(pivot.X) || !float.IsFinite(pivot.Y))
+            return false;
+        var a = world.M11;
+        var b = world.M12;
+        var c = world.M21;
+        var d = world.M22;
+        if (!float.IsFinite(a + b + c + d))
+            return false;
+        var determinant = (a * d) - (b * c);
+        if (!float.IsFinite(determinant) || determinant == 0)
+            return false;
+        var localX = ((sceneDelta.X * d) - (sceneDelta.Y * c)) / determinant;
+        var localY = ((sceneDelta.Y * a) - (sceneDelta.X * b)) / determinant;
+        if (!float.IsFinite(localX) || !float.IsFinite(localY))
+            return false;
+        var (gainX, gainY, usesX, usesY) = ResizeGains(pivot, handle);
+        // A stationary axis needs no gain; only real movement on a locked side fails.
+        var x = usesX ? (localX == 0 ? 0 : localX / gainX) : 0;
+        var y = usesY ? (localY == 0 ? 0 : localY / gainY) : 0;
+        if (!float.IsFinite(x) || !float.IsFinite(y))
+            return false;
+        resizeDelta = new Vector2(x, y);
+        return true;
+    }
+
+    /// <summary>Reports whether the handle adjusts each axis. Sides sitting exactly on the Pivot stay fixed.</summary>
+    public static void ResizeAxes(Vector2 pivot, ResizeHandle handle, out bool adjustsX, out bool adjustsY)
+    {
+        var (gainX, gainY, usesX, usesY) = ResizeGains(pivot, handle);
+        adjustsX = usesX && gainX != 0;
+        adjustsY = usesY && gainY != 0;
+    }
+
+    private static (float GainX, float GainY, bool UsesX, bool UsesY) ResizeGains(Vector2 pivot, ResizeHandle handle) => handle switch
+    {
+        ResizeHandle.Left => (-pivot.X, 0, true, false),
+        ResizeHandle.Top => (0, -pivot.Y, false, true),
+        ResizeHandle.Right => (1 - pivot.X, 0, true, false),
+        ResizeHandle.Bottom => (0, 1 - pivot.Y, false, true),
+        ResizeHandle.TopLeft => (-pivot.X, -pivot.Y, true, true),
+        ResizeHandle.TopRight => (1 - pivot.X, -pivot.Y, true, true),
+        ResizeHandle.BottomLeft => (-pivot.X, 1 - pivot.Y, true, true),
+        ResizeHandle.BottomRight => (1 - pivot.X, 1 - pivot.Y, true, true),
+        _ => (0, 0, false, false),
+    };
+
+    /// <summary>Applies a resize change to the start SizeDelta on the handle axes. Resolved sizes clamp at zero; other members are untouched.</summary>
+    public static bool TryApplyResize(
+        Vector2 startSize, Vector2 anchorSpan, Vector2 resizeDelta, Vector2 pivot, ResizeHandle handle, out Vector2 nextSize)
+    {
+        nextSize = startSize;
+        if (handle is ResizeHandle.None)
+            return false;
+        if (!float.IsFinite(startSize.X + startSize.Y) || !float.IsFinite(anchorSpan.X + anchorSpan.Y))
+            return false;
+        if (!float.IsFinite(resizeDelta.X) || !float.IsFinite(resizeDelta.Y))
+            return false;
+        if (!float.IsFinite(pivot.X) || !float.IsFinite(pivot.Y))
+            return false;
+        var (_, _, usesX, usesY) = ResizeGains(pivot, handle);
+        if (!usesX && !usesY)
+            return false;
+        var next = startSize;
+        if (usesX)
+            next.X = Math.Max(startSize.X + resizeDelta.X, -anchorSpan.X);
+        if (usesY)
+            next.Y = Math.Max(startSize.Y + resizeDelta.Y, -anchorSpan.Y);
+        if (!float.IsFinite(next.X) || !float.IsFinite(next.Y))
+            return false;
+        nextSize = next;
+        return true;
+    }
+
+    /// <summary>Measures the pointer angle change around the drag-start pivot in Scene coordinates. Tiny radii fail.</summary>
+    public static bool TryRotateAngle(Vector2 pivotScene, Vector2 fromScene, Vector2 toScene, out float radians)
+    {
+        radians = 0;
+        if (!float.IsFinite(pivotScene.X + pivotScene.Y + fromScene.X + fromScene.Y + toScene.X + toScene.Y))
+            return false;
+        var from = fromScene - pivotScene;
+        var to = toScene - pivotScene;
+        if (from.LengthSquared() <= 1e-6f || to.LengthSquared() <= 1e-6f)
+            return false;
+        var delta = MathF.Atan2(to.Y, to.X) - MathF.Atan2(from.Y, from.X);
+        if (!float.IsFinite(delta))
+            return false;
+        if (delta > MathF.PI)
+            delta -= MathF.PI * 2;
+        else if (delta < -MathF.PI)
+            delta += MathF.PI * 2;
+        radians = delta;
+        return true;
+    }
+
+    /// <summary>Composes a Scene-plane rotation onto the start rotation. Existing tilt is preserved, never reset.</summary>
+    public static bool TryApplyRotation(Quaternion start, float radians, out Quaternion next)
+    {
+        next = start;
+        if (!float.IsFinite(radians))
+            return false;
+        if (!float.IsFinite(start.X + start.Y + start.Z + start.W) || start.LengthSquared() <= float.Epsilon)
+            return false;
+        // Parent-space Z rotation composes on the left (local * parent order), so X/Y tilt survives the drag.
+        var composed = Quaternion.Concatenate(Quaternion.CreateFromAxisAngle(Vector3.UnitZ, radians), start);
+        var normalized = Quaternion.Normalize(composed);
+        if (!float.IsFinite(normalized.X + normalized.Y + normalized.Z + normalized.W))
+            return false;
+        next = normalized;
         return true;
     }
 
