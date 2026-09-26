@@ -845,15 +845,15 @@
             <ScrollViewer Margin="8">
              <StackPanel Spacing="6">
               <StackPanel x:Name="ObjectInspector" IsEnabled="{Binding CanEdit}" IsVisible="{Binding Inspector.HasObject}" Spacing="6">
-                <TextBlock Text="NAME" Classes="caption" Margin="0,0,0,-2" />
+                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                  <TextBlock Text="NAME" Classes="caption" Margin="0,0,0,-2" />
+                  <TextBlock Text="ID" Classes="caption" Grid.Column="1" />
+                  <TextBlock x:Name="ObjectId" Text="{Binding Inspector.ObjectId}" ToolTip.Tip="{Binding Inspector.ObjectId}" Classes="objectId" MaxLines="1" Grid.Column="2"
+                             HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </Grid>
                 <TextBox x:Name="ObjectName" Text="{Binding Inspector.Name, Mode=TwoWay}" Classes="inspectorField" PlaceholderText="Object name…" AutomationProperties.Name="Object name" />
                 <TextBlock x:Name="NameError" Text="Enter a name." Foreground="#FF9E99"
                            TextWrapping="Wrap" IsVisible="{Binding Inspector.HasNameError}" />
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
-                  <TextBlock Text="ID" Classes="caption" />
-                  <TextBlock x:Name="ObjectId" Text="{Binding Inspector.ObjectId}" ToolTip.Tip="{Binding Inspector.ObjectId}" Classes="objectId" MaxLines="1" Grid.Column="1"
-                             HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
-                </Grid>
                 <StackPanel x:Name="AttachedClasses" IsVisible="{Binding Inspector.HasObject}" Spacing="8" Margin="0,4,0,0">
                   <Separator Classes="divider" />
                   <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
