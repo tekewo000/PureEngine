@@ -275,6 +275,23 @@ static class InspectorValueEditorChecks
         Click(countsClear);
         Check(probe.Counts.Count == 0, "Dictionary Clear must remove all entries and keep the dictionary.");
 
+        // Nested lists fix the index and remove columns at each header and stay editable.
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Matrix[0].Collapse"));
+        Dispatcher.UIThread.RunJobs();
+        var matrixCell = Box(editor, $"{nameof(InspectorValueProbe)}.Matrix[0][0]");
+        Check(matrixCell.Text == "1", $"Nested list cell must start at 1, got '{matrixCell.Text}'.");
+        var outerRemove = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Matrix.Remove[0]");
+        var innerRemove = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Matrix[0].Remove[0]");
+        Check(Position(outerRemove, editor).X + outerRemove.Bounds.Width == Position(innerRemove, editor).X + innerRemove.Bounds.Width,
+            "Nested remove buttons must share the header column.");
+        matrixCell.Text = "42";
+        Dispatcher.UIThread.RunJobs();
+        Check(probe.Matrix[0][0] == 42, "Nested list edit did not reach the scene.");
+        Click(innerRemove);
+        Check(probe.Matrix[0].Count == 1, "Nested inner remove must shrink the inner list.");
+        Click(ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Matrix.Remove[1]"));
+        Check(probe.Matrix.Count == 1, "Nested outer remove must shrink the outer list.");
+
         // Transform member is a reference slot: None -> select scene Transform -> Clear.
         var targetCombo = Combo(editor, $"{nameof(InspectorValueProbe)}.Target");
         Check(targetCombo.SelectedItem?.ToString() == "None", "Transform reference must start as None.");
@@ -460,6 +477,7 @@ static class InspectorValueEditorChecks
         [Inspector] public Dictionary<string, Color> Palette { get; set; } = new() { ["accent"] = Color.White };
         [Inspector] public double Ratio = 1.5;
         [Inspector] public List<int> Scores { get; set; } = [1, 2];
+        [Inspector] public List<List<int>> Matrix { get; set; } = [[1, 2], [3]];
         [Inspector] public Dictionary<string, int> Counts { get; set; } = new() { ["alice"] = 3 };
         [Inspector] public Transform? Target { get; set; }
         [Inspector] public Difficulty Level = Difficulty.Normal;
