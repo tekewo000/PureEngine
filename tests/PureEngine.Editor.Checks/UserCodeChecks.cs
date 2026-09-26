@@ -453,7 +453,7 @@ static class UserCodeChecks
         {
             changed,
             changed.Replace("Hard = 2", "Hard = 2, Expert = 3"),
-            changed.Replace("[Inspector] public Mode Level", "[Inspector, FormerlySerializedAs(\"Level\")] public Mode Rank"),
+            changed.Replace("[Inspector] public Mode Level = Mode.Easy", "[Inspector, FormerlySerializedAs(\"Level\")] public Mode Rank = Mode.Easy"),
         })
         {
             File.WriteAllText(file, source);

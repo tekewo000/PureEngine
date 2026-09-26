@@ -749,6 +749,7 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 
 ### 自作クラスのInspector対応（2026-09-23）
 
+- 以下は導入時点の記録。struct・コンテナ入れ子の制限は下記の2026-09-26対応で更新した。
 - `public AClass Foo { get; set; }` のような自作クラスをInspector値として扱う。条件は参照型のclass（`string`・配列・`List`・`Dictionary`・`Nullable`・enum・`Transform`・`Sprite`を除く）、抽象・ジェネリック・struct・`object`自体を除き、publicな引数なしコンストラクタを持ち、すべての `[Inspector]` メンバーが対応型であること。再帰（自分を直接・間接に含む）は未対応。宣言型と実行時型の一致を要求し、派生型の代入は保存時に拒否する。
 - 単体・`T[]`・`List<T>`・`Dictionary<string, TValue>`・入れ子の自作クラスで同じ変換を使う。YAMLではメンバー名のマッピング、nullは `null`。欠けた項目はクラスの初期値を維持し、未知の項目は読み飛ばす（ベクトル・Transform・Sprite内部は従来どおり厳格）。`Clone` では深く複製する。対応型の正本は[設計書](EngineArchitecture.md)のInspector節とYAML節。
 - Editorは入れ子カード（Null表示＋Create／Set Null＋折りたたみ＋`親.子`のAutomation名）で編集する。単体・配列／リスト要素・辞書値に対応し、無効表示・保存拒否・Esc復元・未保存化は既存の仕組みに合わせる。
@@ -756,3 +757,12 @@ Intel Core i5-13400F、Windows 10.0.26200 x64、.NET 11.0.0-rc.1.26425.128、Rel
 - 追加分（Editor・InspectorValueEditorChecks）：入れ子エディタのUnsupported表示なし、Create→入れ子編集→Set Null、二重入れ子・折りたたみ、リスト・辞書のAdd／Removeと値編集、無効表示・Esc復元・未保存化をHeadlessで確認。
 - PR修正：自作クラスの再コンパイル後の型互換性判定と、入れ子の `FormerlySerializedAs` の名前解決を追加。単体・配列・List・Dictionaryの値保持、入れ子の旧名復元、新旧名の重複拒否、非互換な内部メンバー型／クラス名変更時の元Scene保持を回帰チェックで確認した。仕様は[設計書](EngineArchitecture.md)のInspector節を参照。
 - ローカルの `./tools/code-quality.ps1 -Check`（提案レベル解析・警告をエラー扱いにしたビルド・Core／Editorチェック全件）を通過。以前中断した `ConsoleChecks.CloseReopen` も今回の実行では通過。実画面・実GPUは未確認。CIはPRのChecksで別途確認する。
+
+### struct・コンテナ合成・多次元配列（2026-09-26）
+
+- 対応範囲と保存形式の正本は[設計書のInspector節](EngineArchitecture.md#inspector)。自作struct／Nullable、一次元配列・List・stringキーDictionaryの任意入れ子、ゼロ下限の多次元配列を実装した。既存class埋め込み互換とComponent／DataAsset参照の意味は維持し、新しいclass埋め込み指定は追加していない。
+- `InspectorArrayShape` で形状・行優先座標・検証・確保を共有。一次元の従来形式は維持し、多次元は空次元を含む形状を保存する。Scene参照Codec・削除時のnull化・型移行も同じ再帰規則で処理する。
+- Editorは文書所有者付きのlive value bindingで、深いstructのboxed copyを全親へ書き戻す。32要素のページ表示、子コンテナの遅延展開、配列座標とResize、外側の行削除・キー変更時の子Missing情報の追従に対応。Inspectorの配列拡大操作上限は設計書を参照。
+- Core回帰：`NestedInspectorValueChecks` でstruct・Nullable・混在入れ子・形状・空次元・DataAsset保存／Cloneと外部参照制約を確認。`SceneComposableReferenceChecks` でScene保存／Clone、参照削除Missing、Nullable struct書戻し、Prefab配置時のID接続、Play分離、rank変更拒否を確認。
+- Editor Headless回帰：`ComposableInspectorChecks` で深い兄弟欄の書戻し、Nullable、混在入れ子、座標編集・Resize・不正形状時の元データ維持・ページ編集、struct内の参照選択／解除、外側の削除・改名によるMissing追従を確認。`UserCodeChecks` で実際の別アセンブリ再コンパイル後のstruct／Nullable／入れ子／空多次元配列の保持と非互換rank変更時の元Scene保持を確認。
+- 検証：Core／Editorのローカル回帰は実行済み。最終統合版の必須品質チェックとCIはlanding前に確認する。実画面・実GPUでの目視確認は行っていない。

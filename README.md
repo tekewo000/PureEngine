@@ -27,6 +27,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 - Inspectorの「Name」で名前を編集する。ツリー表示へ即時反映し、未保存になる。
 - オブジェクトを右クリックして「Delete」、またはStuffsで選択してDeleteキーで削除する。複数選択はまとめて削除する。余白を右クリックすると選択が解除され、削除は無効になる。削除後は兄弟内の次の対象へ選択を移す。
 - Inspectorで `[Inspector]` 付きの値を編集し、YAMLで保存・読み込みできる。対応型はstring・int・float・double・bool・enum・`Vector2`・`Vector3`・`Vector4`・`Quaternion`・`Color`・`Transform`・`Sprite`・配列・`List<T>`・`Dictionary<string, TValue>`（対応範囲の詳細は [EngineArchitecture.md](docs/EngineArchitecture.md) のInspector節を参照）。`Color` の単体・Nullableはプレビュー（色見本）で編集し、選ぶとSpectrum／Palette／Sliders（hex・alpha付き）のピッカーが開く。コレクション要素の色は数値欄のまま。
+- 自作struct／Nullableとコンテナの入れ子も同じ欄で編集できる。子コレクションは見出しで展開し、32要素を超える場合はPrevious／Nextでページを切り替える。ゼロ下限の多次元配列は `[行,列,...]` のセルと次元ごとの長さを表示し、長さを入力してResizeで反映する。重なる座標は保持し、0を指定した空次元も保存する。Inspectorからの配列拡大には誤操作防止の上限がある（[設計書](docs/EngineArchitecture.md#inspector)参照）。
 - `Image`だけを付けても表示されない。`Transform`・`UiElement`が不足しているとInspectorに「Requires: …」と表示し、揃うと消える（`Button`・`Text` も同じ）。`Sprite`がNoneのときは描かない。`Text`は内容が空のときは描かない。素材IDが見つからないときはIDを保持したまま「Missing image …」と表示する。
 - ProjectへPNG／JPEGを取り込み、`Image`の`Sprite`欄で選択・None解除ができる。Project Explorerの画像ファイルを`Sprite`欄へドラッグ＆ドロップしても同じ割り当てになる。取り込みはProject Explorerの「Import Image…」から行い、`Assets/`へコピーして新規IDの登録情報を作る。開き直し・Refreshで索引を作り直し、重複・欠落・壊れた登録はConsoleに理由を表示する。
 - Scene Viewは編集中のSceneの親子配置を済ませてから`Order`昇順へ並べ替えて描く。同値は親→子・兄弟順を維持する。追加・削除、位置・サイズ・Anchor・Pivot・回転・拡縮・色・Sprite・文字・Orderの変更を反映する。暗い背景に薄いグリッドと原点・X／Y軸を表示し、中ボタンドラッグでパン、ホイールでカーソル中心にズーム（0.25〜8倍）できる。パン／ズームだけでは未保存にならない。

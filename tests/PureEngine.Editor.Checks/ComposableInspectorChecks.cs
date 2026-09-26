@@ -18,8 +18,10 @@ static class ComposableInspectorChecks
         var item = store.Current.AddEmpty();
         var target = store.Current.AddEmpty();
         target.Rename("ComposableTarget");
-        var probe = new Probe();
-        probe.References = [new() { ["first"] = new() { Target = target } }, new() { ["second"] = new() { Target = target } }];
+        var probe = new Probe
+        {
+            References = [new() { ["first"] = new() { Target = target } }, new() { ["second"] = new() { Target = target } }],
+        };
         item.Attach(probe);
         typeof(MainWindow).GetMethod("SyncHierarchyForTest", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)!.Invoke(editor, []);
         typeof(MainWindow).GetMethod("SelectSceneObjectForTest", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)!.Invoke(editor, [item]);
