@@ -591,8 +591,8 @@ public partial class MainWindow
             var root = new StackPanel { Spacing = 4 };
             var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-            var create = new Avalonia.Controls.Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-            create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
+            var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+            ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
             var clear = new Avalonia.Controls.Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
@@ -689,8 +689,8 @@ public partial class MainWindow
             var root = new StackPanel { Spacing = 4 };
             var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-            var create = new Avalonia.Controls.Button { Content = "Create", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-            create.SetValue(AutomationProperties.NameProperty, $"{automationName}.Create");
+            var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+            ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
             var clear = new Avalonia.Controls.Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
