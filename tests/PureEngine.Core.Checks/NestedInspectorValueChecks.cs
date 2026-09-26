@@ -1,7 +1,7 @@
 using PureEngine.Core;
 using YamlDotNet.Serialization;
 
-static class NestedInspectorValueChecks
+public static class NestedInspectorValueChecks
 {
     public static void Run()
     {
