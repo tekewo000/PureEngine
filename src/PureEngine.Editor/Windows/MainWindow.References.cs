@@ -621,7 +621,7 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
         ToolTip.SetTip(add, mapping ? "Add an entry." : "Add a row.");
-        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(setNull, mapping
             ? "Set the dictionary itself to null. Removing rows keeps an empty dictionary."
             : "Set the list itself to null. Removing rows keeps an empty list.");
@@ -630,7 +630,8 @@ public partial class MainWindow
             ? "Remove all entries. The empty dictionary stays."
             : "Remove all rows. The empty list stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, mapping ? "Create an empty dictionary." : "Create an empty list.");
         var body = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => body.IsVisible = nowExpanded);

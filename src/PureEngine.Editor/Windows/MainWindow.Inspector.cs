@@ -201,8 +201,8 @@ public partial class MainWindow
         var check = new CheckBox { IsChecked = GetMemberValue(component, member) is true, Content = NullableBoolLabel(GetMemberValue(component, member)) };
         check.Classes.Add("inspectorCheck");
         check.SetValue(AutomationProperties.NameProperty, automationName);
-        var clear = new Avalonia.Controls.Button { Content = "Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2) };
-        clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
+        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        ToolTip.SetTip(clear, "Set to null.");
         check.IsCheckedChanged += (_, _) =>
         {
             if (IsPlaying) return;
@@ -226,8 +226,10 @@ public partial class MainWindow
     {
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
-        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new value.");
+        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var vectorPanel = BuildVectorEditorForNullable(component, member, automationName, dimensions);
         root.Children.Add(header);
@@ -262,8 +264,10 @@ public partial class MainWindow
     {
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
-        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new value.");
+        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var colorPanel = BuildColorEditorForNullable(component, member, automationName);
         root.Children.Add(header);
@@ -356,8 +360,10 @@ public partial class MainWindow
     {
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
-        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new value.");
+        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var body = new StackPanel { Spacing = 6 };
         body.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Position" });
@@ -455,23 +461,11 @@ public partial class MainWindow
         return grid;
     }
 
-    /// <summary>Header action button (Add/Clear/Set Null/Create) with unified sizing.</summary>
-    private static Avalonia.Controls.Button BuildHeaderButton(string content, string automationName)
-    {
-        var button = new Avalonia.Controls.Button { Content = content, FontSize = 11, Padding = new Avalonia.Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-        button.SetValue(AutomationProperties.NameProperty, automationName);
-        return button;
-    }
-
-    /// <summary>Header action button that shows a shared icon instead of a text glyph.</summary>
+    /// <summary>Header action (Add/Set Null/Clear/Create). Icon-only borderless button reusing the dismissButton style so only the glyph shows.</summary>
     private static Avalonia.Controls.Button BuildHeaderIconButton(string resourceKey, string automationName)
     {
         var button = new Avalonia.Controls.Button
         {
-            Padding = new Avalonia.Thickness(8, 2),
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
             Content = new PathIcon
             {
                 Data = (StreamGeometry?)Application.Current?.FindResource(resourceKey),
@@ -479,6 +473,7 @@ public partial class MainWindow
                 Height = 12,
             },
         };
+        button.Classes.Add("dismissButton");
         button.SetValue(AutomationProperties.NameProperty, automationName);
         return button;
     }
@@ -574,12 +569,13 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
         ToolTip.SetTip(add, "Add a row.");
-        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the list itself to null. Removing rows keeps an empty list.");
         var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all rows. The empty list stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create an empty list.");
         var elements = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => elements.IsVisible = nowExpanded);
@@ -727,12 +723,13 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
         ToolTip.SetTip(add, "Add an entry.");
-        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set the dictionary itself to null. Removing rows keeps an empty dictionary.");
         var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all entries. The empty dictionary stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create an empty dictionary.");
         var rows = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => rows.IsVisible = nowExpanded);
@@ -1013,8 +1010,10 @@ public partial class MainWindow
         var enumType = Nullable.GetUnderlyingType(GetMemberType(member))!;
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
-        var clear = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new value.");
+        var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
         var body = new StackPanel { Spacing = 4 };
         root.Children.Add(header);

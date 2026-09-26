@@ -67,9 +67,11 @@ public partial class MainWindow
             return UnsupportedBadge(objectType);
         var root = new StackPanel { Spacing = 6 };
         var fields = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
-        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+        ToolTip.SetTip(setNull, "Set to null.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderButton("Create", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new value.");
         var body = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => body.IsVisible = nowExpanded);

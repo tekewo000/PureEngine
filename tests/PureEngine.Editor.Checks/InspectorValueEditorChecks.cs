@@ -180,6 +180,7 @@ static class InspectorValueEditorChecks
         var swatchesAdd = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Add");
         Check(swatchesAdd.Content is PathIcon swatchesAddIcon && ReferenceEquals(swatchesAddIcon.Data, Application.Current?.FindResource("Icon.AddSquare")),
             "Collection Add must use the shared AddSquare icon.");
+        Check(swatchesAdd.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
         var swatchesToggle = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Collapse");
         Check(swatchesToggle.Content is PathIcon swatchesToggleIcon && ReferenceEquals(swatchesToggleIcon.Data, Application.Current?.FindResource("Icon.TriangleDown")),
             "Expanded collections must show the TriangleDown toggle.");
@@ -188,6 +189,15 @@ static class InspectorValueEditorChecks
         var swatchesClear = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Clear");
         Check(swatchesClear.Content is PathIcon swatchesClearIcon && ReferenceEquals(swatchesClearIcon.Data, Application.Current?.FindResource("Icon.Delete")),
             "Bulk Clear must use the shared Delete icon.");
+        Check(swatchesClear.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
+        var swatchesNull = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Null");
+        Check(swatchesNull.Content is PathIcon swatchesNullIcon && ReferenceEquals(swatchesNullIcon.Data, Application.Current?.FindResource("Icon.Dismiss")),
+            "Set Null must use the shared Dismiss icon.");
+        Check(swatchesNull.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
+        var swatchesCreate = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Swatches.Create");
+        Check(swatchesCreate.Content is PathIcon swatchesCreateIcon && ReferenceEquals(swatchesCreateIcon.Data, Application.Current?.FindResource("Icon.AddSquare")),
+            "Create must use the shared AddSquare icon.");
+        Check(swatchesCreate.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
         Click(swatchesClear);
         Check(probe.Swatches.Count == 0, "List Clear must remove all rows and keep the list.");
         Box(editor, $"{nameof(InspectorValueProbe)}.Palette.Value[0].A").Text = "0.25";
@@ -204,6 +214,10 @@ static class InspectorValueEditorChecks
 
         // List Add/Remove updates the scene.
         var addScores = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Add");
+        var scoresNull = ButtonByName(editor, $"{nameof(InspectorValueProbe)}.Scores.Null");
+        Check(scoresNull.Content is PathIcon scoresNullIcon && ReferenceEquals(scoresNullIcon.Data, Application.Current?.FindResource("Icon.Dismiss")),
+            "Set Null must use the shared Dismiss icon.");
+        Check(scoresNull.Classes.Contains("dismissButton"), "Header actions must be borderless icon buttons.");
         Click(addScores);
         Check(probe.Scores.Count == 3, $"List Add must grow the scene list, got {probe.Scores.Count}.");
         var added = Box(editor, $"{nameof(InspectorValueProbe)}.Scores[2]");
