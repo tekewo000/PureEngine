@@ -226,8 +226,8 @@ public partial class MainWindow
     {
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-        ToolTip.SetTip(create, "Create a new value.");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a vector value.");
         var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
@@ -264,8 +264,8 @@ public partial class MainWindow
     {
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-        ToolTip.SetTip(create, "Create a new value.");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a color value.");
         var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
@@ -360,8 +360,8 @@ public partial class MainWindow
     {
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-        ToolTip.SetTip(create, "Create a new value.");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a Transform value.");
         var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);
@@ -574,7 +574,7 @@ public partial class MainWindow
         var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all rows. The empty list stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, "Create an empty list.");
         var elements = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
@@ -728,7 +728,7 @@ public partial class MainWindow
         var clear = BuildHeaderIconButton("Icon.Delete", $"{automationName}.Clear");
         ToolTip.SetTip(clear, "Remove all entries. The empty dictionary stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, "Create an empty dictionary.");
         var rows = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
@@ -1010,8 +1010,8 @@ public partial class MainWindow
         var enumType = Nullable.GetUnderlyingType(GetMemberType(member))!;
         var root = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-        ToolTip.SetTip(create, "Create a new value.");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create an enum value.");
         var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(clear, "Set to null.");
         var header = BuildSplitHeader(status, create, clear);

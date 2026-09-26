@@ -591,8 +591,8 @@ public partial class MainWindow
             var root = new StackPanel { Spacing = 4 };
             var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-            var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-            ToolTip.SetTip(create, "Create a new value.");
+            var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+            ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
             var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
@@ -689,8 +689,8 @@ public partial class MainWindow
             var root = new StackPanel { Spacing = 4 };
             var nullRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             nullRow.Children.Add(new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center });
-            var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-            ToolTip.SetTip(create, "Create a new value.");
+            var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+            ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
             var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");

@@ -630,7 +630,7 @@ public partial class MainWindow
             ? "Remove all entries. The empty dictionary stays."
             : "Remove all rows. The empty list stays.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
         ToolTip.SetTip(create, mapping ? "Create an empty dictionary." : "Create an empty list.");
         var body = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,

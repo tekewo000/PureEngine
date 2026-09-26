@@ -70,8 +70,8 @@ public partial class MainWindow
         var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(setNull, "Set to null.");
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
-        var create = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Create");
-        ToolTip.SetTip(create, "Create a new value.");
+        var create = BuildHeaderIconButton("Icon.Compose", $"{automationName}.Create");
+        ToolTip.SetTip(create, "Create a new instance.");
         var body = new StackPanel { Spacing = 4 };
         var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => body.IsVisible = nowExpanded);
