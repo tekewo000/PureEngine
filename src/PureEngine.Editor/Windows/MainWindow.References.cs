@@ -33,11 +33,11 @@ public partial class MainWindow
     /// value, never as a scene reference. SceneObject and data asset references keep the reference editor.</summary>
     private bool ShouldShowReferenceEditorFor(Type declaredType, object? owner)
     {
-        if (!SceneReferenceTypes.IsSingleReference(declaredType, _components.Registry)) return false;
+        if (!SceneReferenceTypes.IsSingleReference(declaredType, Components.Registry)) return false;
         if (owner is not null && (Documents.AssetOwned.Contains(owner) || Documents.Table.Owned.Contains(owner))
             && declaredType != typeof(SceneObject)
             && !DataAssetStore.IsAssetType(declaredType)
-            && SceneReferenceTypes.IsComponentReference(declaredType, _components.Registry)) return false;
+            && SceneReferenceTypes.IsComponentReference(declaredType, Components.Registry)) return false;
         return true;
     }
 
@@ -305,7 +305,7 @@ public partial class MainWindow
     {
         document = null;
         error = null;
-        if (_project is null)
+        if (Project is null)
         {
             error = "Open a project first.";
             return false;
@@ -317,18 +317,18 @@ public partial class MainWindow
         }
         try
         {
-            _project.ValidatePrefabPath(path);
+            Project.ValidatePrefabPath(path);
             document = PrefabFile.Load(path);
             if (declaredType == typeof(SceneObject))
                 return true;
-            if (!SceneReferenceTypes.IsComponentReference(declaredType, _components.Registry))
+            if (!SceneReferenceTypes.IsComponentReference(declaredType, Components.Registry))
             {
                 error = $"Prefab cannot be assigned to {declaredType.Name}.";
                 return false;
             }
             var count = document.Objects!
                 .SelectMany(item => item.Components ?? [])
-                .Count(data => declaredType.IsAssignableFrom(_components.Registry.GetType(data.TypeId!)));
+                .Count(data => declaredType.IsAssignableFrom(Components.Registry.GetType(data.TypeId!)));
             if (count == 1)
                 return true;
             error = count == 0
@@ -351,7 +351,7 @@ public partial class MainWindow
             return false;
         try
         {
-            assign(Documents.Current.Current.Prefabs.Assign(document, declaredType, _components.Registry, EditSession.Factory, Documents.Current.Current.DataAssets));
+            assign(Documents.Current.Current.Prefabs.Assign(document, declaredType, Components.Registry, EditSession.Factory, Documents.Current.Current.DataAssets));
         }
         catch (Exception exception)
         {
@@ -770,7 +770,7 @@ public partial class MainWindow
             Documents.Current.Current.References.RemovePathsForMember(ownerId, slot);
             refresh();
         }
-        var editor = SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
+        var editor = SceneReferenceTypes.IsSingleReference(elementType, Components.Registry)
             ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name, showClear: false)
             : BuildObjectBox(get, set, elementType, name, ownerId, slot);
         AttachEditorDropHandlers(row, editor);
@@ -858,7 +858,7 @@ public partial class MainWindow
             Documents.Current.Current.References.RemovePathsForMember(ownerId, slot);
             refresh();
         }
-        var valueEditor = SceneReferenceTypes.IsSingleReference(elementType, _components.Registry)
+        var valueEditor = SceneReferenceTypes.IsSingleReference(elementType, Components.Registry)
             ? BuildSingleReferenceEditor(get, set, elementType, ownerId, slot, name, showClear: false)
             : BuildObjectBox(get, set, elementType, name, ownerId, slot);
         AttachEditorDropHandlers(row, valueEditor);

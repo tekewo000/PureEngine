@@ -67,11 +67,18 @@ internal static class Program
         {
             EditorDocumentChecks.Run(root);
             EditorPaneChecks.Run(root);
+            EditorShellChecks.Run(root);
             PrefabFileEditingChecks.Run(root);
             if (args.Contains("--prefab-files")) return;
             AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions())
                 .SetupWithClassicDesktopLifetime([]);
             using var desktop = (ClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+            if (args.Contains("--services-only"))
+            {
+                desktop.MainWindow!.Show();
+                ProjectServiceRegistrationChecks.Run(root);
+                return;
+            }
             if (args.Contains("--reload-only"))
             {
                 desktop.MainWindow!.Show();
@@ -90,6 +97,7 @@ internal static class Program
             if (args.Contains("--panes-only"))
             {
                 desktop.MainWindow!.Show();
+                PlayConnectionChecks.Run();
                 UiMenuChecks.Run();
                 EditorChromeChecks.Run();
                 ConsoleChecks.Run();

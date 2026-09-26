@@ -35,8 +35,8 @@ static class EditorPaneChecks
 
     private static void SelectionAndInspector()
     {
-        var model = new EditorViewModel();
-        using var documents = model.Documents;
+        using var model = new EditorViewModel();
+        var documents = model.Documents;
         var parent = documents.Scene.Current.AddEmpty();
         var child = documents.Scene.Current.AddEmpty();
         child.SetParent(parent);

@@ -38,7 +38,7 @@ internal static class UiImageEditorChecks
         var editStore = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
         var scene = editStore.Current;
-        var components = (ProjectComponents)typeof(MainWindow).GetField("_components",
+        var components = (ProjectComponents)typeof(MainWindow).GetProperty("Components",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
 
         var addButton = Control<Button>(editor, "AddComponentButton");
@@ -130,7 +130,7 @@ internal static class UiImageEditorChecks
         Check(combo.Items.Count >= 1, "Sprite selector must list None at least.");
         var image = item.GetComponent<PureEngine.Core.Image>()!;
         Check(image.Sprite is null, "New Image Sprite must start as None.");
-        var project = (ProjectFile)typeof(MainWindow).GetField("_project",
+        var project = (ProjectFile)typeof(MainWindow).GetProperty("Project",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
         var tempSource = Path.Combine(Path.GetTempPath(), "UiCheck-" + Guid.NewGuid().ToString("N") + ".png");
         try

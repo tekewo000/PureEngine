@@ -300,7 +300,7 @@ dotnet run --project src/PureEngine.Editor
 
 - `src/PureEngine.Core/`：シーン・オブジェクト・属性の定義。
 - `src/PureEngine.Runtime/`：UI非依存のサービス生成とPlay実行接続。
-- `src/PureEngine.Editor/`：Avaloniaによる編集画面。
+- `src/PureEngine.Editor/`：Avaloniaによる編集画面。`Editing/`が文書管理、`ViewModels/`が状態と操作、`Windows/`がネイティブUIとの接続を担当する（[MVVM構成と検証](docs/EditorMvvmMigration.md)）。
 - `src/PureEngine.Analyzers/`：ゲーム用のライフサイクル診断Suppressor。Editorから配布する。
 - `tests/PureEngine.Core.Checks/`：Coreの動作チェック。
 - `tests/PureEngine.Editor.Checks/`：画面を表示しないLauncher・Editor遷移の動作チェック。

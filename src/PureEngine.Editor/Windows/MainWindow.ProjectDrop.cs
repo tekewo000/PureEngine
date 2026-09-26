@@ -38,13 +38,13 @@ public partial class MainWindow
         _treePress = null;
         _treeDragPath = null;
         if (!e.GetCurrentPoint(ProjectTree).Properties.IsLeftButtonPressed) return;
-        if (_project is null || IsPlaying) return;
+        if (Project is null || IsPlaying) return;
         var node = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault();
         if (node?.Tag is not string tag || tag == ComponentsNode || tag == "") return;
         // The project root itself is not movable; structural folders are rejected on drop with a message.
         _treePress = e;
         _treePressPosition = e.GetPosition(ProjectTree);
-        _treeDragPath = _project.ResolveDirectoryPath(tag);
+        _treeDragPath = Project.ResolveDirectoryPath(tag);
     }
 
     private async void OnProjectTreeMoved(object? sender, PointerEventArgs e)
@@ -79,7 +79,7 @@ public partial class MainWindow
 
     private void OnProjectDropDragOver(object? sender, DragEventArgs e)
     {
-        if (_project is null || IsPlaying || IsFileBusy)
+        if (Project is null || IsPlaying || IsFileBusy)
         {
             e.DragEffects = DragDropEffects.None;
         }
@@ -106,7 +106,7 @@ public partial class MainWindow
     /// <summary>Lightweight hover check for Stuff-to-Project prefab creation. Full validation runs on drop.</summary>
     private bool CanDropSceneObjectForPrefab(DragEventArgs e)
     {
-        if (_project is null || IsPlaying || IsFileBusy) return false;
+        if (Project is null || IsPlaying || IsFileBusy) return false;
         if (e.DataTransfer.TryGetValue(SceneObjectIdFormat) is not { } text) return false;
         if (!Guid.TryParse(text, out var id)) return false;
         return FindObject(id) is not null;
@@ -115,13 +115,13 @@ public partial class MainWindow
     /// <summary>Lightweight hover check for internal moves. Full validation (scene containment scan, open editors) runs on drop.</summary>
     private bool CanDropProjectPath(string sourceFull, string targetRelative)
     {
-        if (_project is null) return false;
+        if (Project is null) return false;
         string source;
         string targetDir;
         try
         {
             source = Path.GetFullPath(sourceFull);
-            targetDir = _project.ResolveDirectoryPath(targetRelative);
+            targetDir = Project.ResolveDirectoryPath(targetRelative);
         }
         catch
         {
@@ -136,10 +136,10 @@ public partial class MainWindow
             if (!Path.IsPathRooted(relative) && relative != ".."
                 && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 return false;
-            var sourceRelative = Path.GetRelativePath(_project.RootDirectory, source).Replace('\\', '/');
+            var sourceRelative = Path.GetRelativePath(Project.RootDirectory, source).Replace('\\', '/');
             if (IsStructuralFolder(sourceRelative)) return false;
         }
-        else if (source.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase) && !_project.IsUnderScenes(targetRelative))
+        else if (source.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase) && !Project.IsUnderScenes(targetRelative))
         {
             return false;
         }
@@ -147,7 +147,7 @@ public partial class MainWindow
         {
             try
             {
-                var sourceRelative = Path.GetRelativePath(_project.RootDirectory, source).Replace('\\', '/');
+                var sourceRelative = Path.GetRelativePath(Project.RootDirectory, source).Replace('\\', '/');
                 if (IsStructuralFolder(sourceRelative)) return false;
             }
             catch
@@ -161,7 +161,7 @@ public partial class MainWindow
     private async void OnProjectDrop(object? sender, DragEventArgs e)
     {
         e.Handled = true;
-        if (_project is null) return;
+        if (Project is null) return;
         if (TryGetProjectDragPath(e) is { } sourceFull)
         {
             var moveTarget = ResolveMoveTargetFolder(sender, e);
@@ -242,8 +242,8 @@ public partial class MainWindow
 
     private async Task ImportDroppedStorageItemsAsync(string targetRelative, IStorageItem[] items)
     {
-        if (_project is null) return;
-        var targetDir = _project.ResolveDirectoryPath(targetRelative);
+        if (Project is null) return;
+        var targetDir = Project.ResolveDirectoryPath(targetRelative);
         var localPaths = new List<string>();
         var remoteFiles = new List<IStorageFile>();
         foreach (var item in items)
@@ -293,15 +293,15 @@ public partial class MainWindow
     /// <summary>Moves a project file or folder to another project folder. Keeps image sidecars, scene references, and the asset index consistent.</summary>
     private async Task MoveProjectEntryAsync(string sourceFull, string targetRelative)
     {
-        if (_project is null) return;
+        if (Project is null) return;
         sourceFull = Path.GetFullPath(sourceFull);
-        _project.ValidateFolderPath(sourceFull);
-        var targetDir = _project.ResolveDirectoryPath(targetRelative);
+        Project.ValidateFolderPath(sourceFull);
+        var targetDir = Project.ResolveDirectoryPath(targetRelative);
         var isDirectory = Directory.Exists(sourceFull);
         var isFile = File.Exists(sourceFull);
         if (!isDirectory && !isFile)
             throw new FileNotFoundException("The source file or folder was not found.", sourceFull);
-        var sourceRelative = Path.GetRelativePath(_project.RootDirectory, sourceFull).Replace('\\', '/');
+        var sourceRelative = Path.GetRelativePath(Project.RootDirectory, sourceFull).Replace('\\', '/');
         if (IsStructuralFolder(sourceRelative))
         {
             SetFileStatus("Cannot move the Scenes folder itself.", true);
@@ -318,7 +318,7 @@ public partial class MainWindow
             if (!Path.IsPathRooted(relative) && relative != ".."
                 && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 throw new IOException("Cannot move a folder into itself.");
-            if (!_project.IsUnderScenes(targetRelative)
+            if (!Project.IsUnderScenes(targetRelative)
                 && Directory.EnumerateFiles(sourceFull, "*.pure.scene.yaml", SearchOption.AllDirectories).Any())
             {
                 SetFileStatus("Move scenes inside the Scenes folder.", true);
@@ -327,7 +327,7 @@ public partial class MainWindow
         }
         else if (sourceFull.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
         {
-            if (!_project.IsUnderScenes(targetRelative))
+            if (!Project.IsUnderScenes(targetRelative))
             {
                 SetFileStatus("Move scenes inside the Scenes folder.", true);
                 return;
@@ -342,11 +342,11 @@ public partial class MainWindow
         var hasSidecar = !isDirectory && ProjectAssets.IsSupportedImage(sourceFull) && File.Exists(sidecarSource);
         var destination = ResolveMoveDestination(targetDir, fileName, isDirectory, hasSidecar);
         if (!isDirectory && destination.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase))
-            _project.ValidateScenePath(destination);
+            Project.ValidateScenePath(destination);
         else if (isDirectory)
-            _project.ValidateFolderPath(destination);
+            Project.ValidateFolderPath(destination);
         else
-            _project.ValidateFolderPath(Path.GetDirectoryName(destination)!);
+            Project.ValidateFolderPath(Path.GetDirectoryName(destination)!);
 
         await Task.Run(() =>
         {

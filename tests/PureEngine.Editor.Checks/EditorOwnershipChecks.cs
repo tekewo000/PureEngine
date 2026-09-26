@@ -34,7 +34,7 @@ static class EditorOwnershipChecks
     public static void Run(string root)
     {
         var editor = new MainWindow();
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         owner.Registry.Register<OwnershipProbe>("checks.ownership");
         editor.Show();
         var scene = EditScene(editor);
@@ -141,7 +141,7 @@ static class EditorOwnershipChecks
         Check(OwnershipProbe.Created.All(probe => probe.Disposes == 1 && probe.Destroys == 0),
             "Every editing copy must be released once without game Destroy callbacks.");
         var failingEditor = new MainWindow();
-        var failingOwner = Field<ProjectComponents>(failingEditor, "_components");
+        var failingOwner = failingEditor.ViewModel.Components;
         failingOwner.Registry.Register<OwnershipProbe>("checks.ownership");
         failingEditor.Show();
         var failingServices = Field<GameSession>(failingEditor, "EditSession");

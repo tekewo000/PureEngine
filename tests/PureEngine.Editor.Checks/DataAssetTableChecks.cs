@@ -25,7 +25,8 @@ static class DataAssetTableChecks
             .Any(box => Equals(box.GetValue(AutomationProperties.NameProperty) as string, automationName));
         static void Click(Button button)
         {
-            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if (button.Command is { } command) command.Execute(button.CommandParameter);
+            else button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
         }
         static void Answer(string title, string answer)

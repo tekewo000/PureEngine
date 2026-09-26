@@ -18,10 +18,12 @@ public partial class MainWindow
     private void InitInspectorModel()
     {
         ViewModel.Inspector.DocumentEdited += RefreshEditedDocument;
-        ViewModel.Inspector.PropertyChanged += (_, args) =>
-        {
-            if (args.PropertyName == nameof(InspectorViewModel.HasInputErrors)) QueuePendingUserCodeReload();
-        };
+        ViewModel.Inspector.PropertyChanged += OnInspectorModelChanged;
+    }
+
+    private void OnInspectorModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(InspectorViewModel.HasInputErrors)) QueuePendingUserCodeReload();
     }
 
     private void RefreshEditedDocument(EditedDocumentKind kind)
@@ -687,7 +689,7 @@ public partial class MainWindow
     private Control BuildSequenceElementEditor(object component, MemberInfo member, Type elementType, int index, string automationName)
     {
         var elementName = $"{automationName}[{index}]";
-        if (SceneReferenceTypes.IsSingleReference(elementType, _components.Registry))
+        if (SceneReferenceTypes.IsSingleReference(elementType, Components.Registry))
             return BuildSequenceReferenceEditor(component, member, index, elementType, elementName);
         if (elementType == typeof(string))
             return BuildSequenceStringBox(component, member, index, elementName);
@@ -863,7 +865,7 @@ public partial class MainWindow
     private Control BuildDictionaryValueEditor(object component, MemberInfo member, Type valueType, string key, string automationName, int rowIndex)
     {
         var valueName = $"{automationName}.Value[{rowIndex}]";
-        if (SceneReferenceTypes.IsSingleReference(valueType, _components.Registry))
+        if (SceneReferenceTypes.IsSingleReference(valueType, Components.Registry))
             return BuildDictionaryReferenceEditor(component, member, key, valueType, valueName);
         if (valueType == typeof(string))
         {
@@ -1215,7 +1217,7 @@ public partial class MainWindow
 
     private object? DefaultElementValue(Type elementType)
     {
-        if (SceneReferenceTypes.IsSingleReference(elementType, _components.Registry))
+        if (SceneReferenceTypes.IsSingleReference(elementType, Components.Registry))
             return null;
         if (elementType == typeof(string)) return "";
         if (elementType == typeof(int)) return 0;

@@ -3,7 +3,6 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Core;
-using PureEngine.Runtime;
 
 namespace PureEngine.Editor;
 
@@ -11,7 +10,6 @@ public partial class MainWindow
 {
     public const int ConsoleMaxHistory = ConsoleViewModel.MaxHistory;
     private DispatcherTimer? _consoleTimer;
-    private int _playLoggedErrorCount;
     private bool _consoleInitialized;
     private bool _consoleRefreshing;
     private bool _consoleFollowTail;
@@ -30,17 +28,6 @@ public partial class MainWindow
         _consoleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _consoleTimer.Tick += OnConsoleTick;
         _consoleTimer.Start();
-        Closed += (_, _) =>
-        {
-            // Close-time cleanup: stop intake so a reopened window does not double-drain the shared queue.
-            if (_consoleTimer is not null)
-            {
-                _consoleTimer.Tick -= OnConsoleTick;
-                _consoleTimer.Stop();
-            }
-            _consoleTimer = null;
-            ViewModel.Console.PropertyChanged -= OnConsoleModelChanged;
-        };
         RebuildConsoleView();
     }
 
@@ -109,16 +96,4 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Logs unlogged Runtime errors without duplicating Step/Stop/Dispose reports.</summary>
-    private void LogPendingRuntimeErrors(PlaySession session)
-    {
-        var errors = session.Runtime.Errors;
-        while (_playLoggedErrorCount < errors.Count)
-        {
-            var item = errors[_playLoggedErrorCount++];
-            var message = $"{item.ObjectName}/{item.ComponentType.Name}.{item.MethodName}: {item.Exception.GetType().Name}: {item.Exception.Message}";
-            // Original exception is kept for stack/inner details; the forwarding line is only the record location.
-            Log.Engine.Error(message, item.Exception);
-        }
-    }
 }

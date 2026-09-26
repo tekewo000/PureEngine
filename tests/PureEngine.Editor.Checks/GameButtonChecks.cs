@@ -84,7 +84,7 @@ internal static class GameButtonChecks
     private static void StartPlayWithCallbacks(MainWindow editor)
     {
         Call(editor, "StartPlay");
-        var runtime = Field<PlaySession>(editor, "_play").Runtime;
+        var runtime = editor.ViewModel.Play.Session!.Runtime;
         foreach (var item in runtime.Scene.Objects)
         {
             if (item.GetComponent<PureEngine.Core.Button>() is not { } button) continue;
@@ -96,7 +96,7 @@ internal static class GameButtonChecks
 
     private static void EnsureHandlers(MainWindow editor)
     {
-        var components = Field<ProjectComponents>(editor, "_components");
+        var components = editor.ViewModel.Components;
         foreach (var (type, id) in new[] { (typeof(GameClickCounter), "checks.game-click"), (typeof(GameThrower), "checks.game-throw"),
             (typeof(GameRemover), "checks.game-remove") })
         {
@@ -107,7 +107,7 @@ internal static class GameButtonChecks
 
     private static SceneObject AddCard(MainWindow editor, Scene scene, string name, Vector3 position, Vector2 size, int order, bool interactable, bool withImage)
     {
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         var services = Field<GameSession>(editor, "EditSession");
         var item = scene.AddEmpty();
         item.Rename(name);
@@ -145,7 +145,7 @@ internal static class GameButtonChecks
         var editor = CreateEditor();
         try
         {
-            var components = Field<ProjectComponents>(editor, "_components");
+            var components = editor.ViewModel.Components;
             var found = ComponentAssets.SearchCandidates(components.Registry, "button");
             Check(found.Any(entry => entry.Type == typeof(PureEngine.Core.Button) && entry.TypeId == "core.button"),
                 "Add Component search for 'button' must list the Button component.");
@@ -196,7 +196,7 @@ internal static class GameButtonChecks
         try
         {
             EnsureHandlers(editor);
-            var components = Field<ProjectComponents>(editor, "_components");
+            var components = editor.ViewModel.Components;
             var scene = EditScene(editor);
             var item = AddCard(editor, scene, "Save me", new Vector3(10, 20, 0), new Vector2(100, 40), 3, false, true);
             item.GetComponent<PureEngine.Core.Image>()!.Color = new(0.2f, 0.4f, 0.6f, 1f);
@@ -304,7 +304,7 @@ internal static class GameButtonChecks
 
     private static GameClickCounter RuntimeCounter(MainWindow editor, string name)
     {
-        var play = Field<PlaySession?>(editor, "_play")!;
+        var play = editor.ViewModel.Play.Session!;
         return play.Runtime.Scene.Objects.First(candidate => candidate.Name == name).GetComponent<GameClickCounter>()!;
     }
 
@@ -316,7 +316,7 @@ internal static class GameButtonChecks
         {
             EnsureHandlers(editor);
             var scene = EditScene(editor);
-            var owner = Field<ProjectComponents>(editor, "_components");
+            var owner = editor.ViewModel.Components;
             var services = Field<GameSession>(editor, "EditSession");
             var item = AddCard(editor, scene, "Click me", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true, true);
             Check(owner.TryAttach(item, typeof(GameClickCounter), services.Factory), "Handler must attach beside the Button.");
@@ -375,7 +375,7 @@ internal static class GameButtonChecks
         {
             EnsureHandlers(editor);
             var scene = EditScene(editor);
-            var owner = Field<ProjectComponents>(editor, "_components");
+            var owner = editor.ViewModel.Components;
             var services = Field<GameSession>(editor, "EditSession");
             var back = AddCard(editor, scene, "Back", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true, true);
             owner.TryAttach(back, typeof(GameClickCounter), services.Factory);
@@ -434,7 +434,7 @@ internal static class GameButtonChecks
                 && Field<Guid?>(editor, "GamePressedForTest") == front.Id,
                 "Authoring changes must not change the runtime Button.");
             Call(editor, "CancelGamePress");
-            var play = Field<PlaySession?>(editor, "_play")!;
+            var play = editor.ViewModel.Play.Session!;
             play.Runtime.Scene.Objects.First(candidate => candidate.Name == "Front").GetComponent<PureEngine.Core.Button>()!.Interactable = false;
             Check((bool)Call(editor, "TryGamePressForTest", new Vector2(50, 40))!, "Execution press must start on the back button.");
             Check((bool)Call(editor, "TryGameReleaseForTest", new Vector2(50, 40))!, "Execution release must click.");
@@ -485,7 +485,7 @@ internal static class GameButtonChecks
         {
             EnsureHandlers(editor);
             var scene = EditScene(editor);
-            var owner = Field<ProjectComponents>(editor, "_components");
+            var owner = editor.ViewModel.Components;
             var services = Field<GameSession>(editor, "EditSession");
             var first = AddCard(editor, scene, "First", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true, true);
             owner.TryAttach(first, typeof(GameClickCounter), services.Factory);
@@ -502,7 +502,7 @@ internal static class GameButtonChecks
 
             RaiseGameKey(editor, Key.Tab, KeyModifiers.None, down: true);
             RaiseGameKey(editor, Key.Tab, KeyModifiers.None, down: false);
-            var playSession = Field<PlaySession?>(editor, "_play")!;
+            var playSession = editor.ViewModel.Play.Session!;
             var firstId = playSession.Runtime.Scene.Objects.First(candidate => candidate.Name == "First").Id;
             var secondId = playSession.Runtime.Scene.Objects.First(candidate => candidate.Name == "Second").Id;
             var offId = playSession.Runtime.Scene.Objects.First(candidate => candidate.Name == "Off").Id;
@@ -588,7 +588,7 @@ internal static class GameButtonChecks
             Call(editor, "StepPlayOnce", 0f);
             Check(counter.Calls == 4, "Keyboard activation must not duplicate an active pointer press.");
 
-            var runtimeItem = Field<PlaySession>(editor, "_play").Runtime.Scene.Objects.Single(candidate => candidate.Id == item.Id);
+            var runtimeItem = editor.ViewModel.Play.Session!.Runtime.Scene.Objects.Single(candidate => candidate.Id == item.Id);
             editor.MouseDown(point, MouseButton.Left);
             runtimeItem.GetComponent<PureEngine.Core.Button>()!.Interactable = false;
             Call(editor, "StepPlayOnce", 0f);
@@ -617,7 +617,7 @@ internal static class GameButtonChecks
 
             runtimeItem.GetComponent<Transform>()!.LocalPosition = new Vector3(10, 20, 0);
             editor.MouseDown(point, MouseButton.Left);
-            Field<PlaySession>(editor, "_play").Runtime.Scene.Remove(runtimeItem);
+            editor.ViewModel.Play.Session!.Runtime.Scene.Remove(runtimeItem);
             Call(editor, "StepPlayOnce", 0f);
             Check(Field<Guid?>(editor, "GamePressedForTest") is null
                 && Field<Guid?>(editor, "GameFocusedForTest") is null,
@@ -636,7 +636,7 @@ internal static class GameButtonChecks
         {
             EnsureHandlers(editor);
             var scene = EditScene(editor);
-            var owner = Field<ProjectComponents>(editor, "_components");
+            var owner = editor.ViewModel.Components;
             var services = Field<GameSession>(editor, "EditSession");
             var item = AddCard(editor, scene, "Click me", new Vector3(10, 20, 0), new Vector2(100, 40), 0, true, true);
             owner.TryAttach(item, typeof(GameClickCounter), services.Factory);

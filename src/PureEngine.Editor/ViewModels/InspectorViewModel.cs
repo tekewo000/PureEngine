@@ -83,6 +83,16 @@ public sealed class InspectorViewModel(EditorDocuments documents) : EditorObserv
 
     public bool IsInvalid(Guid fieldId) => _errors.ContainsKey(fieldId);
 
+    public void Clear()
+    {
+        _errors.Clear();
+        Select(null);
+        Changed(nameof(InvalidCount));
+        Changed(nameof(HasFieldErrors));
+        Changed(nameof(ErrorText));
+        Changed(nameof(ErrorHint));
+    }
+
     public static object? ReadMember(object owner, MemberInfo member) => member switch
     {
         FieldInfo field => field.GetValue(owner),

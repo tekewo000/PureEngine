@@ -26,7 +26,7 @@ static class UserCodeChecks
     private static EditSceneStore EditStore(MainWindow window) =>
         (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", Instance)!.GetValue(window)!;
     private static bool HasPendingReload(MainWindow window) =>
-        typeof(MainWindow).GetField("_pendingCompilation", Instance)!.GetValue(window) is not null;
+        window.ViewModel.Compilation.HasPending;
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -109,7 +109,7 @@ static class UserCodeChecks
         item.SetUpdatePriority(player, 5);
         var id = item.Id;
         var editor = new MainWindow(session);
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         Check(ReferenceEquals(owner, session.Components), "Editor must adopt the session owner.");
         Check(editor.FindControl<TextBlock>("CompileStatus")!.Text!.StartsWith("Compile: ", StringComparison.Ordinal)
             && editor.FindControl<TextBlock>("CompileStatus")!.Text != "Compile: —",
@@ -536,7 +536,7 @@ static class UserCodeChecks
     private static void CheckCreateCSharp(ProjectSession session)
     {
         var editor = new MainWindow(session);
-        var owner = Field<ProjectComponents>(editor, "_components");
+        var owner = editor.ViewModel.Components;
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         void Create(string menuName, string? name)

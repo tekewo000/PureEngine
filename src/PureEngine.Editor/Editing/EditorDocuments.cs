@@ -1,4 +1,6 @@
 using PureEngine.Core;
+using PureEngine.Runtime;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace PureEngine.Editor;
 
@@ -79,11 +81,65 @@ public sealed class EditorDocuments : IDisposable
         }
     }
 
+    public static PrefabCatalog BuildPrefabCatalog(ProjectFile? project)
+    {
+        if (project is null) return PrefabCatalog.Empty;
+        try
+        {
+            var catalog = PrefabCatalog.ScanFolder(project.RootDirectory, out var diagnostics);
+            foreach (var diagnostic in diagnostics) Log.Engine.Warning(diagnostic);
+            return catalog;
+        }
+        catch (Exception error)
+        {
+            Log.Engine.Error("Cannot scan prefabs.", error);
+            return PrefabCatalog.Empty;
+        }
+    }
+
     public void SaveScene(string path, string yaml, ProjectFile? project)
     {
         project?.ValidateScenePath(path);
         SceneFile.Write(path, yaml);
         Scene.MarkSaved(path);
+    }
+
+    public Scene ReadScene(string path, ProjectFile? project, ComponentRegistry registry, out bool changed)
+    {
+        project?.ValidateScenePath(path);
+        var serializer = new SceneSerializer(registry, BuildAssetStore(project, registry), BuildPrefabCatalog(project));
+        return serializer.Deserialize(File.ReadAllText(path), out changed, Current.Services.Factory);
+    }
+
+    public void ReplaceScene(Scene next, string? path)
+    {
+        var previous = Current.Replace(next, path, dirty: false);
+        if (!ReferenceEquals(previous, next)) ComponentAssets.DisposeComponents(previous.OwnedComponents);
+    }
+
+    public static (EditSceneStore Document, Guid Id) PreparePrefab(string path, ProjectFile project, ProjectComponents components)
+    {
+        project.ValidatePrefabPath(path);
+        var candidate = new EditSceneStore(new Scene());
+        try
+        {
+            var assets = BuildAssetStore(project, components.Registry);
+            candidate.ReplaceServices(GameSession.Create(services =>
+            {
+                GameServices.ForProject(components)(services);
+                if (assets is not null) services.AddSingleton(assets);
+            })).Dispose();
+            var restored = PrefabFile.OpenForEditing(path, components.Registry, out var id, out var changed,
+                assets, BuildPrefabCatalog(project), candidate.Services.Factory);
+            candidate.Replace(restored, Path.GetFullPath(path), changed);
+            return (candidate, id);
+        }
+        catch (Exception error)
+        {
+            try { DisposeScene(candidate); }
+            catch (Exception cleanup) { throw new AggregateException(error, cleanup); }
+            throw;
+        }
     }
 
     public void SavePrefab(ComponentRegistry registry, ProjectFile project)

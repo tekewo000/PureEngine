@@ -30,6 +30,8 @@ public partial class MainWindow
     /// <summary>Starts driving the Stuffs pane tree. Called once from the constructor.</summary>
     private void InitHierarchy()
     {
+        ViewModel.Hierarchy.BeforeMutation += CancelSceneViewDrag;
+        ViewModel.Hierarchy.SceneChanged += OnHierarchySceneChanged;
         _hierarchyExpandTimer.Tick += OnHierarchyExpandTick;
         RefreshHierarchy();
         SceneObjects.AddHandler(PointerPressedEvent, OnHierarchyPointerPressed, RoutingStrategies.Tunnel);
@@ -39,6 +41,12 @@ public partial class MainWindow
         SceneSurface.AddHandler(DragDrop.DragOverEvent, OnHierarchyDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         SceneSurface.AddHandler(DragDrop.DropEvent, OnHierarchyDrop, RoutingStrategies.Bubble, handledEventsToo: true);
         SceneSurface.AddHandler(DragDrop.DragLeaveEvent, OnHierarchyDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void OnHierarchySceneChanged()
+    {
+        SelectSceneObjects(ViewModel.Hierarchy.SelectedObjects(), focus: true);
+        UpdateSceneTitle();
     }
 
     /// <summary>For tests: reflects objects added directly to the scene in the tree. Preserves the selection.</summary>
@@ -166,8 +174,6 @@ public partial class MainWindow
         RefreshObjectInspector();
         if (focus) SceneObjects.Focus();
     }
-
-    private IEnumerable<SceneObject> EnumerateInDisplayOrder() => ViewModel.Hierarchy.EnumerateInDisplayOrder();
 
     private void OnHierarchyPointerPressed(object? sender, PointerPressedEventArgs e)
     {

@@ -16,7 +16,7 @@ public partial class MainWindow
 
     /// <summary>Builds an edit/play snapshot store for the project. Null without a project or on scan failure.</summary>
     private DataAssetStore? BuildProjectAssetStore(ComponentRegistry registry) =>
-        EditorDocuments.BuildAssetStore(_project, registry);
+        EditorDocuments.BuildAssetStore(Project, registry);
 
     private void MarkEdited(object? owner) => ViewModel.Inspector.MarkEdited(owner);
 
@@ -32,7 +32,7 @@ public partial class MainWindow
         if (Documents.Asset is null && HasInputErrors)
             throw new InvalidOperationException("Fix the scene Inspector input errors before opening a data asset.");
         // Validate the destination before closing the current editing document.
-        var candidate = DataAssetViewModel.PrepareOpen(path, _components.Registry, _project);
+        var candidate = DataAssetViewModel.PrepareOpen(path, Components.Registry, Project);
         if (!await ConfirmCloseDataAsset())
         {
             ReselectAssetFile();
@@ -85,19 +85,7 @@ public partial class MainWindow
         UpdateErrorBadge();
     }
 
-    private async void OnSaveDataAsset(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        await RunFileOperation(SaveDataAssetAsync);
-
-    /// <summary>Saves the open asset. Returns false when input errors or serialization fail, keeping the dirty state.</summary>
-    private Task<bool> SaveDataAssetAsync()
-    {
-        if (IsPlaying) return Task.FromResult(false);
-        if (Documents.Asset is null) return Task.FromResult(true);
-        var saved = ViewModel.DataAsset.Save(_components.Registry, _project);
-        if (saved) RefreshDataAssetInspector();
-        SetFileStatus(ViewModel.DataAsset.Status, !saved);
-        return Task.FromResult(saved);
-    }
+    private Task<bool> SaveDataAssetAsync() => Task.FromResult(ViewModel.SaveDataAsset());
 
     /// <summary>Closes the open asset after confirmation. Returns false when the user cancels and the asset must stay open.</summary>
     private Task<bool> ConfirmCloseDataAsset() => ConfirmDataAssetClose(closeOnConfirm: true);

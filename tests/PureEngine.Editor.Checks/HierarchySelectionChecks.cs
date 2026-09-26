@@ -67,7 +67,7 @@ internal static class HierarchySelectionChecks
             var source = scene.AddEmpty();
             source.Rename("DragSource");
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
-            var components = (ProjectComponents)typeof(MainWindow).GetField("_components", flags)!.GetValue(editor)!;
+            var components = (ProjectComponents)typeof(MainWindow).GetProperty("Components", flags)!.GetValue(editor)!;
             components.Registry.Register<ReferenceEditorChecks.TestRefHolder>("checks.drag-holder");
             var holder = new ReferenceEditorChecks.TestRefHolder();
             target.Attach(holder);

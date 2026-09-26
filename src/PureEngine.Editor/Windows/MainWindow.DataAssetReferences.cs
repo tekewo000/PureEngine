@@ -13,7 +13,7 @@ public partial class MainWindow
     private void RefreshReferenceAssets()
     {
         if (IsPlaying) return;
-        if (BuildProjectAssetStore(_components.Registry) is { } assets)
+        if (BuildProjectAssetStore(Components.Registry) is { } assets)
             Documents.Current.Current.DataAssets.Refresh(assets);
     }
 

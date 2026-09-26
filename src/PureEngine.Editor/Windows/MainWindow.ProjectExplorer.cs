@@ -36,9 +36,7 @@ public partial class MainWindow
 
     private void RefreshProjectExplorer()
     {
-        CloseProjectMenu.IsEnabled = _project is not null;
-        StartupSceneMenu.IsEnabled = _project is not null && !IsPlaying;
-        ToolTip.SetTip(ProjectTab, _project is null ? null : $"{_project.Document.Name} — Start: {_project.Document.StartupScene}");
+        ToolTip.SetTip(ProjectTab, Project is null ? null : $"{Project.Document.Name} — Start: {Project.Document.StartupScene}");
         _explorerRefreshing = true;
         try
         {
@@ -53,16 +51,16 @@ public partial class MainWindow
 
     private void BuildProjectTree()
     {
-        ViewModel.Project.RefreshDirectories(_project);
+        ViewModel.Project.RefreshDirectories(Project);
         ProjectTree.Items.Clear();
-        if (_project is null)
+        if (Project is null)
         {
             ViewModel.Project.ComponentsSelected = false;
             return;
         }
         var root = new TreeViewItem
         {
-            Header = _project.Document.Name,
+            Header = Project.Document.Name,
             Tag = "",
             IsExpanded = true
         };
@@ -94,7 +92,7 @@ public partial class MainWindow
     }
 
     private void RefreshProjectFiles() =>
-        ViewModel.Project.RefreshFiles(_project, _components, Documents.Scene.Path);
+        ViewModel.Project.RefreshFiles(Project, Components, Documents.Scene.Path);
 
     private static StringComparison PathComparison() => OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -154,12 +152,12 @@ public partial class MainWindow
 
     private void OnProjectTreeContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        var hasProject = _project is not null;
+        var hasProject = Project is not null;
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
         var canWrite = hasProject && !isComponents;
         TreeCreateFolderMenu.IsEnabled = canWrite;
         TreeCreateCSharpMenu.IsEnabled = canWrite && !IsPlaying;
-        TreeCreateSceneMenu.IsEnabled = canWrite && _project!.IsUnderScenes(folder);
+        TreeCreateSceneMenu.IsEnabled = canWrite && Project!.IsUnderScenes(folder);
         RefreshDataAssetMenu(TreeCreateDataAssetMenu, canWrite && !IsPlaying);
         var renamable = canWrite && folder != "" && folder != "Scenes";
         TreeRenameMenu.IsEnabled = renamable;
@@ -170,7 +168,7 @@ public partial class MainWindow
     {
         var entry = ProjectFiles.SelectedItem as ProjectExplorerEntry;
         ExplorerSelectionIsFolder(out var folder, out var isComponents);
-        var hasProject = _project is not null;
+        var hasProject = Project is not null;
         FilesOpenMenu.IsEnabled = entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.DataAsset }
             || entry is { Kind: ProjectExplorerKind.Prefab } && !IsPlaying
             || entry is { IsCSharpFile: true };
@@ -178,7 +176,7 @@ public partial class MainWindow
         FilesStartupMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Scene };
         FilesCreateFolderMenu.IsEnabled = hasProject && !isComponents;
         FilesCreateCSharpMenu.IsEnabled = hasProject && !isComponents && !IsPlaying;
-        FilesCreateSceneMenu.IsEnabled = hasProject && !isComponents && _project!.IsUnderScenes(folder);
+        FilesCreateSceneMenu.IsEnabled = hasProject && !isComponents && Project!.IsUnderScenes(folder);
         RefreshDataAssetMenu(FilesCreateDataAssetMenu, hasProject && !isComponents && !IsPlaying);
         FilesRenameMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset or ProjectExplorerKind.Prefab };
         FilesDeleteMenu.IsEnabled = hasProject && entry is { Kind: ProjectExplorerKind.Folder or ProjectExplorerKind.Scene or ProjectExplorerKind.File or ProjectExplorerKind.DataAsset or ProjectExplorerKind.Prefab };
@@ -190,6 +188,7 @@ public partial class MainWindow
     /// <summary>Opens a data asset in the Inspector on selection. Scene files still need a double-click to switch.</summary>
     private async void OnProjectFilesSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (ViewModel.Compilation.IsApplying) return;
         if (ProjectFiles.SelectedItem is not ProjectExplorerEntry entry) return;
         if (entry.Kind != ProjectExplorerKind.DataAsset || entry.FullPath is null) return;
         await OpenDataAssetForEdit(entry.FullPath);
@@ -233,7 +232,7 @@ public partial class MainWindow
             await OpenDataAssetForEdit(entry.FullPath);
             return;
         }
-        if (entry.Kind != ProjectExplorerKind.Scene || entry.FullPath is null || _project is null) return;
+        if (entry.Kind != ProjectExplorerKind.Scene || entry.FullPath is null || Project is null) return;
         await RunFileOperation(async () =>
         {
             try { await OpenScenePathAsync(entry.FullPath); }
@@ -244,7 +243,7 @@ public partial class MainWindow
     /// <summary>Opens a C# file in Zed from the project root without blocking scene switching or Play.</summary>
     private void OpenCSharpInZed(string fullPath)
     {
-        if (ExternalEditor.TryOpenCSharpInZed(fullPath, _project?.RootDirectory, out var error))
+        if (ExternalEditor.TryOpenCSharpInZed(fullPath, Project?.RootDirectory, out var error))
         {
             SetFileStatus($"Opened in Zed: {Path.GetFileName(fullPath)}");
             return;
@@ -271,16 +270,16 @@ public partial class MainWindow
     /// <summary>Creates an empty scene in the selected folder under Scenes. Leaves the scene being edited untouched.</summary>
     private async void OnExplorerCreateScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
-        if (_project is null) return;
+        if (Project is null) return;
         var folder = ExplorerTargetFolder("Scenes");
-        if (!_project.IsUnderScenes(folder))
+        if (!Project.IsUnderScenes(folder))
         {
             SetFileStatus("Create scenes inside the Scenes folder.", true);
             return;
         }
-        var name = _project.NextSceneName(folder);
-        var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
-        SceneFile.Write(path, _sceneSerializer.Serialize(new Scene()));
+        var name = Project.NextSceneName(folder);
+        var path = Path.Combine(Project.ResolveDirectoryPath(folder), name);
+        SceneFile.Write(path, SceneSerializer.Serialize(new Scene()));
         ViewModel.Project.Folder = folder;
         ViewModel.Project.SelectedFile = path;
         SelectExplorerNode(folder);
@@ -290,12 +289,12 @@ public partial class MainWindow
 
     private async void OnExplorerCreateFolder(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
-        if (_project is null) return;
+        if (Project is null) return;
         var folder = ExplorerTargetFolder("");
         var name = await AskExplorerName("Create Folder", "New folder name", "New Folder");
         if (name is null) return;
         ValidateExplorerFolderName(name);
-        var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
+        var path = Path.Combine(Project.ResolveDirectoryPath(folder), name);
         if (Directory.Exists(path) || File.Exists(path)) throw new IOException("A folder or file with the same name already exists.");
         Directory.CreateDirectory(path);
         var relative = string.IsNullOrEmpty(folder) ? name : $"{folder}/{name}";
@@ -307,7 +306,7 @@ public partial class MainWindow
 
     private async void OnExplorerCreateCSharp(object? sender, RoutedEventArgs e) => await RunFileOperation(async () =>
     {
-        if (_project is null) return;
+        if (Project is null) return;
         var folder = ExplorerTargetFolder("");
         if (ReferenceEquals(sender, TreeCreateCSharpMenu))
             ExplorerSelectionIsFolder(out folder, out _);
@@ -318,7 +317,7 @@ public partial class MainWindow
             || SyntaxFacts.GetKeywordKind(className) != SyntaxKind.None
             || className.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             throw new ArgumentException("Enter a valid C# class name (no spaces, symbols, or reserved words).");
-        var path = Path.Combine(_project.ResolveDirectoryPath(folder), className + ".cs");
+        var path = Path.Combine(Project.ResolveDirectoryPath(folder), className + ".cs");
         if (File.Exists(path) || Directory.Exists(path))
             throw new IOException("A folder or file with the same name already exists.");
         using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -336,7 +335,7 @@ public partial class MainWindow
         menu.IsEnabled = enabled;
         menu.Items.Clear();
         if (!enabled) return;
-        var descriptors = DataAssetDescriptor.DescribeAll(_components.Registry, out var diagnostics, _components.DataAssetTypes);
+        var descriptors = DataAssetDescriptor.DescribeAll(Components.Registry, out var diagnostics, Components.DataAssetTypes);
         foreach (var problem in diagnostics)
             menu.Items.Add(new MenuItem { Header = $"Invalid: {problem}", IsEnabled = false });
         if (descriptors.Count == 0)
@@ -377,21 +376,21 @@ public partial class MainWindow
         if (sender is not MenuItem { Tag: ValueTuple<string, bool> selection }) return;
         await RunFileOperation(async () =>
         {
-            if (_project is null || RejectWhenPlaying("Create Data Asset")) return;
-            var type = _components.Registry.GetType(selection.Item1);
-            if (!DataAssetDescriptor.TryCreate(type, _components.Registry, out var descriptor, out var error) || descriptor is null)
+            if (Project is null || RejectWhenPlaying("Create Data Asset")) return;
+            var type = Components.Registry.GetType(selection.Item1);
+            if (!DataAssetDescriptor.TryCreate(type, Components.Registry, out var descriptor, out var error) || descriptor is null)
             {
                 SetFileStatus(error ?? $"{type.FullName}: invalid data asset type.", true);
                 return;
             }
             var folder = ExplorerTargetFolder("");
             if (selection.Item2) ExplorerSelectionIsFolder(out folder, out _);
-            var name = _project.NextDataAssetName(folder, descriptor.DisplayName);
-            var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
-            _project.ValidateDataAssetPath(path);
+            var name = Project.NextDataAssetName(folder, descriptor.DisplayName);
+            var path = Path.Combine(Project.ResolveDirectoryPath(folder), name);
+            Project.ValidateDataAssetPath(path);
             if (File.Exists(path) || Directory.Exists(path))
                 throw new IOException("A folder or file with the same name already exists.");
-            DataAssetFile.Create(path, type, _components.Registry);
+            DataAssetFile.Create(path, type, Components.Registry);
             ViewModel.Project.Folder = folder;
             ViewModel.Project.SelectedFile = path;
             RefreshProjectExplorer();
@@ -409,7 +408,7 @@ public partial class MainWindow
         RefreshProjectExplorer();
         RefreshComponents();
         if (await ConfirmTableRowsClose(closeOnConfirm: false)) RescanTableRows();
-        SetFileStatus(_project is null ? "No project is open." : $"Refreshed: {_project.Document.Name}");
+        SetFileStatus(Project is null ? "No project is open." : $"Refreshed: {Project.Document.Name}");
         await Task.CompletedTask;
     });
 
@@ -424,7 +423,7 @@ public partial class MainWindow
     private async Task RenameSelectedExplorerEntry() =>
         await RunFileOperation(async () =>
         {
-            if (_project is null) return;
+            if (Project is null) return;
             string? oldFull = null, newFull = null;
             var isTreeFolder = false;
             if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
@@ -434,7 +433,7 @@ public partial class MainWindow
             }
             else if (ExplorerSelectionIsFolder(out var folder, out var isComponents) && !isComponents && folder != "")
             {
-                oldFull = _project.ResolveDirectoryPath(folder);
+                oldFull = Project.ResolveDirectoryPath(folder);
                 isTreeFolder = true;
             }
             else return;
@@ -442,7 +441,7 @@ public partial class MainWindow
             var oldName = Path.GetFileName(oldFull!);
             var isScene = oldFull!.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
             var isDirectory = Directory.Exists(oldFull);
-            var oldRelative = Path.GetRelativePath(_project.RootDirectory, oldFull).Replace('\\', '/');
+            var oldRelative = Path.GetRelativePath(Project.RootDirectory, oldFull).Replace('\\', '/');
             if (!isScene && isDirectory && IsStructuralFolder(oldRelative))
             {
                 SetFileStatus("Cannot rename the Scenes folder itself.", true);
@@ -462,9 +461,9 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                 throw new ArgumentException("Specify a valid name.");
             newFull = Path.Combine(Path.GetDirectoryName(oldFull!)!, name);
-            if (isScene) _project.ValidateScenePath(newFull);
-            else if (isDirectory) _project.ValidateFolderPath(newFull);
-            else _project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
+            if (isScene) Project.ValidateScenePath(newFull);
+            else if (isDirectory) Project.ValidateFolderPath(newFull);
+            else Project.ValidateFolderPath(Path.GetDirectoryName(newFull)!);
             if (File.Exists(newFull) || Directory.Exists(newFull)) throw new IOException("A folder or file with the same name already exists.");
             if (ContainsOpenDataAsset(oldFull!) && !await ConfirmCloseDataAsset()) return;
             if (ContainsOpenTable(oldFull!) && !await ConfirmCloseTableRows()) return;
@@ -474,7 +473,7 @@ public partial class MainWindow
             RemapSceneReferences(oldFull!, newFull, isDirectory);
             if (isTreeFolder || isDirectory)
             {
-                ViewModel.Project.Folder = Path.GetRelativePath(_project.RootDirectory, newFull).Replace('\\', '/');
+                ViewModel.Project.Folder = Path.GetRelativePath(Project.RootDirectory, newFull).Replace('\\', '/');
                 ViewModel.Project.SelectedFile = null;
             }
             else
@@ -489,7 +488,7 @@ public partial class MainWindow
     private async Task DeleteSelectedExplorerEntry() =>
         await RunFileOperation(async () =>
         {
-            if (_project is null) return;
+            if (Project is null) return;
             string? target = null;
             var isDirectory = false;
             if (ProjectFiles.SelectedItem is ProjectExplorerEntry entry
@@ -500,15 +499,15 @@ public partial class MainWindow
             }
             else if (ExplorerSelectionIsFolder(out var folder, out var isComponents) && !isComponents && folder != "")
             {
-                target = _project.ResolveDirectoryPath(folder);
+                target = Project.ResolveDirectoryPath(folder);
                 isDirectory = true;
             }
             else return;
 
             if (ContainsOpenDataAsset(target) && !await ConfirmCloseDataAsset()) return;
             if (ContainsOpenTable(target) && !await ConfirmCloseTableRows()) return;
-            var startup = _project.StartupScenePath;
-            var targetRelative = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
+            var startup = Project.StartupScenePath;
+            var targetRelative = Path.GetRelativePath(Project.RootDirectory, target).Replace('\\', '/');
             if (IsStructuralFolder(targetRelative))
             {
                 SetFileStatus("Cannot delete the Scenes folder itself.", true);
@@ -529,7 +528,7 @@ public partial class MainWindow
                 SetFileStatus("Cannot delete because it contains the open scene. Open another scene first.", true);
                 return;
             }
-            var display = Path.GetRelativePath(_project.RootDirectory, target).Replace('\\', '/');
+            var display = Path.GetRelativePath(Project.RootDirectory, target).Replace('\\', '/');
             if (!await ConfirmExplorerDelete(display, isDirectory)) return;
             if (ContainsOpenPrefab(target, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Delete(target, recursive: true);
@@ -556,7 +555,7 @@ public partial class MainWindow
     /// <summary>Repoints the edited-scene and startup-scene references after a move or rename. Rejects moves that take the startup scene outside Scenes.</summary>
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)
     {
-        if (_project is null) return;
+        if (Project is null) return;
         var editPath = Documents.Scene.Path;
         if (editPath is not null && (string.Equals(editPath, oldFull, PathComparison())
             || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison()))))
@@ -566,14 +565,14 @@ public partial class MainWindow
                 : newFull);
             UpdateSceneTitle();
         }
-        var startup = _project.StartupScenePath;
+        var startup = Project.StartupScenePath;
         if (string.Equals(startup, oldFull, PathComparison())
             || (isDirectory && (startup + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison())))
         {
             var remapped = isDirectory
                 ? Path.Combine(newFull, Path.GetRelativePath(oldFull, startup))
                 : newFull;
-            _project.SetStartupScene(remapped);
+            Project.SetStartupScene(remapped);
         }
     }
 
@@ -635,11 +634,11 @@ public partial class MainWindow
 
     private Task<IStorageFolder?> ExplorerSaveDirectory()
     {
-        if (_project is null) return Task.FromResult<IStorageFolder?>(null);
+        if (Project is null) return Task.FromResult<IStorageFolder?>(null);
         var folder = ViewModel.Project.ComponentsSelected ? "Scenes" : ViewModel.Project.Folder;
-        if (!_project.IsUnderScenes(folder)) folder = "Scenes";
-        var directory = _project.ResolveDirectoryPath(folder);
-        if (!Directory.Exists(directory)) directory = _project.ScenesDirectory;
+        if (!Project.IsUnderScenes(folder)) folder = "Scenes";
+        var directory = Project.ResolveDirectoryPath(folder);
+        if (!Directory.Exists(directory)) directory = Project.ScenesDirectory;
         return StorageProvider.TryGetFolderFromPathAsync(directory);
     }
 }

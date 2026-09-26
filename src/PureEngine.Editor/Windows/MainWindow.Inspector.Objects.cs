@@ -63,7 +63,7 @@ public partial class MainWindow
     /// </summary>
     private Control BuildObjectBox(Func<object?> getter, Action<object?> setter, Type objectType, string automationName, Guid? ownerId = null, string? baseStorePath = null)
     {
-        if (!InspectorValueTypes.IsSupportedType(objectType) && !SceneReferenceTypes.IsSupportedInspectorType(objectType, _components.Registry))
+        if (!InspectorValueTypes.IsSupportedType(objectType) && !SceneReferenceTypes.IsSupportedInspectorType(objectType, Components.Registry))
             return UnsupportedBadge(objectType);
         var root = new StackPanel { Spacing = 6 };
         var fields = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };

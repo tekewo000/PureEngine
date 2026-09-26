@@ -12,13 +12,13 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow
 {
-    private readonly SceneSerializer _sceneSerializer;
+    private SceneSerializer SceneSerializer => ViewModel.SceneSerializer;
     private static readonly FilePickerFileType SceneFileType = new("PureEngine scene")
         { Patterns = ["*.pure.scene.yaml", "*.yaml", "*.yml"] };
-    private bool _fileBusy;
     private bool _allowClose;
+    private bool _sessionClosed;
 
-    internal bool IsFileBusy => _fileBusy;
+    internal bool IsFileBusy => ViewModel.FileBusy;
 
     private void MarkSceneChanged()
     {
@@ -27,36 +27,24 @@ public partial class MainWindow
         UpdatePrefabEditorChrome();
     }
 
-    private void UpdateSceneTitle()
-    {
-        Title = $"{(Documents.Current.IsDirty ? "* " : "")}{Path.GetFileName(Documents.Current.Path) ?? "Untitled"} — {(_project is null ? "" : _project.Document.Name + " — ")}PureEngine Editor";
-        SceneViewTab.Header = Documents.Current.IsDirty ? "Scene View *" : "Scene View";
-    }
+    private void UpdateSceneTitle() => ViewModel.RefreshDocumentState();
 
-    private void SetFileStatus(string message, bool error = false)
-    {
-        FileStatus.Text = message;
-        FileStatus.Foreground = new SolidColorBrush(Color.Parse(error ? "#FF9E99" : "#B8BDC5"));
-        ToolTip.SetTip(FileStatus, message);
-    }
+    private void SetFileStatus(string message, bool error = false) => ViewModel.SetStatus(message, error);
 
     private async void OnOpenScene(object? sender, RoutedEventArgs e) => await RunFileOperation(OpenSceneAsync);
     private async void OnSaveScene(object? sender, RoutedEventArgs e) => await RunFileOperation(async () => await SaveSceneAsync(false));
     private async void OnSaveSceneAs(object? sender, RoutedEventArgs e) => await RunFileOperation(async () => await SaveSceneAsync(true));
 
-    private async Task RunFileOperation(Func<Task> operation)
+    private Task RunFileOperation(Func<Task> operation) => ViewModel.RunFileOperation(operation);
+
+    private void OnDocumentSaved(EditedDocumentKind kind)
     {
-        var blockReason = EditorOperationGate.FileOperationBlockReason(IsPlaying, _fileBusy);
-        if (blockReason is not null)
+        if (kind == EditedDocumentKind.DataAsset) RefreshDataAssetInspector();
+        else
         {
-            if (IsPlaying) SetFileStatus(blockReason, true);
-            return;
+            if (kind == EditedDocumentKind.Table) UpdateDataAssetTableChrome();
+            RefreshProjectExplorer();
         }
-        _fileBusy = true;
-        EditorSurface.IsEnabled = false;
-        try { await operation(); }
-        catch (Exception error) { SetFileStatus($"Operation failed: {error.GetBaseException().Message}", true); }
-        finally { EditorSurface.IsEnabled = true; _fileBusy = false; FlushPendingUserCodeReload(); }
     }
 
     private async Task<bool> SaveSceneAsync(bool saveAs)
@@ -69,22 +57,16 @@ public partial class MainWindow
 
     private async Task<bool> SaveMainSceneAsync(bool saveAs)
     {
-        CancelSceneViewDrag();
-        var saveBlock = EditorOperationGate.SaveBlockReason(!IsPrefabEditing && Documents.Asset is null && HasInputErrors);
-        if (saveBlock is not null)
-        {
-            SetFileStatus($"Cannot save. {saveBlock}", true);
-            return false;
-        }
-        // Validation happens before picking or touching a destination file.
-        var yaml = _sceneSerializer.Serialize(Documents.Scene.Current);
+        // Validate before opening a destination picker or touching a file.
+        var yaml = ViewModel.PrepareSceneSave();
+        if (yaml is null) return false;
         var path = Documents.Scene.Path;
         if (saveAs || path is null)
         {
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Save Scene",
-                SuggestedFileName = Path.GetFileName(path) ?? _project?.NextSceneName() ?? "Main.pure.scene.yaml",
+                SuggestedFileName = Path.GetFileName(path) ?? Project?.NextSceneName() ?? "Main.pure.scene.yaml",
                 DefaultExtension = "pure.scene.yaml",
                 FileTypeChoices = [SceneFileType],
                 ShowOverwritePrompt = true,
@@ -93,11 +75,7 @@ public partial class MainWindow
             if (file is null) return false;
             path = file.TryGetLocalPath() ?? throw new IOException("Select a local save destination.");
         }
-        Documents.SaveScene(path, yaml, _project);
-        ViewModel.Project.SelectedFile = path;
-        UpdateSceneTitle();
-        RefreshProjectExplorer();
-        SetFileStatus($"Saved: {path}");
+        ViewModel.SaveScene(path, yaml);
         return true;
     }
 
@@ -128,16 +106,12 @@ public partial class MainWindow
             return;
         }
         ActivateEditorViewport(0);
-        _project?.ValidateScenePath(path);
-        // Completely restore into a separate scene before replacing any editor data.
-        // Use the editing factory for constructor injection with a service set separate from Play.
-        var serializer = new SceneSerializer(_components.Registry, BuildProjectAssetStore(_components.Registry), BuildPrefabCatalog());
-        var restored = serializer.Deserialize(File.ReadAllText(path), EditSession.Factory);
+        var restored = Documents.ReadScene(path, Project, Components.Registry, out _);
         // This first scene only validates the file; it is never adopted by the editor.
         ComponentAssets.DisposeComponents(restored.OwnedComponents);
         if (!await ConfirmUnsavedChanges()) return;
         // Saving the old scene during confirmation may overwrite the file just selected.
-        restored = serializer.Deserialize(File.ReadAllText(path), out var membersChanged, EditSession.Factory);
+        restored = Documents.ReadScene(path, Project, Components.Registry, out var membersChanged);
         SetCurrentScene(restored, path);
         if (membersChanged) MarkSceneChanged();
         SetFileStatus($"Loaded: {path}");
@@ -151,57 +125,82 @@ public partial class MainWindow
             SetFileStatus("Cannot switch scenes while playing. Stop first.", true);
             return;
         }
-        var previous = Documents.Current.Replace(restored, path, dirty: false);
-        RefreshHierarchy();
-        SelectSceneObject(Documents.Current.Current.RootObjects.Count > 0 ? Documents.Current.Current.RootObjects[0] : null, focus: false);
-        // Selection may already have been empty; explicitly reset the Inspector as well.
-        RefreshObjectInspector();
-        UpdateSceneTitle();
-        SyncExplorerToScene(path);
-        RefreshProjectExplorer();
-        if (!ReferenceEquals(previous, restored))
-            ComponentAssets.DisposeComponents(previous.OwnedComponents);
+        try { Documents.ReplaceScene(restored, path); }
+        finally
+        {
+            RefreshHierarchy();
+            SelectSceneObject(Documents.Current.Current.RootObjects.Count > 0 ? Documents.Current.Current.RootObjects[0] : null, focus: false);
+            RefreshObjectInspector();
+            UpdateSceneTitle();
+            SyncExplorerToScene(path);
+            RefreshProjectExplorer();
+        }
     }
 
     private void CloseEditSession()
     {
+        if (_sessionClosed) return;
+        _sessionClosed = true;
         ClearHierarchyDropIndicator();
         CancelSceneViewDrag();
-        // When switching or closing projects, stop watching that project.
-        // Shutdown order: dispose edit-scene components, then edit services, then request code release. Leaves other projects untouched.
         StopUserCodeWatching();
-        _playTimer?.Stop();
-        Documents.Asset = null;
-        Documents.AssetOwned.Clear();
+        StopPlayUpdates();
+        DisconnectViewModel();
+        _hierarchyRefreshing = true;
+        _tableTypeChanging = true;
+        DataContext = null;
+        SceneSurface.ContextMenu!.DataContext = null;
+        _inputIds.Clear();
+        ComponentEditors.Children.Clear();
         DataAssetEditors.Children.Clear();
-        ClearTableRowViews();
-        var errors = new List<Exception>();
-        try { ForceStopPlayForShutdown(); }
-        catch (Exception error) { errors.Add(error); }
-        try { ClosePrefabEditor(); }
-        catch (Exception error) { errors.Add(error); }
-        try { Documents.Dispose(); }
-        catch (Exception error) { errors.Add(error); }
-        try { _components.Dispose(); }
-        catch (Exception error) { errors.Add(error); }
+        DataAssetTableRows.Children.Clear();
+        _tableViews.Clear();
         _dragTypes = null;
         _assetPress = null;
         _pressedPrefab = null;
-        if (errors.Count != 0) throw new AggregateException("Editor cleanup failed.", errors);
+        ViewModel.Dispose();
+    }
+
+    private void DisconnectViewModel()
+    {
+        _playTimer?.Tick -= OnPlayTick;
+        if (_consoleTimer is not null)
+        {
+            _consoleTimer.Tick -= OnConsoleTick;
+            _consoleTimer.Stop();
+            _consoleTimer = null;
+        }
+        ViewModel.Hierarchy.BeforeMutation -= CancelSceneViewDrag;
+        ViewModel.Hierarchy.SceneChanged -= OnHierarchySceneChanged;
+        ViewModel.BeforeSceneSave -= CancelSceneViewDrag;
+        ViewModel.DocumentSaved -= OnDocumentSaved;
+        ViewModel.Console.PropertyChanged -= OnConsoleModelChanged;
+        ViewModel.Inspector.DocumentEdited -= RefreshEditedDocument;
+        ViewModel.Inspector.PropertyChanged -= OnInspectorModelChanged;
+        ViewModel.Play.BeforeStart -= CancelSceneViewDrag;
+        ViewModel.Play.Started -= OnPlayStarted;
+        ViewModel.Play.Stopping -= StopPlayUpdates;
+        ViewModel.Play.InputReset -= ResetGameInput;
+        ViewModel.Play.ReturnToScene -= OnPlayReturnedToScene;
+        ViewModel.Play.FrameCompleted -= ValidateGameInput;
+        ViewModel.Play.PropertyChanged -= OnPlayModelChanged;
+        ViewModel.Compilation.BeforeApply -= CancelSceneViewDrag;
+        ViewModel.Compilation.Adopted -= OnUserCodeAdopted;
+        ViewModel.Compilation.AttemptCompleted -= OnUserCodeAttemptCompleted;
     }
 
     /// <summary>Reselects the opened scene folder in the Explorer and selects that file in the right pane.</summary>
     private void SyncExplorerToScene(string? path)
     {
         ViewModel.Project.SelectedFile = path;
-        if (_project is null || path is null)
+        if (Project is null || path is null)
         {
-            ViewModel.Project.ComponentsSelected = _project is null;
+            ViewModel.Project.ComponentsSelected = Project is null;
             return;
         }
         try
         {
-            var relative = _project.GetSceneRelativePath(path);
+            var relative = Project.GetSceneRelativePath(path);
             ViewModel.Project.Folder = relative.Contains('/') ? relative[..relative.LastIndexOf('/')] : "";
             ViewModel.Project.ComponentsSelected = false;
         }
@@ -240,8 +239,8 @@ public partial class MainWindow
     {
         CancelSceneViewDrag();
         if (_allowClose) return;
-        if (_fileBusy) { e.Cancel = true; return; }
-        if (_play is not null)
+        if (ViewModel.FileBusy) { e.Cancel = true; return; }
+        if (IsPlaying)
         {
             // While running, always stop and release before the unsaved-changes check. Keeps the edit scene as it was before the run.
             if (!StopPlay())

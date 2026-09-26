@@ -13,6 +13,17 @@ public sealed class ProjectPaneViewModel : EditorObservable
     public IReadOnlyList<string> Directories { get; private set; } = [];
     public string FileCountText => Files.Count == 0 ? "Empty folder" : $"{Files.Count} item(s)";
 
+    public void Clear()
+    {
+        Files = [];
+        Directories = [];
+        SelectedEntry = null;
+        SelectedFile = null;
+        Changed(nameof(Files));
+        Changed(nameof(Directories));
+        Changed(nameof(FileCountText));
+    }
+
     public void RefreshDirectories(ProjectFile? project)
     {
         Directories = project?.ListDirectories() ?? [];

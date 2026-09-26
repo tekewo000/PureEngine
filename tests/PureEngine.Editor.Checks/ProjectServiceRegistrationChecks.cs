@@ -251,6 +251,8 @@ static class ProjectServiceRegistrationChecks
         var editor = new MainWindow(opened);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
+        // This check owns explicit compile requests; UserCodeChecks covers real watcher delivery.
+        Field<UserCodeWatcher>(editor, "_userCodeWatcher").Dispose();
         try
         {
             var scene = Field<EditSceneStore>(editor, "EditSceneStore").Current;
@@ -279,7 +281,7 @@ static class ProjectServiceRegistrationChecks
 
             var current = Field<EditSceneStore>(editor, "EditSceneStore").Current.Objects.Single(o => o.Id == objectId);
             dynamic renewed = current.Components.Single();
-            Check(!ReferenceEquals((object)renewed, oldBoard), "Reload must create new instances.");
+            Check(!ReferenceEquals((object)renewed, oldBoard), $"Reload must create new instances. Status: {editor.ViewModel.Status}; compile: {editor.ViewModel.Compilation.StatusText}; task: {editor.ViewModel.Compilation.ReloadTask.Status}; pending: {editor.ViewModel.Compilation.HasPending}; errors: {editor.ViewModel.Inspector.InvalidCount}/{editor.ViewModel.Inspector.HasNameError}.");
             Check((int)renewed.Score == 55, "Reload must preserve unsaved Inspector values.");
             Check(current.GetStartPriority((object)renewed) == -4, "Reload must preserve Priority.");
             Check(editor.Title!.StartsWith("* "), "Reload must preserve dirty state.");
@@ -321,6 +323,8 @@ static class ProjectServiceRegistrationChecks
         var editor = new MainWindow(opened);
         editor.Show();
         Dispatcher.UIThread.RunJobs();
+        // This check owns explicit compile requests; UserCodeChecks covers real watcher delivery.
+        Field<UserCodeWatcher>(editor, "_userCodeWatcher").Dispose();
         try
         {
             var scene = Field<EditSceneStore>(editor, "EditSceneStore").Current;

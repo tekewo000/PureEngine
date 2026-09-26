@@ -1,6 +1,6 @@
 # Editor MVVM移行
 
-専用ブランチで、既存の編集・保存・Play・再読み込みの動作を維持しながら順に移行する。
+専用ブランチで、既存の編集・保存・Play・再読み込みの動作を維持しながら、文書管理→各ペイン→MainWindowの接続整理の順に移行した。
 
 ## 順序と完了条件
 
@@ -12,16 +12,16 @@ Core・Runtime・Renderingの責務、namespace、保存形式は維持する。
 
 ## 進捗
 
-- 文書管理：所有・保存・コード移行の基盤分離を実装し、ローカル品質チェックを通過。ペインの操作コマンドは次段階で接続する。
+- 文書管理：所有・保存・コード移行の基盤分離を実装し、ローカル品質チェックを通過。
 - 各ペイン：Console・Project・Hierarchy・Inspector・単体DataAsset・DataAsset表のViewModelとバインディングを実装し、ローカル品質チェックを通過。
-- MainWindowの接続整理：作業中。
-- ローカル品質チェック：文書管理と各ペインの変更で通過。CI・mainへの反映：未実施。
+- MainWindowの接続整理：実装し、ローカル品質チェックを通過。
+- ローカル品質チェック：全段階で通過。CIとmainへの反映の証跡は対応するPR／Actionsで管理する。
 
 検証結果は段階ごとに追記し、実画面の確認とHeadlessの検証を区別する。
 
 ### 文書管理の検証（2026-09-26）
 
-`EditorDocuments` がScene・Prefab・単体DataAsset・表編集を所有する。表のControlと行高はViewに残し、データの保存・候補移行と分離した。`UserCodeReloadCoordinator` は単体DataAssetと表の候補を先に準備し、Sceneの移行成功時だけ一緒に採用する。終了確認途中では単体DataAssetを破棄せず、すべての確認が済むまで保持する。
+`EditorDocuments` がScene・Prefab・単体DataAsset・表編集を所有する。この段階では表のControlと行高はViewに残し、データの保存・候補移行と分離した。`UserCodeReloadCoordinator` は単体DataAssetと表の候補を先に準備し、Sceneの移行成功時だけ一緒に採用する。終了確認途中では単体DataAssetを破棄せず、すべての確認が済むまで保持する。
 
 `EditorDocumentChecks` をWindow生成前に実行し、文書切替、入れ子の所有判定、部分的な書込失敗後のdirty保持と再試行、事前シリアライズ失敗、候補移行、解放失敗時のサービス解放と二重解放防止を確認した。既存チェックのprivate field参照を既存／新規の読み取り専用プロパティへ更新し、検査する動作は維持した。
 
@@ -34,3 +34,24 @@ Core・Runtime・Renderingの責務、namespace、保存形式は維持する。
 `EditorPaneChecks`でWindowなしの通知・コマンド・選択保持・名前／数値の拒否・Play時の編集禁止・Project一覧を検証した。Console、Hierarchy、Scene View、表、単体DataAsset、PrefabのHeadlessチェックも実行し、最後に`./tools/code-quality.ps1 -Check`全体が通過した。
 
 移行中に検出したDataAsset Inspectorの表示切替回帰は、文書を開いている状態と選択中の編集対象を分けて修正した。旧privateフィールドを参照していた既存チェックはViewModel経由へ更新し、動作の検査は保持した。別途、C#自動反映の待機タイムアウトとWindowsのファイル置換エラーが各一度発生したが、後続の個別・全体チェックでは再現しなかった。待ち時間・判定条件・保存処理を緩めず、反映失敗時の診断情報を追加した。実画面・CIは未確認。
+
+### MainWindow接続整理の検証（2026-09-26）
+
+`EditorViewModel` がProjectSessionからProjectComponents・編集文書・増分コンパイル状態を受け取る。`PlayViewModel` が実行Sessionとエラーを所有し、`CompilationViewModel` が要求世代・候補・採用を管理する。採用後はViewの購読がなくても各ペインの参照を更新する。保存コマンド、ファイル操作の競合状態、タイトルと操作可否はモデルに集約した。Hierarchyの追加・複製・削除もモデルへ移し、Scene／Prefabの読み込み・準備・旧Component解放は文書管理が扱う。
+
+MainWindowはネイティブ入力、動的Control生成、ダイアログ、描画ホストとモデルの接続を担当する。コンテキストメニューにも初回表示前からDataContextを渡す。Gameタブ切替後にタイマーを開始する順序を維持し、終了時は購読とタイマーを解除してからモデルの所有資源を解放する。終了エラーがあっても実行・文書・サービス・コードの後片付けを続行し、保持されたモデルから古いユーザー型への参照を外す。
+
+`EditorShellChecks`はWindowなしでPlayコマンド、編集データとの分離、操作可否、実際のC#再コンパイルによるペイン更新、互換性のない変更の拒否、終了を検証する。既存のPlay／Console／Hierarchy／Inspector／DataAsset／Prefab／再読み込みチェックも通過した。サービス登録の検証は明示的な要求を制御するためWatcherを停止し、自動配達と世代競合はUserCodeChecks・背景コンパイル・統合チェックで引き続き検証する。検査する条件は維持した。
+
+最終の `./tools/code-quality.ps1 -Check` は提案診断、警告をエラー扱いにしたビルド、Core／Editor Checksを含め通過。実画面・実GPUの追加検証は行っていない。
+
+## 保守時の責務
+
+| 場所 | 責務 |
+| --- | --- |
+| `Editing/` | 文書所有、保存、移行、データの後片付け |
+| `ViewModels/` | 選択・表示・入力エラー・操作可否、Play・コンパイルの状態とコマンド |
+| `Windows/` | Control生成、ポインター・フォーカス・スクロール、ダイアログ、描画ホスト、購読の接続と解除 |
+| `Core`／`Runtime`／`Rendering` | 既存の保存形式、実行、描画の責務を維持 |
+
+新しい編集状態や処理を追加するときは、まずWindowなしで必要な動作を検証する。Control固有の入力と表示については既存のHeadless経路で接続も確認する。

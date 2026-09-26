@@ -20,10 +20,8 @@ public partial class MainWindow : Window
     private EditorDocuments Documents => ViewModel.Documents;
     internal EditSceneStore SceneDocument => Documents.Scene;
     internal EditSceneStore? PrefabDocument => Documents.Prefab;
-    /// <summary>Owner of code-reload preparation, adoption, cleanup, and pending state. Verifiable without a UI.</summary>
-    private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
     /// <summary>Type owner for this window (project). Serializer, attach, Play, and reload all use it explicitly.</summary>
-    internal ProjectComponents _components;
+    internal ProjectComponents Components => ViewModel.Components;
     private static readonly DataFormat<Type> ComponentFormat =
         DataFormat.CreateInProcessFormat<Type>("PureEngine.ComponentType");
     private static readonly DataFormat<IReadOnlyList<Type>> ComponentTypesFormat =
@@ -39,24 +37,15 @@ public partial class MainWindow : Window
 
     internal EditSceneStore EditSceneStore => Documents.Current;
 
-    internal UserCodeReloadCoordinator ReloadCoordinator => _reloadCoordinator;
+    internal UserCodeReloadCoordinator ReloadCoordinator => ViewModel.Compilation.Coordinator;
 
     internal GameSession EditSession => Documents.Current.Services;
 
     public MainWindow(ProjectSession session) : this()
     {
-        ArgumentNullException.ThrowIfNull(session);
-        Documents.Current.ReplaceServices(session.EditServices).Dispose();
-        // Transfers Session ownership (Components and Scene) to this window. The transferred Session is not disposed.
-        var placeholder = _components;
-        _components = session.Components;
-        session.TransferOwnership();
-        var userCodeCache = session.TakeUserCodeCache();
-        try { placeholder.Dispose(); } catch { }
         try
         {
-            _sceneSerializer = new SceneSerializer(_components.Registry);
-            _project = session.Project;
+            ViewModel.AdoptProject(session);
             // Adopt the scene before asset I/O so constructor failure cleanup owns its components.
             SetCurrentScene(session.Scene, session.Project.StartupScenePath);
             RefreshProjectAssets();
@@ -65,17 +54,10 @@ public partial class MainWindow : Window
             RefreshDataAssetTableTypes();
             if (session.SceneNeedsSave) MarkSceneChanged();
             ProjectTab.IsSelected = true;
-            StartUserCodeWatching(userCodeCache);
-            userCodeCache = null;
-            _lastCompileElapsed = session.InitialCompileElapsed;
-            UpdateCompileStatus();
+            StartUserCodeWatching();
         }
         catch (Exception error)
         {
-            if (userCodeCache is not null)
-            {
-                try { userCodeCache.Dispose(); } catch { }
-            }
             try { CloseEditSession(); }
             catch (Exception cleanup) { throw new AggregateException(error, cleanup); }
             throw;
@@ -86,11 +68,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = ViewModel;
+        // Context menus need their model before the popup is first opened.
+        SceneSurface.ContextMenu!.DataContext = ViewModel;
         // Only once at startup, adjusts the bottom pane height from the live Scene View/Game width so it is 16:9.
         CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
         // Per-project type owner. Held independently even for empty projects (tests, unopened).
-        _components = new ProjectComponents();
-        _sceneSerializer = new SceneSerializer(_components.Registry);
         // Dedicated service set for the editing lifetime. Built from the same registrations, kept independent from Play.
         Closed += (_, _) => CloseEditSession();
         Closing += OnEditorClosing;
@@ -110,6 +92,9 @@ public partial class MainWindow : Window
             surface.AddHandler(DragDrop.DropEvent, OnComponentDrop, RoutingStrategies.Bubble, handledEventsToo: true);
         }
         InitProjectDrop();
+        ViewModel.BeforeSceneSave += CancelSceneViewDrag;
+        ViewModel.DocumentSaved += OnDocumentSaved;
+        InitCompilationModel();
         InitPlayControls();
         InitConsole();
         RefreshDataAssetTableTypes();
@@ -125,7 +110,6 @@ public partial class MainWindow : Window
         InitSceneView();
         InitGameInput();
         ViewportTabs.SelectionChanged += OnEditorViewportChanged;
-        UpdateCompileStatus();
     }
 
     private void OnAssetPressed(object? sender, PointerPressedEventArgs e)
@@ -170,7 +154,7 @@ public partial class MainWindow : Window
             // C# files in the Project column can drag in attachable classes via D&D.
             // When one file holds multiple classes, attaches all unattached classes from that file.
             // Files without attachable types remain movable within the Project pane.
-            var types = _components.GetTypesForFile(entry.FullPath);
+            var types = Components.GetTypesForFile(entry.FullPath);
             if (types.Count > 0)
                 _dragTypes = types;
         }
@@ -207,11 +191,11 @@ public partial class MainWindow : Window
             hasPayload = true;
             hasMove = true;
         }
-        if (_pressedDataAsset is { FullPath: not null } dataEntry && _project is not null)
+        if (_pressedDataAsset is { FullPath: not null } dataEntry && Project is not null)
         {
             RefreshReferenceAssets();
             var assets = Documents.Current.Current.DataAssets;
-            var relative = Path.GetRelativePath(_project.RootDirectory, dataEntry.FullPath).Replace('\\', '/');
+            var relative = Path.GetRelativePath(Project.RootDirectory, dataEntry.FullPath).Replace('\\', '/');
             var id = assets.Ids.FirstOrDefault(id => assets.DisplayName(id) == relative);
             if (id != Guid.Empty)
             {
@@ -272,7 +256,7 @@ public partial class MainWindow : Window
         var canAny = false;
         foreach (var type in GetDragTypes(e))
         {
-            if (_components.CanAttach(target, type)) { canAny = true; break; }
+            if (Components.CanAttach(target, type)) { canAny = true; break; }
         }
         e.DragEffects = canAny ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -293,7 +277,7 @@ public partial class MainWindow : Window
         e.DragEffects = DragDropEffects.None;
         if (RejectWhenPlaying("Attach")) return;
         var target = DropTarget(sender, e);
-        var types = GetDragTypes(e).Where(t => _components.CanAttach(target, t)).ToArray();
+        var types = GetDragTypes(e).Where(t => Components.CanAttach(target, t)).ToArray();
         if (types.Length == 0) return;
         SelectSceneObject(target, focus: false);
         var attached = 0;
@@ -303,7 +287,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                if (!_components.TryAttach(target, type, EditSession.Factory)) continue;
+                if (!Components.TryAttach(target, type, EditSession.Factory)) continue;
                 attached++;
             }
             catch (Exception error)
@@ -617,7 +601,7 @@ public partial class MainWindow : Window
         var effectiveStore = storePath;
         if (effectiveOwnerId is not null && effectiveStore is not null)
         {
-            if (SceneReferenceTypes.IsSingleReference(memberType, _components.Registry))
+            if (SceneReferenceTypes.IsSingleReference(memberType, Components.Registry))
             {
                 var capturedOwner = owner;
                 var capturedMember = member;
@@ -628,19 +612,19 @@ public partial class MainWindow : Window
                 editor = BuildNestedReferenceEditor(capturedOwner, capturedMember, capturedId, capturedPath, capturedAutomation, capturedRefresh);
                 return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
             }
-            if (SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
+            if (SceneReferenceTypes.ContainsReference(memberType, Components.Registry)
                 && (memberType.IsArray || (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(List<>))))
             {
                 editor = BuildNestedCollectionEditor(owner, member, effectiveOwnerId.Value, effectiveStore, automationName);
                 return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
             }
-            if (SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
+            if (SceneReferenceTypes.ContainsReference(memberType, Components.Registry)
                 && memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
                 editor = BuildNestedCollectionEditor(owner, member, effectiveOwnerId.Value, effectiveStore, automationName);
                 return BuildLabeledEditorRow(member.Name, $"{member.Name} : {friendlyType}", friendlyType, editor);
             }
-            if (InspectorValueTypes.IsCustomInspectorObject(memberType) || SceneReferenceTypes.ContainsReference(memberType, _components.Registry))
+            if (InspectorValueTypes.IsCustomInspectorObject(memberType) || SceneReferenceTypes.ContainsReference(memberType, Components.Registry))
             {
                 var objectType = memberType;
                 var capturedBase = effectiveStore;
@@ -714,9 +698,9 @@ public partial class MainWindow : Window
         if (ShouldShowReferenceEditorFor(memberType, component))
             return BuildMemberReferenceEditor(component, member, automationName);
         if ((memberType.IsArray || memberType.IsGenericType)
-            && SceneReferenceTypes.ContainsReference(memberType, _components.Registry)
+            && SceneReferenceTypes.ContainsReference(memberType, Components.Registry)
             && GetOwnerComponentId(component) is { } ownerId)
-            return SceneReferenceTypes.IsSupportedInspectorType(memberType, _components.Registry)
+            return SceneReferenceTypes.IsSupportedInspectorType(memberType, Components.Registry)
                 ? BuildNestedCollectionEditor(component, member, ownerId, member.Name, automationName)
                 : UnsupportedBadge(memberType);
 
@@ -806,15 +790,15 @@ public partial class MainWindow : Window
             return BuildNullableEditor(component, member, automationName);
         if (memberType.IsArray || (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            if (SceneReferenceTypes.IsSupportedInspectorType(memberType, _components.Registry))
+            if (SceneReferenceTypes.IsSupportedInspectorType(memberType, Components.Registry))
                 return BuildSequenceEditor(component, member, automationName);
         }
         if (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
         {
-            if (SceneReferenceTypes.IsSupportedInspectorType(memberType, _components.Registry))
+            if (SceneReferenceTypes.IsSupportedInspectorType(memberType, Components.Registry))
                 return BuildDictionaryEditor(component, member, automationName);
         }
-        if (InspectorValueTypes.IsCustomInspectorObject(memberType) || SceneReferenceTypes.ContainsReference(memberType, _components.Registry))
+        if (InspectorValueTypes.IsCustomInspectorObject(memberType) || SceneReferenceTypes.ContainsReference(memberType, Components.Registry))
             return BuildObjectEditor(component, member, automationName);
 
         return UnsupportedBadge(memberType);
@@ -928,48 +912,14 @@ public partial class MainWindow : Window
     private void OnAddUiText(object? sender, RoutedEventArgs e) =>
         AddUiObject("Text", [typeof(Core.Transform), typeof(UiElement), typeof(Core.Text)]);
 
-    /// <summary>Creates the required UI setup using the current parent selection and the Component creation path.</summary>
-    private void AddUiObject(string baseName, Type[] componentTypes)
-    {
-        if (RejectWhenPlaying("Add")) return;
-        var parent = EditingParent();
-        var item = Documents.Current.Current.AddNamed(baseName);
-        try
-        {
-            foreach (var type in componentTypes)
-                if (!_components.TryAttach(item, type, EditSession.Factory))
-                    throw new InvalidOperationException($"Could not attach {type.Name}.");
-            if (parent is not null) item.SetParent(parent);
-        }
-        catch (Exception error)
-        {
-            Documents.Current.Current.Remove(item);
-            try { ComponentAssets.DisposeComponents(item.Components); }
-            catch (Exception cleanupError) { Log.Engine.Error(cleanupError); }
-            SetFileStatus($"Could not create UI: {error.GetBaseException().Message}", true);
-            return;
-        }
-        MarkSceneChanged();
-        RefreshHierarchy(item.Id, expandId: parent?.Id);
-        RefreshObjectInspector();
-        SceneObjects.Focus();
-    }
+    private void AddUiObject(string baseName, Type[] componentTypes) =>
+        ViewModel.Hierarchy.AddUiObject(baseName, componentTypes, Components);
 
-    private void OnAddObject(object? sender, RoutedEventArgs e)
-    {
-        if (RejectWhenPlaying("Add")) return;
-        var parent = EditingParent();
-        var item = Documents.Current.Current.AddEmpty();
-        if (parent is not null) item.SetParent(parent);
-        MarkSceneChanged();
-        RefreshHierarchy(item.Id, expandId: parent?.Id);
-        RefreshObjectInspector();
-        SceneObjects.Focus();
-    }
+    private void OnAddObject(object? sender, RoutedEventArgs e) => ViewModel.Hierarchy.AddEmpty();
 
     private async void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
     {
-        if (_hierarchyRefreshing) return;
+        if (_hierarchyRefreshing || ViewModel.Compilation.IsApplying || ViewModel.Hierarchy.IsMutating) return;
         CaptureHierarchySelection();
         if (_assetSelectionChanging) return;
         if (GetSelectedSceneObject() is not null && Documents.Asset is not null)
@@ -998,17 +948,10 @@ public partial class MainWindow : Window
         ViewModel.Inspector.Select(item);
         if (Documents.Asset is not null && item is null)
         {
-            DeleteObjectMenuItem.IsEnabled = false;
-            DuplicateObjectMenuItem.IsEnabled = false;
             RefreshDataAssetInspector();
             return;
         }
         ViewModel.DataAsset.Refresh();
-        var selected = GetSelectedSceneObjects();
-        var canEdit = selected.Count > 0 && selected.Any(candidate => !IsPrefabRoot(candidate));
-        DeleteObjectMenuItem.IsEnabled = canEdit && !IsPlaying;
-        DuplicateObjectMenuItem.IsEnabled = canEdit && !IsPlaying;
-        SavePrefabMenuItem.IsEnabled = item is not null && !IsPlaying;
         RefreshComponents();
     }
 
@@ -1031,177 +974,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void DeleteSelectedObject()
-    {
-        if (RejectWhenPlaying("Delete")) return;
-        var selected = GetSelectedSceneObjects();
-        if (selected.Count == 0) return;
-        var targets = TopLevelSelection(selected);
-        List<SceneObject> deletable = [];
-        var skippedPrefabRoot = false;
-        foreach (var item in targets)
-        {
-            if (!Documents.Current.Current.Objects.Contains(item)) continue;
-            if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
-            deletable.Add(item);
-        }
-        if (deletable.Count == 0)
-        {
-            SetFileStatus("The prefab root cannot be deleted. Edit its name or components instead.", true);
-            return;
-        }
-        CancelSceneViewDrag();
-        var next = FindNextAfterDelete(deletable[0], deletable);
-        List<object> doomed = [];
-        foreach (var item in deletable)
-        {
-            doomed.AddRange(item.Components);
-            var stack = new Stack<SceneObject>(item.Children);
-            while (stack.Count > 0)
-            {
-                var descendant = stack.Pop();
-                doomed.AddRange(descendant.Components);
-                foreach (var child in descendant.Children)
-                    stack.Push(child);
-            }
-        }
-        foreach (var item in deletable)
-            Documents.Current.Current.Remove(item);
-        MarkSceneChanged();
-        RefreshHierarchy(next?.Id);
-        RefreshObjectInspector();
-        SceneObjects.Focus();
-        try { ComponentAssets.DisposeComponents(doomed); }
-        catch (Exception error) { SetFileStatus(error.ToString(), true); }
-        if (skippedPrefabRoot)
-            SetFileStatus($"Deleted {deletable.Count} object(s). The prefab root cannot be deleted.", true);
-    }
+    private void DeleteSelectedObject() => ViewModel.Hierarchy.DeleteSelected();
 
-    /// <summary>Duplicates the selected subtrees next to their sources. Testable core of the Ctrl+D shortcut.</summary>
     internal List<SceneObject> DuplicateSelectedForTest() => DuplicateSelectedObjects();
 
-    private List<SceneObject> DuplicateSelectedObjects()
-    {
-        if (RejectWhenPlaying("Duplicate")) return [];
-        var selected = GetSelectedSceneObjects();
-        if (selected.Count == 0) return [];
-        var targets = TopLevelSelection(selected);
-        List<SceneObject> sources = [];
-        var skippedPrefabRoot = false;
-        foreach (var item in targets)
-        {
-            if (!Documents.Current.Current.Objects.Contains(item)) continue;
-            if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
-            sources.Add(item);
-        }
-        if (sources.Count == 0)
-        {
-            SetFileStatus("The prefab root cannot be duplicated. Select a non-root object instead.", true);
-            return [];
-        }
-        CancelSceneViewDrag();
-        var serializer = new PrefabSerializer(_components.Registry);
-        List<SceneObject> copies = [];
-        foreach (var source in sources)
-        {
-            PrefabDocument document;
-            try { document = serializer.Capture(Documents.Current.Current, source); }
-            catch (Exception error)
-            {
-                SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
-                continue;
-            }
-            document.Id = source.PrefabId ?? Guid.NewGuid();
-            SceneObject copy;
-            try { copy = serializer.Instantiate(Documents.Current.Current, document, source.Parent, EditSession.Factory); }
-            catch (Exception error)
-            {
-                SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
-                continue;
-            }
-            copy.PrefabId = source.PrefabId;
-            MoveCopyAfterSource(source, copy);
-            copies.Add(copy);
-        }
-        if (copies.Count == 0) return [];
-        MarkSceneChanged();
-        RefreshHierarchyForSelection([.. copies.Select(copy => copy.Id)]);
-        SceneObjects.Focus();
-        if (skippedPrefabRoot)
-            SetFileStatus($"Duplicated {copies.Count} object(s). The prefab root cannot be duplicated.", true);
-        else
-            SetFileStatus($"Duplicated {copies.Count} object(s).");
-        return copies;
-    }
-
-    private List<SceneObject> TopLevelSelection(IReadOnlyList<SceneObject> selected)
-    {
-        var selectedSet = new HashSet<SceneObject>(selected, ReferenceEqualityComparer.Instance);
-        var order = new Dictionary<SceneObject, int>(ReferenceEqualityComparer.Instance);
-        var index = 0;
-        foreach (var item in EnumerateInDisplayOrder())
-            order[item] = index++;
-        List<SceneObject> tops = [];
-        foreach (var item in selected)
-        {
-            var inside = false;
-            for (var ancestor = item.Parent; ancestor is not null; ancestor = ancestor.Parent)
-                if (selectedSet.Contains(ancestor)) { inside = true; break; }
-            if (!inside) tops.Add(item);
-        }
-        tops.Sort((left, right) =>
-            (order.TryGetValue(left, out var leftIndex) ? leftIndex : int.MaxValue).CompareTo(
-                order.TryGetValue(right, out var rightIndex) ? rightIndex : int.MaxValue));
-        return tops;
-    }
-
-    private SceneObject? FindNextAfterDelete(SceneObject first, List<SceneObject> deletable)
-    {
-        var condemned = new HashSet<SceneObject>(ReferenceEqualityComparer.Instance);
-        foreach (var item in deletable)
-        {
-            condemned.Add(item);
-            var stack = new Stack<SceneObject>(item.Children);
-            while (stack.Count > 0)
-            {
-                var descendant = stack.Pop();
-                if (!condemned.Add(descendant)) continue;
-                foreach (var child in descendant.Children)
-                    stack.Push(child);
-            }
-        }
-        var siblings = first.Parent is null ? Documents.Current.Current.RootObjects : first.Parent.Children;
-        var siblingIndex = IndexOfSceneObject(siblings, first);
-        if (siblingIndex >= 0)
-        {
-            for (var i = siblingIndex + 1; i < siblings.Count; i++)
-                if (!condemned.Contains(siblings[i])) return siblings[i];
-            for (var i = siblingIndex - 1; i >= 0; i--)
-                if (!condemned.Contains(siblings[i])) return siblings[i];
-        }
-        return first.Parent;
-    }
-
-    private void MoveCopyAfterSource(SceneObject source, SceneObject copy)
-    {
-        if (source.Parent is null)
-        {
-            var roots = Documents.Current.Current.RootObjects;
-            var sourceIndex = IndexOfSceneObject(roots, source);
-            if (sourceIndex >= 0) Documents.Current.Current.SetRootSiblingIndex(copy, sourceIndex + 1);
-            return;
-        }
-        var siblings = source.Parent.Children;
-        var desired = IndexOfSceneObject(siblings, source) + 1;
-        if (desired >= 0 && desired < siblings.Count) copy.SetSiblingIndex(desired);
-    }
-
-    private static int IndexOfSceneObject(IReadOnlyList<SceneObject> items, SceneObject item)
-    {
-        for (var i = 0; i < items.Count; i++)
-            if (ReferenceEquals(items[i], item)) return i;
-        return -1;
-    }
+    private List<SceneObject> DuplicateSelectedObjects() => ViewModel.Hierarchy.DuplicateSelected(Components.Registry);
 
     private void OnPanePointerPressed(object? sender, PointerPressedEventArgs e)
     {

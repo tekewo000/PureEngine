@@ -44,7 +44,7 @@ static class ConsoleChecks
     private static void EnsureChecks(MainWindow editor)
     {
         // A4: Register explicitly with each window's owner. Do not depend on shared statics.
-        var components = Field<ProjectComponents>(editor, "_components");
+        var components = editor.ViewModel.Components;
         components.Registry.Register<ConsoleProbe>("checks.console-probe");
         components.Registry.Register<ConsoleFailUpdate>("checks.console-fail-update");
         components.Registry.Register<ConsoleFailCleanup>("checks.console-fail-cleanup");
@@ -386,7 +386,7 @@ static class ConsoleChecks
             EditScene(editor).AddEmpty().Attach(new ConsoleFailCleanup());
             Call(editor, "StartPlay");
             Field<DispatcherTimer>(editor, "_playTimer").Stop();
-            var play = Field<PlaySession>(editor, "_play");
+            var play = editor.ViewModel.Play.Session!;
             play.Runtime.Scene.Remove(play.Runtime.Scene.Objects[0]);
             Call(editor, "StepPlayOnce", 1f / 60f);
             Drain(editor);
@@ -534,7 +534,7 @@ static class ConsoleChecks
         {
             var scene = EditScene(auto);
             var services = Field<GameSession>(auto, "EditSession");
-            var owner = Field<ProjectComponents>(auto, "_components");
+            var owner = auto.ViewModel.Components;
             var item = scene.AddEmpty();
             owner.TryAttach(item, typeof(ConsoleFailUpdate), services.Factory);
             Dispatcher.UIThread.RunJobs();

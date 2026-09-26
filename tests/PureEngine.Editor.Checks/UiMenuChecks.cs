@@ -26,7 +26,7 @@ static class UiMenuChecks
         editor.Show();
         Dispatcher.UIThread.RunJobs();
         var store = (EditSceneStore)typeof(MainWindow).GetProperty("EditSceneStore", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor)!;
-        var components = (ProjectComponents)typeof(MainWindow).GetField("_components", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor)!;
+        var components = (ProjectComponents)typeof(MainWindow).GetProperty("Components", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor)!;
         var objects = editor.FindControl<TreeView>("SceneObjects")!;
         try
         {

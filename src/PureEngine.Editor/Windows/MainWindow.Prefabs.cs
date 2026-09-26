@@ -21,29 +21,15 @@ public partial class MainWindow
     }
 
     /// <summary>Builds a prefab catalog snapshot for the project. Empty without a project or on scan failure.</summary>
-    private PrefabCatalog BuildPrefabCatalog()
-    {
-        if (_project is null) return PrefabCatalog.Empty;
-        try
-        {
-            var catalog = PrefabCatalog.ScanFolder(_project.RootDirectory, out var diagnostics);
-            foreach (var diagnostic in diagnostics) Log.Engine.Warning(diagnostic);
-            return catalog;
-        }
-        catch (Exception error)
-        {
-            Log.Engine.Error("Cannot scan prefabs.", error);
-            return PrefabCatalog.Empty;
-        }
-    }
+    private PrefabCatalog BuildPrefabCatalog() => EditorDocuments.BuildPrefabCatalog(Project);
 
     private async void OnSavePrefab(object? sender, RoutedEventArgs e)
     {
         if (GetSelectedSceneObject() is not SceneObject root) return;
         await RunFileOperation(async () =>
         {
-            if (_project is null || RejectWhenPlaying("Save Prefab")) return;
-            var name = await AskExplorerName("Save as Prefab", "Prefab file name", _project.NextPrefabName(ViewModel.Project.Folder, root.Name));
+            if (Project is null || RejectWhenPlaying("Save Prefab")) return;
+            var name = await AskExplorerName("Save as Prefab", "Prefab file name", Project.NextPrefabName(ViewModel.Project.Folder, root.Name));
             if (name is null) return;
             SavePrefabToPath(root, ViewModel.Project.Folder, name);
             await Task.CompletedTask;
@@ -55,17 +41,17 @@ public partial class MainWindow
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        if (_project is null) throw new InvalidOperationException("Open a project first.");
+        if (Project is null) throw new InvalidOperationException("Open a project first.");
         if (RejectWhenPlaying("Save Prefab")) throw new InvalidOperationException("Cannot save prefabs while playing.");
         if (!string.Equals(fileName, fileName.Trim(), StringComparison.Ordinal)
             || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             throw new ArgumentException("Specify a valid file name.");
         if (!ProjectFile.IsPrefabFileName(fileName)) fileName += ".pure.prefab.yaml";
-        var path = Path.Combine(_project.ResolveDirectoryPath(relativeDirectory), fileName);
-        _project.ValidatePrefabPath(path);
+        var path = Path.Combine(Project.ResolveDirectoryPath(relativeDirectory), fileName);
+        Project.ValidatePrefabPath(path);
         if (File.Exists(path) || Directory.Exists(path))
             throw new IOException("A folder or file with the same name already exists.");
-        var prefabId = PrefabFile.Create(path, Documents.Current.Current, root, _components.Registry);
+        var prefabId = PrefabFile.Create(path, Documents.Current.Current, root, Components.Registry);
         root.PrefabId = prefabId;
         MarkSceneChanged();
         RefreshHierarchy();
@@ -79,10 +65,10 @@ public partial class MainWindow
     /// <summary>Creates a prefab file from a Stuffs object dropped onto the Project pane. Testable core of Stuff-to-Project drag-drop.</summary>
     internal string CreatePrefabFromDrop(Guid objectId, string targetRelative)
     {
-        if (_project is null) throw new InvalidOperationException("Open a project first.");
+        if (Project is null) throw new InvalidOperationException("Open a project first.");
         if (RejectWhenPlaying("Save Prefab")) throw new InvalidOperationException("Cannot save prefabs while playing.");
         var root = FindObject(objectId) ?? throw new ArgumentException("The dragged object was not found.");
-        var fileName = _project.NextPrefabName(targetRelative, root.Name);
+        var fileName = Project.NextPrefabName(targetRelative, root.Name);
         return SavePrefabToPath(root, targetRelative, fileName);
     }
 
@@ -104,15 +90,15 @@ public partial class MainWindow
     internal SceneObject PlacePrefabAt(string path, SceneObject? parent)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (_project is null) throw new InvalidOperationException("Open a project first.");
+        if (Project is null) throw new InvalidOperationException("Open a project first.");
         if (RejectWhenPlaying("Place Prefab")) throw new InvalidOperationException("Cannot place prefabs while playing.");
         if (IsPrefabEditing) parent ??= Documents.Prefab!.Current.RootObjects.Single();
-        _project.ValidatePrefabPath(path);
+        Project.ValidatePrefabPath(path);
         var document = PrefabFile.Load(path);
         SceneObject placed;
         try
         {
-            placed = new PrefabSerializer(_components.Registry).Instantiate(
+            placed = new PrefabSerializer(Components.Registry).Instantiate(
                 Documents.Current.Current, document, out _, parent, EditSession.Factory);
         }
         catch (Exception error)

@@ -5,7 +5,7 @@
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         x:Class="PureEngine.Editor.MainWindow"
         x:DataType="editor:EditorViewModel"
-        Title="PureEngine Editor"
+        Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="960" MinHeight="640"
         Background="{StaticResource EditorBackgroundBrush}" Foreground="{StaticResource EditorTextBrush}"
@@ -482,32 +482,32 @@
     </Style>
   </Window.Styles>
 
-  <Grid x:Name="EditorSurface" RowDefinitions="48,*,26" Margin="8,0">
+  <Grid x:Name="EditorSurface" IsEnabled="{Binding IsFileIdle}" RowDefinitions="48,*,26" Margin="8,0">
     <Grid ColumnDefinitions="220,*,240" Margin="10,0">
       <StackPanel Orientation="Horizontal" Spacing="12">
         <TextBlock Text="PureEngine" FontWeight="SemiBold" />
         <Menu Background="Transparent" VerticalAlignment="Center">
           <MenuItem Header="File">
-            <MenuItem x:Name="CloseProjectMenu" Header="Return to Launcher" InputGesture="Ctrl+Shift+O" Click="OnCloseProject" />
+            <MenuItem x:Name="CloseProjectMenu" IsEnabled="{Binding HasProject}" Header="Return to Launcher" InputGesture="Ctrl+Shift+O" Click="OnCloseProject" />
             <Separator />
-            <MenuItem x:Name="NewSceneMenu" Header="New Scene" InputGesture="Ctrl+N" Click="OnNewScene" />
-            <MenuItem x:Name="OpenSceneMenu" Header="Open Scene…" InputGesture="Ctrl+O" Click="OnOpenScene" />
-            <MenuItem x:Name="SaveSceneMenu" Header="Save Scene" InputGesture="Ctrl+S" Click="OnSaveScene" />
-            <MenuItem x:Name="SaveSceneAsMenu" Header="Save Scene As…" InputGesture="Ctrl+Shift+S" Click="OnSaveSceneAs" />
-            <MenuItem x:Name="StartupSceneMenu" Header="Set Current Scene as Startup" Click="OnSetStartupScene" IsEnabled="False" />
+            <MenuItem x:Name="NewSceneMenu" IsEnabled="{Binding CanEdit}" Header="New Scene" InputGesture="Ctrl+N" Click="OnNewScene" />
+            <MenuItem x:Name="OpenSceneMenu" IsEnabled="{Binding CanEdit}" Header="Open Scene…" InputGesture="Ctrl+O" Click="OnOpenScene" />
+            <MenuItem x:Name="SaveSceneMenu" IsEnabled="{Binding CanEdit}" Header="{Binding SaveLabel}" InputGesture="Ctrl+S" Click="OnSaveScene" />
+            <MenuItem x:Name="SaveSceneAsMenu" IsEnabled="{Binding CanSaveAs}" Header="Save Scene As…" InputGesture="Ctrl+Shift+S" Click="OnSaveSceneAs" />
+            <MenuItem x:Name="StartupSceneMenu" IsEnabled="{Binding CanSetStartup}" Header="Set Current Scene as Startup" Click="OnSetStartupScene" />
           </MenuItem>
           <MenuItem Header="Edit" IsEnabled="False" />
           <MenuItem Header="View" IsEnabled="False" />
         </Menu>
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
-        <Button x:Name="PlayButton" Classes="accent" MinWidth="96" Click="OnPlayClicked" AutomationProperties.Name="Play">
+        <Button x:Name="PlayButton" Classes="accent" MinWidth="96" Command="{Binding StartPlayCommand}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Play">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Play}" />
             <TextBlock Text="Play" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button x:Name="StopButton" MinWidth="96" Click="OnStopClicked" IsEnabled="False" AutomationProperties.Name="Stop">
+        <Button x:Name="StopButton" MinWidth="96" Command="{Binding StopPlayCommand}" IsEnabled="{Binding Play.IsPlaying}" AutomationProperties.Name="Stop">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Stop}" />
             <TextBlock Text="Stop" VerticalAlignment="Center" />
@@ -545,24 +545,24 @@
               <Grid x:Name="SceneSurface" RowDefinitions="Auto,*" Background="Transparent" DragDrop.AllowDrop="True">
                 <Grid.ContextMenu>
                   <ContextMenu>
-                    <MenuItem x:Name="AddObjectMenuItem" Header="Add Empty" Click="OnAddObject" />
-                    <MenuItem x:Name="AddUiMenuItem" Header="UI">
+                    <MenuItem x:Name="AddObjectMenuItem" IsEnabled="{Binding CanEdit}" Header="Add Empty" Click="OnAddObject" />
+                    <MenuItem x:Name="AddUiMenuItem" IsEnabled="{Binding CanEdit}" Header="UI">
                       <MenuItem x:Name="AddUiImageMenuItem" Header="Image" Click="OnAddUiImage" />
                       <MenuItem x:Name="AddUiButtonMenuItem" Header="Button" Click="OnAddUiButton" />
                       <MenuItem x:Name="AddUiTextMenuItem" Header="Text" Click="OnAddUiText" />
                     </MenuItem>
                     <Separator />
-                    <MenuItem x:Name="SavePrefabMenuItem" Header="Save as Prefab…" Click="OnSavePrefab"
-                              IsEnabled="False" />
-                    <MenuItem x:Name="DuplicateObjectMenuItem" Header="Duplicate" Click="OnDuplicateObject"
-                              InputGesture="Ctrl+D" IsEnabled="False" />
-                    <MenuItem x:Name="DeleteObjectMenuItem" Header="Delete" Click="OnDeleteObject"
-                              InputGesture="Delete" IsEnabled="False" />
+                    <MenuItem x:Name="SavePrefabMenuItem" IsEnabled="{Binding CanSaveSelection}" Header="Save as Prefab…" Click="OnSavePrefab"
+                              />
+                    <MenuItem x:Name="DuplicateObjectMenuItem" IsEnabled="{Binding CanDeleteSelection}" Header="Duplicate" Click="OnDuplicateObject"
+                              InputGesture="Ctrl+D" />
+                    <MenuItem x:Name="DeleteObjectMenuItem" IsEnabled="{Binding CanDeleteSelection}" Header="Delete" Click="OnDeleteObject"
+                              InputGesture="Delete" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <TextBlock x:Name="StuffsContext" IsVisible="False" Margin="12,8,12,0"
+                <TextBlock x:Name="StuffsContext" ToolTip.Tip="{Binding PrefabPath}" Text="{Binding StuffsContext}" IsVisible="{Binding IsPrefabEditing}" Margin="12,8,12,0"
                            TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
-                <TreeView x:Name="SceneObjects" ItemsSource="{Binding Hierarchy.Roots}" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="8"
+                <TreeView x:Name="SceneObjects" IsEnabled="{Binding CanEdit}" ItemsSource="{Binding Hierarchy.Roots}" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="8"
                           SelectionMode="Multiple" AutomationProperties.Name="Stuffs objects"
                           DragDrop.AllowDrop="True"
                           KeyDown="OnSceneKeyDown" SelectionChanged="OnObjectSelected">
@@ -584,7 +584,7 @@
         </Border>
         <Border x:Name="SceneViewPane" Classes="pane">
           <TabControl x:Name="ViewportTabs" Classes="editorTabs" SelectedIndex="0" PointerPressed="OnPanePointerPressed">
-            <TabItem x:Name="SceneViewTab" Classes="paneTab first" Header="Scene View" AutomationProperties.Name="Scene View">
+            <TabItem x:Name="SceneViewTab" Classes="paneTab first" Header="{Binding SceneTabTitle}" AutomationProperties.Name="Scene View">
               <Border Classes="viewportFrame">
                 <Grid x:Name="SceneViewHost"><Grid x:Name="SceneViewport" /></Grid>
               </Border>
@@ -593,7 +593,7 @@
               <Border Classes="viewportFrame">
                 <Grid>
                   <Grid x:Name="GameViewport" />
-                  <TextBlock x:Name="GamePlaceholder" Classes="hint" Text="Press Play to show the game."
+                  <TextBlock x:Name="GamePlaceholder" IsVisible="{Binding CanEdit}" Classes="hint" Text="Press Play to show the game."
                              HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
                              AutomationProperties.Name="Game placeholder" />
                 </Grid>
@@ -611,7 +611,7 @@
                   </ComboBox>
                   <Button x:Name="SaveDataAssetTableButton" IsEnabled="{Binding DataAssetTable.CanSave}" Content="Save All" FontSize="11" Padding="8,2"
                           VerticalAlignment="Center" AutomationProperties.Name="Save data asset table"
-                          ToolTip.Tip="Save all rows (Ctrl+S)" Click="OnSaveDataAssetTable" />
+                          ToolTip.Tip="Save all rows (Ctrl+S)" Command="{Binding SaveTableCommand}" />
                   <Button x:Name="AddDataAssetTableRowButton" IsEnabled="{Binding DataAssetTable.CanAdd}" Content="Add Row" FontSize="11" Padding="8,2"
                           VerticalAlignment="Center" AutomationProperties.Name="Add data asset table row"
                           Click="OnAddDataAssetTableRow" />
@@ -626,14 +626,14 @@
                 </ScrollViewer>
               </Grid>
             </TabItem>
-            <TabItem x:Name="PrefabEditorTab" Classes="paneTab" Header="Prefab Editor" AutomationProperties.Name="Prefab Editor" IsVisible="False">
+            <TabItem x:Name="PrefabEditorTab" IsEnabled="{Binding CanEdit}" Classes="paneTab" Header="{Binding PrefabTabTitle}" AutomationProperties.Name="Prefab Editor" IsVisible="{Binding HasPrefab}">
               <Grid RowDefinitions="Auto,*">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,8">
                   <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="PrefabEditorTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="PrefabEditorPath" Classes="hint" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="PrefabEditorTitle" Text="{Binding PrefabTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="PrefabEditorPath" ToolTip.Tip="{Binding PrefabPath}" Text="{Binding PrefabRelativePath}" Classes="hint" TextTrimming="CharacterEllipsis" />
                   </StackPanel>
-                  <Button x:Name="SavePrefabEditorButton" Grid.Column="1" Content="Save" Click="OnSavePrefabEditor"
+                  <Button x:Name="SavePrefabEditorButton" IsEnabled="{Binding CanSavePrefab}" Grid.Column="1" Content="Save" Command="{Binding SavePrefabCommand}"
                           VerticalAlignment="Center" AutomationProperties.Name="Save Prefab" ToolTip.Tip="Save prefab (Ctrl+S)" />
                   <Button Grid.Column="2" Content="Close" Click="OnClosePrefabEditor" VerticalAlignment="Center"
                           AutomationProperties.Name="Close Prefab Editor" />
@@ -652,7 +652,7 @@
                 <Grid RowDefinitions="Auto,Auto,*">
                   <TextBlock Text="FOLDERS" Classes="columnHeader" Margin="8,2,0,0" />
                   <Separator Grid.Row="1" Classes="divider" Margin="0,6" />
-                  <TreeView Grid.Row="2" x:Name="ProjectTree" Background="Transparent" BorderThickness="0"
+                  <TreeView Grid.Row="2" x:Name="ProjectTree" IsEnabled="{Binding CanEdit}" Background="Transparent" BorderThickness="0"
                             SelectionMode="Single" DragDrop.AllowDrop="True"
                             AutomationProperties.Name="Project folders"
                             SelectionChanged="OnProjectTreeSelectionChanged"
@@ -679,7 +679,7 @@
                               Cursor="SizeWestEast" AutomationProperties.Name="Resize Project tree" />
                 <Grid Grid.Column="2" RowDefinitions="Auto,*">
                   <TextBlock x:Name="ProjectFilesCount" Text="{Binding Project.FileCountText}" Classes="muted" FontSize="11" Margin="8,2,0,6" />
-                  <ListBox Grid.Row="1" x:Name="ProjectFiles" ItemsSource="{Binding Project.Files}" SelectedItem="{Binding Project.SelectedEntry, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
+                  <ListBox Grid.Row="1" x:Name="ProjectFiles" IsEnabled="{Binding CanEdit}" ItemsSource="{Binding Project.Files}" SelectedItem="{Binding Project.SelectedEntry, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
                            SelectionMode="Single" DragDrop.AllowDrop="True"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                            AutomationProperties.Name="Project files"
@@ -844,7 +844,7 @@
           <TabItem Classes="paneTab first" Header="Inspector" AutomationProperties.Name="Inspector">
             <ScrollViewer Margin="8">
              <StackPanel Spacing="6">
-              <StackPanel x:Name="ObjectInspector" IsVisible="{Binding Inspector.HasObject}" Spacing="6">
+              <StackPanel x:Name="ObjectInspector" IsEnabled="{Binding CanEdit}" IsVisible="{Binding Inspector.HasObject}" Spacing="6">
                 <TextBlock Text="NAME" Classes="caption" Margin="0,0,0,-2" />
                 <TextBox x:Name="ObjectName" Text="{Binding Inspector.Name, Mode=TwoWay}" Classes="inspectorField" PlaceholderText="Object name…" AutomationProperties.Name="Object name" />
                 <TextBlock x:Name="NameError" Text="Enter a name." Foreground="#FF9E99"
@@ -870,7 +870,7 @@
                            Text="No components — press Add Component or drag a .cs file from Project to attach." />
                 <TextBlock x:Name="AttachError" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="False" />
               </StackPanel>
-              <StackPanel x:Name="DataAssetInspector" IsVisible="{Binding DataAsset.IsVisible}" Spacing="6">
+              <StackPanel x:Name="DataAssetInspector" IsEnabled="{Binding CanEdit}" IsVisible="{Binding DataAsset.IsVisible}" Spacing="6">
                 <TextBlock Text="DATA ASSET" Classes="caption" Margin="0,0,0,-2" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                   <TextBlock x:Name="DataAssetTitle" Text="{Binding DataAsset.Title}" Classes="sectionHeader" TextTrimming="CharacterEllipsis"
@@ -889,7 +889,7 @@
                              HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
                 </Grid>
                 <Button x:Name="SaveDataAssetButton" IsEnabled="{Binding DataAsset.CanSave}" Content="Save Data Asset" FontSize="11" Padding="8,2"
-                        HorizontalAlignment="Left" AutomationProperties.Name="Save Data Asset" Click="OnSaveDataAsset" />
+                        HorizontalAlignment="Left" AutomationProperties.Name="Save Data Asset" Command="{Binding SaveDataAssetCommand}" />
                 <TextBlock x:Name="DataAssetError" Text="{Binding DataAsset.Error}" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="{Binding DataAsset.HasError}" />
                 <StackPanel x:Name="DataAssetEditors" Spacing="12" />
               </StackPanel>
@@ -901,10 +901,10 @@
     </Grid>
     <Border Grid.Row="2" Background="{StaticResource EditorSurfaceBrush}" BorderBrush="{StaticResource EditorBorderBrush}" BorderThickness="0,1,0,0" Padding="10,0">
       <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-        <TextBlock x:Name="FileStatus" Classes="muted" VerticalAlignment="Center"
+        <TextBlock x:Name="FileStatus" Text="{Binding Status}" Foreground="{Binding StatusColor}" ToolTip.Tip="{Binding Status}" Classes="muted" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" AutomationProperties.Name="Scene file status" />
         <Rectangle Grid.Column="1" Classes="columnDivider" />
-        <TextBlock Grid.Column="2" x:Name="CompileStatus" Classes="muted" VerticalAlignment="Center"
+        <TextBlock Grid.Column="2" x:Name="CompileStatus" Text="{Binding Compilation.StatusText}" ToolTip.Tip="{Binding Compilation.StatusText}" Classes="muted" VerticalAlignment="Center"
                    AutomationProperties.Name="Compile status" />
       </Grid>
     </Border>

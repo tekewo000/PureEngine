@@ -42,7 +42,7 @@ public partial class MainWindow
         _tableTypeChanging = true;
         try
         {
-            ViewModel.DataAssetTable.RefreshTypes(_project, _components);
+            ViewModel.DataAssetTable.RefreshTypes(Project, Components);
             DataAssetTableTypes.SelectedItem = ViewModel.DataAssetTable.SelectedType;
             if (Documents.Table.Type is null) ClearTableRowViews();
             else if (rescanRows) RescanTableRowsCore();
@@ -53,7 +53,7 @@ public partial class MainWindow
 
     private async void OnDataAssetTableTypeChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_tableTypeChanging) return;
+        if (_tableTypeChanging || ViewModel.Compilation.IsApplying) return;
         var selected = DataAssetTableTypes.SelectedItem as DataAssetDescriptor;
         if (selected is not null && Documents.Table.Type is not null && selected.TypeId == Documents.Table.Type.TypeId) return;
         await RunFileOperation(async () =>
@@ -86,7 +86,7 @@ public partial class MainWindow
 
     private void RescanTableRowsCore()
     {
-        if (Documents.Table.Type is null || _project is null)
+        if (Documents.Table.Type is null || Project is null)
         {
             ClearTableRowViews();
             return;
@@ -94,7 +94,7 @@ public partial class MainWindow
         DetachInvalidFields(DataAssetTableRows);
         DataAssetTableRows.Children.Clear();
         _tableViews.Clear();
-        var error = ViewModel.DataAssetTable.Rescan(_project, _components.Registry);
+        var error = ViewModel.DataAssetTable.Rescan(Project, Components.Registry);
         if (error is not null) SetFileStatus(error, true);
         RebuildTableRowViews();
     }
@@ -241,23 +241,7 @@ public partial class MainWindow
         _tableViews.Clear();
     }
 
-    private void OnSaveDataAssetTable(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        _ = RunFileOperation(SaveDataAssetTableAsync);
-
-    /// <summary>Saves every dirty table row. Serializes all rows before writing any file, keeping the dirty state on failure.</summary>
-    internal Task<bool> SaveDataAssetTableAsync()
-    {
-        if (IsPlaying) return Task.FromResult(false);
-        if (Documents.Table.Type is null || !IsDataAssetTableDirty) return Task.FromResult(true);
-        var saved = ViewModel.DataAssetTable.Save(_components.Registry);
-        if (saved)
-        {
-            UpdateDataAssetTableChrome();
-            RefreshProjectExplorer();
-        }
-        SetFileStatus(ViewModel.DataAssetTable.OperationStatus, !saved);
-        return Task.FromResult(saved);
-    }
+    internal Task<bool> SaveDataAssetTableAsync() => Task.FromResult(ViewModel.SaveTable());
 
     private void OnAddDataAssetTableRow(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         _ = RunFileOperation(AddDataAssetTableRowAsync);
@@ -265,8 +249,8 @@ public partial class MainWindow
     private async Task AddDataAssetTableRowAsync()
     {
         var descriptor = Documents.Table.Type;
-        if (_project is null || descriptor is null || RejectWhenPlaying("Add Row")) return;
-        ViewModel.DataAssetTable.Add(_project, _components.Registry);
+        if (Project is null || descriptor is null || RejectWhenPlaying("Add Row")) return;
+        ViewModel.DataAssetTable.Add(Project, Components.Registry);
         RebuildTableRowViews();
         UpdateDataAssetTableChrome();
         RefreshProjectExplorer();
@@ -277,8 +261,8 @@ public partial class MainWindow
     private async Task DuplicateTableRowAsync(DataAssetEditState row)
     {
         var descriptor = Documents.Table.Type;
-        if (_project is null || descriptor is null || !Documents.Table.Rows.Contains(row) || RejectWhenPlaying("Duplicate Row")) return;
-        ViewModel.DataAssetTable.Duplicate(row, _project, _components.Registry);
+        if (Project is null || descriptor is null || !Documents.Table.Rows.Contains(row) || RejectWhenPlaying("Duplicate Row")) return;
+        ViewModel.DataAssetTable.Duplicate(row, Project, Components.Registry);
         RebuildTableRowViews();
         UpdateDataAssetTableChrome();
         RefreshProjectExplorer();
@@ -288,10 +272,10 @@ public partial class MainWindow
 
     private async Task DeleteTableRowAsync(DataAssetEditState row)
     {
-        if (_project is null || !Documents.Table.Rows.Contains(row) || RejectWhenPlaying("Delete Row")) return;
+        if (Project is null || !Documents.Table.Rows.Contains(row) || RejectWhenPlaying("Delete Row")) return;
         if (Documents.Asset is not null && string.Equals(Documents.Asset.Path, row.Path, PathComparison()))
             if (!await ConfirmCloseDataAsset()) return;
-        var display = Path.GetRelativePath(_project.RootDirectory, row.Path).Replace('\\', '/');
+        var display = Path.GetRelativePath(Project.RootDirectory, row.Path).Replace('\\', '/');
         if (!await ConfirmExplorerDelete(display, isDirectory: false)) return;
         ViewModel.DataAssetTable.Delete(row);
         if (TableView(row).Card is { } card) DetachInvalidFields(card);
