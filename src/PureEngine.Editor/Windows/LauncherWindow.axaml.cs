@@ -103,9 +103,29 @@ public partial class LauncherWindow : Window
 
     private async void OnRecentKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || RecentList.SelectedItem is not RecentProject project) return;
+        if (RecentList.SelectedItem is not RecentProject project) return;
+        if (e.Key is Key.Delete or Key.Back)
+        {
+            e.Handled = true;
+            RemoveRecent(project);
+            return;
+        }
+        if (e.Key != Key.Enter) return;
         e.Handled = true;
         await OpenRecent(project);
+    }
+
+    private void OnRemoveRecent(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.DataContext is not RecentProject project) return;
+        e.Handled = true;
+        RemoveRecent(project);
+    }
+
+    private void RemoveRecent(RecentProject project)
+    {
+        _history.Forget(project);
+        RefreshHistory();
     }
 
     private Task OpenRecent(RecentProject project) => RunOperation(async () =>

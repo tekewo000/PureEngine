@@ -34,6 +34,18 @@ public sealed class RecentProjects(string path)
         Entries = new[] { new RecentProject(project.Document.Name!, project.ManifestPath) }
             .Concat(Entries.Where(entry => !PathComparer.Equals(entry.ManifestPath, project.ManifestPath)))
             .Take(12).ToArray();
+        Save("The project was opened, but the recent projects history could not be saved.");
+    }
+
+    public void Forget(RecentProject project)
+    {
+        if (!Entries.Any(entry => PathComparer.Equals(entry.ManifestPath, project.ManifestPath))) return;
+        Entries = [.. Entries.Where(entry => !PathComparer.Equals(entry.ManifestPath, project.ManifestPath))];
+        Save("The recent projects history could not be saved.");
+    }
+
+    private void Save(string saveWarning)
+    {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
@@ -42,7 +54,7 @@ public sealed class RecentProjects(string path)
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Warning = "The project was opened, but the recent projects history could not be saved.";
+            Warning = saveWarning;
         }
     }
 

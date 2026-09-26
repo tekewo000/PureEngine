@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
@@ -7,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PureEngine.Editor;
+using System.Text.Json;
 
 internal static class Program
 {
@@ -240,6 +242,37 @@ internal static class Program
             recent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             Dispatcher.UIThread.RunJobs();
             Check(launcher.IsVisible && !desktop.Windows.OfType<MainWindow>().Any(), "Missing recent project must not close Launcher.");
+
+            // Per-item removal must clear the list, persist, and show the empty state.
+            var removeButton = launcher.GetVisualDescendants().OfType<Button>()
+                .First(button => AutomationProperties.GetName(button) == "Remove recent project");
+            Click(removeButton);
+            Check(recent.Items.Count == 0 && Control<TextBlock>(launcher, "EmptyHistory").IsVisible,
+                "Removing a recent project must clear the list and show the empty state.");
+            var pruned = new RecentProjects(historyPath);
+            pruned.Load();
+            Check(pruned.Entries.Count == 0, "Removing a recent project must persist.");
+
+            // Delete key removal follows the same rule on a reloaded entry.
+            var keyboardManifest = Path.Combine(root, "KeyboardDummy", "Project.pure.project.yaml");
+            File.WriteAllText(historyPath, JsonSerializer.Serialize(new[] { new RecentProject("KeyboardDummy", keyboardManifest) }));
+            var keyboardLauncher = new LauncherWindow(new RecentProjects(historyPath));
+            keyboardLauncher.Show();
+            Dispatcher.UIThread.RunJobs();
+            var keyboardRecent = keyboardLauncher.FindControl<ListBox>("RecentList")!;
+            Until(() => keyboardLauncher.GetVisualDescendants().OfType<Button>()
+                .Any(button => AutomationProperties.GetName(button) == "Remove recent project"));
+            keyboardRecent.SelectedIndex = 0;
+            keyboardRecent.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Delete });
+            Dispatcher.UIThread.RunJobs();
+            Check(keyboardRecent.Items.Count == 0
+                && keyboardLauncher.FindControl<TextBlock>("EmptyHistory")!.IsVisible,
+                "Delete must remove the selected recent project.");
+            var keyboardPruned = new RecentProjects(historyPath);
+            keyboardPruned.Load();
+            Check(keyboardPruned.Entries.Count == 0, "Delete must persist the removal.");
+            keyboardLauncher.Close();
+            Dispatcher.UIThread.RunJobs();
             File.WriteAllText(historyPath, "{broken");
             history.Load();
             Check(history.Entries.Count == 0 && history.Warning is not null, "Corrupt history must allow a fresh Launcher.");
@@ -247,7 +280,7 @@ internal static class Program
             desktop.Exit += (_, _) => exited = true;
             launcher.Close();
             Check(exited, "Closing Launcher must exit without a hidden window keeping the app alive.");
-            Console.WriteLine("PASS: Launcher startup, create, recent reopen, Editor return, unsaved Cancel/Discard, project failures, history, and exit.");
+            Console.WriteLine("PASS: Launcher startup, create, recent reopen, Editor return, unsaved Cancel/Discard, project failures, recent removal, history, and exit.");
         }
         finally
         {
