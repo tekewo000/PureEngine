@@ -22,10 +22,8 @@ public static class ComponentAssets
     /// into its own registry on creation. Holds no shared static registration. Survives user.* replacement.
     /// Transform, UiElement, Image, Button, and Text follow the same search, add, and save path as ordinary components.
     /// </summary>
-    public static void RegisterBuiltins(ComponentRegistry registry)
-    {
+    public static void RegisterBuiltins(ComponentRegistry registry) =>
         Runtime.GameRegistration.RegisterBuiltins(registry);
-    }
 
     /// <summary>Filters Inspector add candidates by substring match on type name, full name, and type ID. Case-insensitive.</summary>
     public static IReadOnlyList<(Type Type, string TypeId)> SearchCandidates(ComponentRegistry registry, string? query)

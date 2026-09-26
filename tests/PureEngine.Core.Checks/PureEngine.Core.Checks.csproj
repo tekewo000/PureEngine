@@ -19,6 +19,5 @@
     <Compile Include="../../src/PureEngine.Editor/DataAssets/DataAssetFile.cs" Link="DataAssetFile.cs" />
     <Compile Include="../../src/PureEngine.Editor/Projects/ProjectFile.cs" Link="ProjectFile.cs" />
     <Compile Include="../../src/PureEngine.Editor/Projects/ProjectFileImporter.cs" Link="ProjectFileImporter.cs" />
-    <Compile Include="../../src/PureEngine.Editor/Samples/*.cs" Link="Samples/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

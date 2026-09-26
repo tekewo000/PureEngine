@@ -19,8 +19,6 @@ public static class GameServices
         ProjectGameServices.Apply(userCode, services);
     };
 
-    public static void Configure(IServiceCollection services)
-    {
+    public static void Configure(IServiceCollection services) =>
         Runtime.GameRegistration.Configure(services);
-    }
 }
