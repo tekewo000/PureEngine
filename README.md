@@ -12,7 +12,7 @@ C#15＋VulkanのV0〜V2を実装しました。Scene Viewには編集中のScene
 
 - 灰色のダークテーマで、タブの切り替えとペインのサイズ変更ができる。
 - 起動時にLauncherを表示し、Projectの新規作成・既存Projectの選択・最近開いたProjectからの再開ができる。
-- 下部のProject Explorerは左にフォルダツリー、右にファイル一覧を表示する。プロジェクトに存在するフォルダとファイルだけを表示し、組み込みサンプルの一覧は追加しない。素材の登録情報（`.pureasset.yaml`）は表示しない。
+- 下部のProject Explorerは左にフォルダツリー、右にファイル一覧を表示する。エディタが扱う種類（シーン／C#／画像／データアセット／Prefab／Localization）とそのフォルダだけを表示し、組み込みサンプルの一覧は追加しない。Projectの管理情報（`Project.pure.project.yaml`・生成したcsproj／slnx／`global.json`）・`.pureengine`・隠しと`bin`／`obj`のフォルダ・素材の登録情報（`.pureasset.yaml`）・その他の一般ファイルは表示しない。
 - OSのファイル／フォルダをProject Explorerへドロップするとコピーする。フォルダ上はその中へ、余白は表示中のフォルダへ取り込む（右ペインでフォルダを選択中ならそのフォルダを優先）。同名は連番化し、同じ親フォルダへのドロップはスキップする。Play中は受け付けない。途中で失敗した場合、コピー済みの項目は残る。画像のSprite登録には引き続き「Import Image…」を使う。
 - 自作C#はProject内の任意フォルダから読み込み、元のフォルダ内のファイルをドラッグしてアタッチできる。エンジン側への手動登録は不要。組み込みサンプルのComponents一覧は表示しない。
 - Scene View／Gameは左、Stuffsは中央、Inspectorは右に配置する。

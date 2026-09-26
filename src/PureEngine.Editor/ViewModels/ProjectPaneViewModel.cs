@@ -52,7 +52,6 @@ public sealed class ProjectPaneViewModel : EditorObservable
                 var startup = (project.Document.StartupScene ?? "").Replace('\\', '/');
                 foreach (var file in project.ListFiles(folder))
                 {
-                    if (file.EndsWith(".pureasset.yaml", StringComparison.OrdinalIgnoreCase)) continue;
                     var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
                     var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
                     var isDataAsset = !isScene && ProjectFile.IsDataAssetFileName(file);
