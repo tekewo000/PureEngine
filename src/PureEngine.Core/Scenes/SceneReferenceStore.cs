@@ -78,6 +78,52 @@ public sealed class SceneReferenceStore
         return _legacy.TryGetValue((ownerId, path), out raw);
     }
 
+    /// <summary>Removes a list or vector row and shifts retained paths in all later rows.</summary>
+    public void RemoveSequenceElement(Guid ownerId, string path, int index)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        RemapPaths(ownerId, savedPath =>
+        {
+            var prefix = path + "[";
+            if (!savedPath.StartsWith(prefix, StringComparison.Ordinal)) return savedPath;
+            var end = savedPath.IndexOf(']', prefix.Length);
+            if (end < 0 || !int.TryParse(savedPath.AsSpan(prefix.Length, end - prefix.Length),
+                System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var savedIndex))
+                return savedPath;
+            if (savedIndex == index) return null;
+            return savedIndex > index ? $"{path}[{savedIndex - 1}]{savedPath[(end + 1)..]}" : savedPath;
+        });
+    }
+
+    /// <summary>Moves a dictionary row, including nested Missing and legacy reference slots.</summary>
+    public void RenameDictionaryKey(Guid ownerId, string path, string oldKey, string newKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(oldKey);
+        ArgumentNullException.ThrowIfNull(newKey);
+        if (oldKey == newKey) return;
+        var oldPath = DictionaryPath(path, oldKey);
+        var newPath = DictionaryPath(path, newKey);
+        RemovePathsForMember(ownerId, newPath);
+        MovePath(ownerId, oldPath, newPath);
+    }
+
+    private void RemapPaths(Guid ownerId, Func<string, string?> remap)
+    {
+        Remap(_missing);
+        Remap(_missingPrefabs);
+        Remap(_legacy);
+        void Remap<T>(Dictionary<(Guid OwnerId, string Path), T> entries)
+        {
+            var saved = entries.Where(entry => entry.Key.OwnerId == ownerId).ToList();
+            foreach (var entry in saved) entries.Remove(entry.Key);
+            foreach (var entry in saved)
+                if (remap(entry.Key.Path) is { } path)
+                    entries[(ownerId, path)] = entry.Value;
+        }
+    }
+
     /// <summary>Moves retained IDs and legacy values when an Inspector collection slot moves.</summary>
     public void MovePath(Guid ownerId, string oldPath, string newPath)
     {
