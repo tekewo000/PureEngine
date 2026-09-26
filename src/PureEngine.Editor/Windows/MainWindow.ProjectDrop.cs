@@ -199,7 +199,7 @@ public partial class MainWindow
             var node = visual?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault();
             if (node?.Tag is string tag && tag != ComponentsNode)
                 return tag;
-            return _explorerFolder;
+            return ViewModel.Project.Folder;
         }
 
         var tile = visual?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
@@ -222,7 +222,7 @@ public partial class MainWindow
             var node = visual?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault();
             if (node?.Tag is string tag && tag != ComponentsNode)
                 return tag;
-            return _explorerFolder;
+            return ViewModel.Project.Folder;
         }
 
         var tile = visual?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
@@ -283,8 +283,8 @@ public partial class MainWindow
             return;
         }
 
-        _explorerFolder = targetRelative;
-        _explorerSelectedFile = imported.LastOrDefault(File.Exists);
+        ViewModel.Project.Folder = targetRelative;
+        ViewModel.Project.SelectedFile = imported.LastOrDefault(File.Exists);
         RefreshProjectExplorer();
         var display = string.IsNullOrEmpty(targetRelative) ? "(root)" : targetRelative;
         SetFileStatus($"Imported files: {imported.Count} -> {display}");
@@ -359,8 +359,8 @@ public partial class MainWindow
         });
         RemapSceneReferences(sourceFull, destination, isDirectory);
         RefreshProjectAssets();
-        _explorerFolder = targetRelative;
-        _explorerSelectedFile = destination;
+        ViewModel.Project.Folder = targetRelative;
+        ViewModel.Project.SelectedFile = destination;
         RefreshProjectExplorer();
         RescanTableRows();
         var displayTarget = string.IsNullOrEmpty(targetRelative) ? "(root)" : targetRelative;

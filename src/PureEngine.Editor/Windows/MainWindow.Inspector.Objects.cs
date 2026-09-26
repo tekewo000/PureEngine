@@ -71,7 +71,7 @@ public partial class MainWindow
         var nullStatus = new TextBlock { Classes = { "memberType" }, Text = "Null", VerticalAlignment = VerticalAlignment.Center };
         var create = BuildHeaderButton("Create", $"{automationName}.Create");
         var body = new StackPanel { Spacing = 4 };
-        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, _collapsedMembers,
+        var toggle = BuildCollapseToggle($"{automationName}.Collapse", automationName, ViewModel.Inspector.CollapsedMembers,
             nowExpanded => body.IsVisible = nowExpanded);
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(toggle);
@@ -84,7 +84,7 @@ public partial class MainWindow
         void refresh()
         {
             foreach (var box in body.GetVisualDescendants().OfType<TextBox>())
-                _invalidFields.Remove(box);
+                ClearInputError(box);
             body.Children.Clear();
             var value = getter();
             if (value is null || value.GetType() != objectType)
@@ -97,7 +97,7 @@ public partial class MainWindow
             {
                 nullHeader.IsVisible = false;
                 header.IsVisible = true;
-                body.IsVisible = !_collapsedMembers.TryGetValue(automationName, out var collapsed) || !collapsed;
+                body.IsVisible = !ViewModel.Inspector.CollapsedMembers.TryGetValue(automationName, out var collapsed) || !collapsed;
                 var members = ComponentSchema.GetInspectorMembers(objectType);
                 fields.Text = $"{members.Count} fields";
                 foreach (var member in members)
@@ -129,7 +129,7 @@ public partial class MainWindow
             if (IsPlaying) return;
             setter(null);
             if (ownerId is { } id && baseStorePath is not null)
-                _documents.Current.Current.References.RemovePathsForMember(id, baseStorePath);
+                Documents.Current.Current.References.RemovePathsForMember(id, baseStorePath);
             refresh();
         };
         ToolTip.SetTip(root, $"{objectType.Name} — Create to edit, Set Null to clear");

@@ -121,7 +121,7 @@ public partial class MainWindow
         if (_pendingCompilation is not { Result: { } compiled } attempt || _compileTracker is null
             || _reloadCoordinator.IsReloading
             || EditorOperationGate.ReloadBlockReason(IsPlaying, _fileBusy, HasInputErrors) is not null) return;
-        if (_documents.Prefab is not null && compiled.Success)
+        if (Documents.Prefab is not null && compiled.Success)
         {
             SetFileStatus("C# changes are ready. Close Prefab Editor to apply them.");
             return;
@@ -134,7 +134,7 @@ public partial class MainWindow
             return;
         }
         var selectedId = GetSelectedSceneObject()?.Id;
-        var outcome = _reloadCoordinator.Apply(_documents, _components, compiled, _project);
+        var outcome = _reloadCoordinator.Apply(Documents, _components, compiled, _project);
         foreach (var diagnostic in outcome.Diagnostics)
         {
             var message = UserCodeCompiler.FormatDiagnostic(diagnostic);

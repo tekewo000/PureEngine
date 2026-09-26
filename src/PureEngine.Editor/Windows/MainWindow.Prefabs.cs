@@ -43,9 +43,9 @@ public partial class MainWindow
         await RunFileOperation(async () =>
         {
             if (_project is null || RejectWhenPlaying("Save Prefab")) return;
-            var name = await AskExplorerName("Save as Prefab", "Prefab file name", _project.NextPrefabName(_explorerFolder, root.Name));
+            var name = await AskExplorerName("Save as Prefab", "Prefab file name", _project.NextPrefabName(ViewModel.Project.Folder, root.Name));
             if (name is null) return;
-            SavePrefabToPath(root, _explorerFolder, name);
+            SavePrefabToPath(root, ViewModel.Project.Folder, name);
             await Task.CompletedTask;
         });
     }
@@ -65,12 +65,12 @@ public partial class MainWindow
         _project.ValidatePrefabPath(path);
         if (File.Exists(path) || Directory.Exists(path))
             throw new IOException("A folder or file with the same name already exists.");
-        var prefabId = PrefabFile.Create(path, _documents.Current.Current, root, _components.Registry);
+        var prefabId = PrefabFile.Create(path, Documents.Current.Current, root, _components.Registry);
         root.PrefabId = prefabId;
         MarkSceneChanged();
         RefreshHierarchy();
-        _explorerFolder = relativeDirectory;
-        _explorerSelectedFile = path;
+        ViewModel.Project.Folder = relativeDirectory;
+        ViewModel.Project.SelectedFile = path;
         RefreshProjectExplorer();
         SetFileStatus($"Saved prefab: {fileName}");
         return path;
@@ -106,14 +106,14 @@ public partial class MainWindow
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (_project is null) throw new InvalidOperationException("Open a project first.");
         if (RejectWhenPlaying("Place Prefab")) throw new InvalidOperationException("Cannot place prefabs while playing.");
-        if (IsPrefabEditing) parent ??= _documents.Prefab!.Current.RootObjects.Single();
+        if (IsPrefabEditing) parent ??= Documents.Prefab!.Current.RootObjects.Single();
         _project.ValidatePrefabPath(path);
         var document = PrefabFile.Load(path);
         SceneObject placed;
         try
         {
             placed = new PrefabSerializer(_components.Registry).Instantiate(
-                _documents.Current.Current, document, out _, parent, EditSession.Factory);
+                Documents.Current.Current, document, out _, parent, EditSession.Factory);
         }
         catch (Exception error)
         {

@@ -31,10 +31,10 @@ public partial class MainWindow
         public float Zoom { get; set; } = 1;
     }
 
-    internal bool IsPrefabEditing => _documents.IsPrefabActive;
+    internal bool IsPrefabEditing => Documents.IsPrefabActive;
 
     private SceneObject? EditingParent() =>
-        GetSelectedSceneObject() ?? (IsPrefabEditing ? _documents.Prefab!.Current.RootObjects.Single() : null);
+        GetSelectedSceneObject() ?? (IsPrefabEditing ? Documents.Prefab!.Current.RootObjects.Single() : null);
 
     private bool IsPrefabRoot(SceneObject item) => IsPrefabEditing && item.Parent is null;
 
@@ -46,12 +46,12 @@ public partial class MainWindow
         if (RejectWhenPlaying("Open Prefab")) return;
         if (_project is null) throw new InvalidOperationException("Open a project first.");
         _project.ValidatePrefabPath(path);
-        if (HasInputErrors && _documents.Asset is null && !IsPrefabEditing)
+        if (HasInputErrors && Documents.Asset is null && !IsPrefabEditing)
         {
             SetFileStatus("Fix the Inspector input errors before switching editing documents.", true);
             return;
         }
-        if (_documents.Prefab?.Path is { } opened && SamePath(opened, path))
+        if (Documents.Prefab?.Path is { } opened && SamePath(opened, path))
         {
             if (!await ConfirmCloseDataAsset()) return;
             ActivateEditorViewport(PrefabViewportIndex);
@@ -74,9 +74,9 @@ public partial class MainWindow
             candidate.Replace(restored, Path.GetFullPath(path), changed);
             if (!await ConfirmDataAssetClose(closeOnConfirm: false)
                 || !await ConfirmPrefabEditorClose(closeOnConfirm: false)) return;
-            if (_documents.Asset is not null) CloseDataAssetForEdit();
+            if (Documents.Asset is not null) CloseDataAssetForEdit();
             ClosePrefabEditor();
-            _documents.AdoptPrefab(candidate, id);
+            Documents.AdoptPrefab(candidate, id);
             ownsCandidate = false;
             _prefabViewState = new EditingViewState
             {
@@ -91,7 +91,7 @@ public partial class MainWindow
         catch
         {
             // A user Inspector getter may fail during activation. Never leave a partially adopted document.
-            if (ReferenceEquals(candidate, _documents.Prefab)) ClosePrefabEditor();
+            if (ReferenceEquals(candidate, Documents.Prefab)) ClosePrefabEditor();
             throw;
         }
         finally
@@ -106,15 +106,15 @@ public partial class MainWindow
         var requested = ViewportTabs.SelectedIndex;
         if (requested == _activeViewportIndex) return;
         SetViewportSelection(_activeViewportIndex);
-        if (_fileBusy || (requested == PrefabViewportIndex && (_documents.Prefab is null || IsPlaying))
+        if (_fileBusy || (requested == PrefabViewportIndex && (Documents.Prefab is null || IsPlaying))
             || (requested == DataAssetTableViewportIndex && IsPlaying)) return;
         // The table is an additional view, not a document replacement: it never forces the single asset closed.
-        if (requested != DataAssetTableViewportIndex && HasInputErrors && _documents.Asset is null)
+        if (requested != DataAssetTableViewportIndex && HasInputErrors && Documents.Asset is null)
         {
             SetFileStatus("Fix the Inspector input errors before switching editing documents.", true);
             return;
         }
-        if (_documents.Asset is not null && requested != DataAssetTableViewportIndex)
+        if (Documents.Asset is not null && requested != DataAssetTableViewportIndex)
         {
             await RunFileOperation(async () =>
             {
@@ -135,7 +135,7 @@ public partial class MainWindow
     /// <summary>Switches the shared editing surface, hierarchy, and Inspector together without replacing either document.</summary>
     private void ActivateEditorViewport(int index)
     {
-        var prefab = index == PrefabViewportIndex && _documents.Prefab is not null;
+        var prefab = index == PrefabViewportIndex && Documents.Prefab is not null;
         CancelSceneViewDrag();
         var contextChanged = prefab != IsPrefabEditing;
         if (contextChanged)
@@ -148,7 +148,7 @@ public partial class MainWindow
             ClearHierarchyDropIndicator();
             _hierarchyPress = null;
             _hierarchyDragId = null;
-            _documents.ActivatePrefab(prefab);
+            Documents.ActivatePrefab(prefab);
             var next = prefab ? _prefabViewState : _sceneViewState;
             _scenePan = next.Pan;
             _sceneZoom = next.Zoom;
@@ -157,16 +157,13 @@ public partial class MainWindow
             HierarchyNode? restoredSelection = null;
             try
             {
-                _hierarchyRoots = BuildHierarchyRoots();
-                foreach (var node in EnumerateHierarchyNodes())
-                    node.IsExpanded = next.Expanded.Contains(node.Ref.Id);
-                SceneObjects.ItemsSource = _hierarchyRoots;
-                restoredSelection = _documents.Asset is null
+                ViewModel.Hierarchy.RebuildRoots(next.Expanded);
+                restoredSelection = Documents.Asset is null
                     ? EnumerateHierarchyNodes().FirstOrDefault(node => node.Ref.Id == next.SelectionId) : null;
                 SceneObjects.SelectedItems.Clear();
                 if (restoredSelection is not null) SceneObjects.SelectedItems.Add(restoredSelection);
             }
-            finally { _hierarchyRefreshing = false; }
+            finally { _hierarchyRefreshing = false; CaptureHierarchySelection(); }
             // Reuse the exact Scene View rendering and input implementation, not a second editor.
             SceneViewHost.Children.Remove(SceneViewport);
             PrefabViewHost.Children.Remove(SceneViewport);
@@ -182,17 +179,17 @@ public partial class MainWindow
     private void UpdatePrefabEditorChrome()
     {
         if (PrefabEditorTab is null) return;
-        var name = Path.GetFileName(_documents.Prefab?.Path);
-        var dirty = _documents.Prefab?.IsDirty == true;
+        var name = Path.GetFileName(Documents.Prefab?.Path);
+        var dirty = Documents.Prefab?.IsDirty == true;
         PrefabEditorTab.Header = dirty ? "Prefab Editor *" : "Prefab Editor";
         PrefabEditorTitle.Text = $"{name}{(dirty ? " *" : "")}";
-        PrefabEditorPath.Text = _documents.Prefab?.Path is { } path && _project is not null
+        PrefabEditorPath.Text = Documents.Prefab?.Path is { } path && _project is not null
             ? Path.GetRelativePath(_project.RootDirectory, path) : "";
-        ToolTip.SetTip(PrefabEditorPath, _documents.Prefab?.Path);
+        ToolTip.SetTip(PrefabEditorPath, Documents.Prefab?.Path);
         StuffsContext.IsVisible = IsPrefabEditing;
         StuffsContext.Text = $"Prefab: {name}";
-        ToolTip.SetTip(StuffsContext, _documents.Prefab?.Path);
-        SavePrefabEditorButton.IsEnabled = _documents.Prefab is not null && !IsPlaying;
+        ToolTip.SetTip(StuffsContext, Documents.Prefab?.Path);
+        SavePrefabEditorButton.IsEnabled = Documents.Prefab is not null && !IsPlaying;
         SaveSceneMenu.Header = IsPrefabEditing ? "Save Prefab" : "Save Scene";
         SaveSceneAsMenu.IsEnabled = !IsPrefabEditing && !IsPlaying;
         PrefabEditorTab.IsEnabled = !IsPlaying;
@@ -204,14 +201,14 @@ public partial class MainWindow
     internal bool SavePrefabEditor()
     {
         CancelSceneViewDrag();
-        if (_documents.Prefab is null || RejectWhenPlaying("Save Prefab")) return false;
-        if (IsPrefabEditing && _documents.Asset is null && HasInputErrors)
+        if (Documents.Prefab is null || RejectWhenPlaying("Save Prefab")) return false;
+        if (IsPrefabEditing && Documents.Asset is null && HasInputErrors)
         {
             SetFileStatus("Cannot save prefab. Fix the Inspector input errors.", true);
             return false;
         }
-        var path = _documents.Prefab.Path!;
-        _documents.SavePrefab(_components.Registry, _project!);
+        var path = Documents.Prefab.Path!;
+        Documents.SavePrefab(_components.Registry, _project!);
         UpdateSceneTitle();
         UpdatePrefabEditorChrome();
         SetFileStatus($"Saved prefab: {Path.GetFileName(path)}");
@@ -225,10 +222,10 @@ public partial class MainWindow
 
     private async Task<bool> ConfirmPrefabEditorClose(bool closeOnConfirm)
     {
-        if (_documents.Prefab is null) return true;
+        if (Documents.Prefab is null) return true;
         CancelSceneViewDrag();
         if (closeOnConfirm && IsPrefabEditing && !await ConfirmDataAssetClose(closeOnConfirm: false)) return false;
-        if (_documents.Prefab.IsDirty || (IsPrefabEditing && _documents.Asset is null && HasInputErrors))
+        if (Documents.Prefab.IsDirty || (IsPrefabEditing && Documents.Asset is null && HasInputErrors))
         {
             var dialog = new Window
             {
@@ -247,7 +244,7 @@ public partial class MainWindow
                 Margin = new Thickness(20), Spacing = 20,
                 Children =
                 {
-                    new TextBlock { Text = $"{Path.GetFileName(_documents.Prefab.Path)} has unsaved changes. Save?", TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = $"{Path.GetFileName(Documents.Prefab.Path)} has unsaved changes. Save?", TextWrapping = TextWrapping.Wrap },
                     buttons,
                 },
             };
@@ -256,7 +253,7 @@ public partial class MainWindow
         }
         if (closeOnConfirm)
         {
-            if (IsPrefabEditing && _documents.Asset is not null) CloseDataAssetForEdit();
+            if (IsPrefabEditing && Documents.Asset is not null) CloseDataAssetForEdit();
             ClosePrefabEditor();
         }
         return true;
@@ -264,7 +261,7 @@ public partial class MainWindow
 
     internal void ClosePrefabEditor()
     {
-        var previous = _documents.Prefab;
+        var previous = Documents.Prefab;
         if (previous is null) return;
         try
         {
@@ -272,7 +269,7 @@ public partial class MainWindow
         }
         finally
         {
-            try { _documents.ClosePrefab(); }
+            try { Documents.ClosePrefab(); }
             finally
             {
                 _prefabViewState = new EditingViewState();

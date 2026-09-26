@@ -99,7 +99,7 @@ static class EditorOwnershipChecks
         Check(EditStore(editor).IsDirty && cards.Children.Count == 1
             && editor.FindControl<TextBlock>("ComponentsHeader")!.Text == "Components (1)",
             "Remove must update the Inspector and dirty state.");
-        Check(siblingInput.Text == "unfinished" && Field<HashSet<TextBox>>(editor, "_invalidFields").SetEquals([siblingInput]),
+        Check(siblingInput.Text == "unfinished" && editor.ViewModel.Inspector.InvalidCount == 1 && (bool)Call(editor, "IsInvalidInput", siblingInput)!,
             "Remove must clear only its own input errors and preserve sibling edits.");
         siblingInput.Text = "123";
         Dispatcher.UIThread.RunJobs();

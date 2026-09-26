@@ -16,9 +16,10 @@ namespace PureEngine.Editor;
 
 public partial class MainWindow : Window
 {
-    private readonly EditorDocuments _documents = new();
-    internal EditSceneStore SceneDocument => _documents.Scene;
-    internal EditSceneStore? PrefabDocument => _documents.Prefab;
+    public EditorViewModel ViewModel { get; } = new();
+    private EditorDocuments Documents => ViewModel.Documents;
+    internal EditSceneStore SceneDocument => Documents.Scene;
+    internal EditSceneStore? PrefabDocument => Documents.Prefab;
     /// <summary>Owner of code-reload preparation, adoption, cleanup, and pending state. Verifiable without a UI.</summary>
     private readonly UserCodeReloadCoordinator _reloadCoordinator = new();
     /// <summary>Type owner for this window (project). Serializer, attach, Play, and reload all use it explicitly.</summary>
@@ -30,26 +31,22 @@ public partial class MainWindow : Window
     private PointerPressedEventArgs? _assetPress;
     private Point _assetPressPosition;
     private IReadOnlyList<Type>? _dragTypes;
-    private readonly HashSet<TextBox> _invalidFields = [];
-    /// <summary>Collapsed state of Component cards. Kept per type and preserved across selection changes.</summary>
-    private readonly Dictionary<string, bool> _collapsedCards = [with(StringComparer.Ordinal)];
-    /// <summary>Collapsed state of collection-member (List/Dictionary) element lists. Kept per member.</summary>
-    private readonly Dictionary<string, bool> _collapsedMembers = [with(StringComparer.Ordinal)];
+    private readonly Dictionary<TextBox, Guid> _inputIds = [];
     private bool _viewportFitted;
 
     /// <summary>Whether UI-driven input errors exist. Passed as a value to gate decisions.</summary>
-    internal bool HasInputErrors => _invalidFields.Count > 0 || (NameError?.IsVisible == true);
+    internal bool HasInputErrors => ViewModel.Inspector.HasInputErrors;
 
-    internal EditSceneStore EditSceneStore => _documents.Current;
+    internal EditSceneStore EditSceneStore => Documents.Current;
 
     internal UserCodeReloadCoordinator ReloadCoordinator => _reloadCoordinator;
 
-    internal GameSession EditSession => _documents.Current.Services;
+    internal GameSession EditSession => Documents.Current.Services;
 
     public MainWindow(ProjectSession session) : this()
     {
         ArgumentNullException.ThrowIfNull(session);
-        _documents.Current.ReplaceServices(session.EditServices).Dispose();
+        Documents.Current.ReplaceServices(session.EditServices).Dispose();
         // Transfers Session ownership (Components and Scene) to this window. The transferred Session is not disposed.
         var placeholder = _components;
         _components = session.Components;
@@ -88,6 +85,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DataContext = ViewModel;
         // Only once at startup, adjusts the bottom pane height from the live Scene View/Game width so it is 16:9.
         CenterGrid.LayoutUpdated += OnCenterLayoutUpdated;
         // Per-project type owner. Held independently even for empty projects (tests, unopened).
@@ -99,7 +97,7 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnFileShortcut, RoutingStrategies.Tunnel);
         UpdateSceneTitle();
         InitHierarchy();
-        ObjectName.TextChanged += OnObjectNameChanged;
+        InitInspectorModel();
         RefreshProjectExplorer();
         SceneSurface.AddHandler(PointerPressedEvent, OnScenePointerPressed, RoutingStrategies.Tunnel);
         ProjectFiles.AddHandler(PointerPressedEvent, OnAssetPressed, RoutingStrategies.Tunnel);
@@ -212,7 +210,7 @@ public partial class MainWindow : Window
         if (_pressedDataAsset is { FullPath: not null } dataEntry && _project is not null)
         {
             RefreshReferenceAssets();
-            var assets = _documents.Current.Current.DataAssets;
+            var assets = Documents.Current.Current.DataAssets;
             var relative = Path.GetRelativePath(_project.RootDirectory, dataEntry.FullPath).Replace('\\', '/');
             var id = assets.Ids.FirstOrDefault(id => assets.DisplayName(id) == relative);
             if (id != Guid.Empty)
@@ -334,22 +332,17 @@ public partial class MainWindow : Window
     {
         DetachInvalidFields(ComponentEditors);
         ComponentEditors.Children.Clear();
-        if (_documents.Asset is not null && GetSelectedSceneObject() is null)
+        if (Documents.Asset is not null && GetSelectedSceneObject() is null)
         {
-            AttachedClasses.IsVisible = false;
-            NoComponentsHint.IsVisible = false;
             AttachError.IsVisible = false;
-            ComponentsHeader.Text = "Components";
             RefreshDataAssetInspector();
             return;
         }
-        DataAssetInspector.IsVisible = false;
+        ViewModel.DataAsset.Refresh();
         var item = GetSelectedSceneObject();
-        var components = item?.Components.ToArray() ?? [];
-        AttachedClasses.IsVisible = item is not null;
-        NoComponentsHint.IsVisible = item is not null && components.Length == 0;
+        ViewModel.Inspector.RefreshComponents();
+        var components = ViewModel.Inspector.Components;
         AttachError.IsVisible = false;
-        ComponentsHeader.Text = $"Components ({components.Length})";
         UpdateErrorBadge();
         if (item is null) return;
         foreach (var component in components)
@@ -360,23 +353,10 @@ public partial class MainWindow : Window
     private void DetachInvalidFields(Control root)
     {
         foreach (var box in root.GetVisualDescendants().OfType<TextBox>().ToArray())
-            _invalidFields.Remove(box);
+            ClearInputError(box);
     }
 
-    private void UpdateErrorBadge()
-    {
-        ComponentsError.IsVisible = _invalidFields.Count > 0;
-        ComponentsError.Text = $"Error {_invalidFields.Count}";
-        ToolTip.SetTip(ComponentsError, _invalidFields.Count > 0
-            ? $"{_invalidFields.Count} field(s) have invalid input — fix the highlighted fields to save."
-            : null);
-        DataAssetInvalid.IsVisible = _invalidFields.Count > 0;
-        DataAssetInvalid.Text = $"Error {_invalidFields.Count}";
-        ToolTip.SetTip(DataAssetInvalid, _invalidFields.Count > 0
-            ? $"{_invalidFields.Count} field(s) have invalid input — fix the highlighted fields to save."
-            : null);
-        UpdateDataAssetTableChrome();
-    }
+    private void UpdateErrorBadge() => UpdateDataAssetTableChrome();
 
     /// <summary>Collapse toggle colors. The glyph always carries the structural accent; collapsed state adds a wash fill.</summary>
     private static readonly SolidColorBrush CollapseToggleBrush = new(Color.Parse("#8B7CF6"));
@@ -439,7 +419,7 @@ public partial class MainWindow : Window
         if (members.Count == 0 && priorityFields.Count == 0)
             content.Children.Add(new TextBlock { Classes = { "cardMeta" }, Text = "No editable fields" });
         var collapseKey = type.FullName ?? type.Name;
-        var toggle = BuildCollapseToggle($"{type.Name}.Collapse", collapseKey, _collapsedCards,
+        var toggle = BuildCollapseToggle($"{type.Name}.Collapse", collapseKey, ViewModel.Inspector.CollapsedCards,
             nowExpanded => content.IsVisible = nowExpanded);
         var body = new StackPanel { Spacing = 8 };
         var header = new Grid { ColumnDefinitions = [with("*,Auto")], ColumnSpacing = 8 };
@@ -480,10 +460,9 @@ public partial class MainWindow : Window
             if (RejectWhenPlaying("Remove") || !ComponentEditors.Children.Contains(card)) return;
             if (!item.Detach(component)) return;
             foreach (var box in card.GetVisualDescendants().OfType<TextBox>())
-                _invalidFields.Remove(box);
+                ClearInputError(box);
             ComponentEditors.Children.Remove(card);
-            ComponentsHeader.Text = $"Components ({item.Components.Count})";
-            NoComponentsHint.IsVisible = item.Components.Count == 0;
+            ViewModel.Inspector.RefreshComponents();
             UpdateErrorBadge();
             MarkSceneChanged();
             RefreshUiWarnings(item);
@@ -770,17 +749,7 @@ public partial class MainWindow : Window
             box.SetValue(AutomationProperties.NameProperty, automationName);
             ToolTip.SetTip(box, hint);
             box.TextChanged += (_, _) =>
-            {
-                if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-                {
-                    SetMemberValue(component, member, value);
-                    MarkInvalid(box, null, hint);
-                }
-                else
-                {
-                    MarkInvalid(box, "Enter an integer");
-                }
-            };
+                MarkInvalid(box, ViewModel.Inspector.SetNumericText(component, member, box.Text), hint);
             AttachEscapeRevert(box, component, member);
             return box;
         }
@@ -794,18 +763,7 @@ public partial class MainWindow : Window
             box.SetValue(AutomationProperties.NameProperty, automationName);
             ToolTip.SetTip(box, hint);
             box.TextChanged += (_, _) =>
-            {
-                if (float.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value)
-                    && float.IsFinite(value))
-                {
-                    SetMemberValue(component, member, value);
-                    MarkInvalid(box, null, hint);
-                }
-                else
-                {
-                    MarkInvalid(box, "Enter a number");
-                }
-            };
+                MarkInvalid(box, ViewModel.Inspector.SetNumericText(component, member, box.Text), hint);
             AttachEscapeRevert(box, component, member);
             return box;
         }
@@ -891,14 +849,14 @@ public partial class MainWindow : Window
             box.ClearValue(TextBox.BorderBrushProperty);
             box.ClearValue(TextBox.BackgroundProperty);
             ToolTip.SetTip(box, validTip);
-            _invalidFields.Remove(box);
+            ClearInputError(box);
         }
         else
         {
             box.BorderBrush = InvalidBrush;
             box.Background = InvalidFieldBackground;
             ToolTip.SetTip(box, message);
-            _invalidFields.Add(box);
+            SetInputError(box, message);
         }
         UpdateErrorBadge();
         QueuePendingUserCodeReload();
@@ -949,26 +907,9 @@ public partial class MainWindow : Window
         type.IsGenericType ? $"{type.Name.Split('`')[0]}<{string.Join(", ", type.GetGenericArguments().Select(FriendlyTypeName))}>" :
         type.Name;
 
-    private static object? GetMemberValue(object component, MemberInfo member) =>
-        member switch
-        {
-            FieldInfo field => field.GetValue(component),
-            PropertyInfo property => property.GetValue(component),
-            _ => throw new NotSupportedException($"Unsupported member: {member.Name}"),
-        };
+    private static object? GetMemberValue(object component, MemberInfo member) => InspectorViewModel.ReadMember(component, member);
 
-    private void SetMemberValue(object component, MemberInfo member, object? value)
-    {
-        if (IsPlaying) return;
-        if (Equals(GetMemberValue(component, member), value)) return;
-        switch (member)
-        {
-            case FieldInfo field: field.SetValue(component, value); break;
-            case PropertyInfo property: property.SetValue(component, value); break;
-            default: throw new NotSupportedException($"Unsupported member: {member.Name}");
-        }
-        MarkEdited(component);
-    }
+    private void SetMemberValue(object component, MemberInfo member, object? value) => ViewModel.Inspector.SetMember(component, member, value);
 
     private void OnScenePointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -992,7 +933,7 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("Add")) return;
         var parent = EditingParent();
-        var item = _documents.Current.Current.AddNamed(baseName);
+        var item = Documents.Current.Current.AddNamed(baseName);
         try
         {
             foreach (var type in componentTypes)
@@ -1002,7 +943,7 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            _documents.Current.Current.Remove(item);
+            Documents.Current.Current.Remove(item);
             try { ComponentAssets.DisposeComponents(item.Components); }
             catch (Exception cleanupError) { Log.Engine.Error(cleanupError); }
             SetFileStatus($"Could not create UI: {error.GetBaseException().Message}", true);
@@ -1018,7 +959,7 @@ public partial class MainWindow : Window
     {
         if (RejectWhenPlaying("Add")) return;
         var parent = EditingParent();
-        var item = _documents.Current.Current.AddEmpty();
+        var item = Documents.Current.Current.AddEmpty();
         if (parent is not null) item.SetParent(parent);
         MarkSceneChanged();
         RefreshHierarchy(item.Id, expandId: parent?.Id);
@@ -1028,8 +969,10 @@ public partial class MainWindow : Window
 
     private async void OnObjectSelected(object? sender, SelectionChangedEventArgs e)
     {
-        if (_hierarchyRefreshing || _assetSelectionChanging) return;
-        if (GetSelectedSceneObject() is not null && _documents.Asset is not null)
+        if (_hierarchyRefreshing) return;
+        CaptureHierarchySelection();
+        if (_assetSelectionChanging) return;
+        if (GetSelectedSceneObject() is not null && Documents.Asset is not null)
         {
             _assetSelectionChanging = true;
             try
@@ -1052,39 +995,21 @@ public partial class MainWindow : Window
     private void RefreshObjectInspector()
     {
         var item = GetSelectedSceneObject();
-        if (_documents.Asset is not null && item is null)
+        ViewModel.Inspector.Select(item);
+        if (Documents.Asset is not null && item is null)
         {
             DeleteObjectMenuItem.IsEnabled = false;
             DuplicateObjectMenuItem.IsEnabled = false;
             RefreshDataAssetInspector();
             return;
         }
-        DataAssetInspector.IsVisible = false;
+        ViewModel.DataAsset.Refresh();
         var selected = GetSelectedSceneObjects();
         var canEdit = selected.Count > 0 && selected.Any(candidate => !IsPrefabRoot(candidate));
         DeleteObjectMenuItem.IsEnabled = canEdit && !IsPlaying;
         DuplicateObjectMenuItem.IsEnabled = canEdit && !IsPlaying;
         SavePrefabMenuItem.IsEnabled = item is not null && !IsPlaying;
-        ObjectInspector.IsVisible = item is not null;
-        ObjectName.Text = item?.Name ?? "";
-        var id = item?.Id.ToString() ?? "";
-        ObjectId.Text = id;
-        ToolTip.SetTip(ObjectId, id);
-        NameError.IsVisible = false;
         RefreshComponents();
-    }
-
-    private void OnObjectNameChanged(object? sender, TextChangedEventArgs e)
-    {
-        if (IsPlaying) return;
-        if (GetSelectedSceneObject() is not SceneObject item) return;
-        NameError.IsVisible = string.IsNullOrWhiteSpace(ObjectName.Text);
-        if (!NameError.IsVisible && item.Name != ObjectName.Text!.Trim())
-        {
-            item.Rename(ObjectName.Text!);
-            MarkSceneChanged();
-        }
-        QueuePendingUserCodeReload();
     }
 
     private void OnDeleteObject(object? sender, RoutedEventArgs e) => DeleteSelectedObject();
@@ -1116,7 +1041,7 @@ public partial class MainWindow : Window
         var skippedPrefabRoot = false;
         foreach (var item in targets)
         {
-            if (!_documents.Current.Current.Objects.Contains(item)) continue;
+            if (!Documents.Current.Current.Objects.Contains(item)) continue;
             if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
             deletable.Add(item);
         }
@@ -1141,7 +1066,7 @@ public partial class MainWindow : Window
             }
         }
         foreach (var item in deletable)
-            _documents.Current.Current.Remove(item);
+            Documents.Current.Current.Remove(item);
         MarkSceneChanged();
         RefreshHierarchy(next?.Id);
         RefreshObjectInspector();
@@ -1165,7 +1090,7 @@ public partial class MainWindow : Window
         var skippedPrefabRoot = false;
         foreach (var item in targets)
         {
-            if (!_documents.Current.Current.Objects.Contains(item)) continue;
+            if (!Documents.Current.Current.Objects.Contains(item)) continue;
             if (IsPrefabRoot(item)) { skippedPrefabRoot = true; continue; }
             sources.Add(item);
         }
@@ -1180,7 +1105,7 @@ public partial class MainWindow : Window
         foreach (var source in sources)
         {
             PrefabDocument document;
-            try { document = serializer.Capture(_documents.Current.Current, source); }
+            try { document = serializer.Capture(Documents.Current.Current, source); }
             catch (Exception error)
             {
                 SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
@@ -1188,7 +1113,7 @@ public partial class MainWindow : Window
             }
             document.Id = source.PrefabId ?? Guid.NewGuid();
             SceneObject copy;
-            try { copy = serializer.Instantiate(_documents.Current.Current, document, source.Parent, EditSession.Factory); }
+            try { copy = serializer.Instantiate(Documents.Current.Current, document, source.Parent, EditSession.Factory); }
             catch (Exception error)
             {
                 SetFileStatus($"Cannot duplicate {source.Name}: {error.GetBaseException().Message}", true);
@@ -1245,7 +1170,7 @@ public partial class MainWindow : Window
                     stack.Push(child);
             }
         }
-        var siblings = first.Parent is null ? _documents.Current.Current.RootObjects : first.Parent.Children;
+        var siblings = first.Parent is null ? Documents.Current.Current.RootObjects : first.Parent.Children;
         var siblingIndex = IndexOfSceneObject(siblings, first);
         if (siblingIndex >= 0)
         {
@@ -1261,9 +1186,9 @@ public partial class MainWindow : Window
     {
         if (source.Parent is null)
         {
-            var roots = _documents.Current.Current.RootObjects;
+            var roots = Documents.Current.Current.RootObjects;
             var sourceIndex = IndexOfSceneObject(roots, source);
-            if (sourceIndex >= 0) _documents.Current.Current.SetRootSiblingIndex(copy, sourceIndex + 1);
+            if (sourceIndex >= 0) Documents.Current.Current.SetRootSiblingIndex(copy, sourceIndex + 1);
             return;
         }
         var siblings = source.Parent.Children;

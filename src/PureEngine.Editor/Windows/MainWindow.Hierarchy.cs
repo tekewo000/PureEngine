@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -20,7 +19,6 @@ public partial class MainWindow
         e.DataTransfer.TryGetValue(SceneObjectIdFormat) is { } text
         && Guid.TryParse(text, out var id) ? id : null;
 
-    private ObservableCollection<HierarchyNode> _hierarchyRoots = [];
     private PointerPressedEventArgs? _hierarchyPress;
     private Point _hierarchyPressPosition;
     private Guid? _hierarchyDragId;
@@ -47,35 +45,24 @@ public partial class MainWindow
     internal void SyncHierarchyForTest() => RefreshHierarchy();
 
     /// <summary>The primary selected SceneObject. Reads the TreeView primary selection as a HierarchyNode Ref.</summary>
-    internal SceneObject? GetSelectedSceneObject() => (SceneObjects.SelectedItem as HierarchyNode)?.Ref;
+    internal SceneObject? GetSelectedSceneObject() => ViewModel.Hierarchy.Primary?.Ref;
 
     /// <summary>All selected SceneObjects in display order. Empty when nothing is selected.</summary>
-    internal IReadOnlyList<SceneObject> GetSelectedSceneObjects()
-    {
-        List<SceneObject> selected = [];
-        foreach (var node in SceneObjects.SelectedItems.OfType<HierarchyNode>())
-            selected.Add(node.Ref);
-        if (selected.Count <= 1) return selected;
-        var order = new Dictionary<SceneObject, int>(ReferenceEqualityComparer.Instance);
-        var index = 0;
-        foreach (var item in EnumerateInDisplayOrder())
-            order[item] = index++;
-        selected.Sort((left, right) =>
-            (order.TryGetValue(left, out var leftIndex) ? leftIndex : int.MaxValue).CompareTo(
-                order.TryGetValue(right, out var rightIndex) ? rightIndex : int.MaxValue));
-        return selected;
-    }
+    internal IReadOnlyList<SceneObject> GetSelectedSceneObjects() => ViewModel.Hierarchy.SelectedObjects();
+
+    private void CaptureHierarchySelection() => ViewModel.Hierarchy.Select(
+        SceneObjects.SelectedItems.OfType<HierarchyNode>(), SceneObjects.SelectedItem as HierarchyNode);
 
     private List<Guid>? GetSelectedSceneObjectIds()
     {
         List<Guid> ids = [];
-        foreach (var node in SceneObjects.SelectedItems.OfType<HierarchyNode>())
+        foreach (var node in ViewModel.Hierarchy.SelectedNodes)
             ids.Add(node.Ref.Id);
         return ids.Count == 0 ? null : ids;
     }
 
     /// <summary>For tests: the primary selected node. Lets post-TreeView tests compare by instance instead of ID.</summary>
-    internal HierarchyNode? SelectedHierarchyNodeForTest() => SceneObjects.SelectedItem as HierarchyNode;
+    internal HierarchyNode? SelectedHierarchyNodeForTest() => ViewModel.Hierarchy.Primary;
 
     /// <summary>For tests: selects the node for a SceneObject. Goes through the tree display selection path.</summary>
     internal void SelectSceneObjectForTest(SceneObject? item) => SelectSceneObject(item, focus: false);
@@ -84,30 +71,11 @@ public partial class MainWindow
     internal void SelectSceneObjectsForTest(IEnumerable<SceneObject?> items) => SelectSceneObjects(items, focus: false);
 
     /// <summary>For tests: all selected nodes in display order.</summary>
-    internal IReadOnlyList<HierarchyNode> SelectedHierarchyNodesForTest() => [.. SceneObjects.SelectedItems.OfType<HierarchyNode>()];
+    internal IReadOnlyList<HierarchyNode> SelectedHierarchyNodesForTest() => ViewModel.Hierarchy.SelectedNodes;
 
     /// <summary>Enumerates HierarchyNodes. Used to stash state before a rebuild and restore the selection.</summary>
-    private IEnumerable<HierarchyNode> EnumerateHierarchyNodes(IEnumerable<HierarchyNode>? roots = null)
-    {
-        var stack = new Stack<HierarchyNode>(roots ?? _hierarchyRoots);
-        while (stack.Count > 0)
-        {
-            var node = stack.Pop();
-            yield return node;
-            foreach (var child in node.Children)
-                stack.Push(child);
-        }
-    }
-
-    /// <summary>Builds Stuffs nodes with prefab icons. Prefab editor roots show the prefab icon even for files saved before origin markers.</summary>
-    private ObservableCollection<HierarchyNode> BuildHierarchyRoots()
-    {
-        var roots = StuffsHierarchy.Build(_documents.Current.Current);
-        if (IsPrefabEditing)
-            foreach (var root in roots)
-                root.IsPrefab = true;
-        return roots;
-    }
+    private IEnumerable<HierarchyNode> EnumerateHierarchyNodes(IEnumerable<HierarchyNode>? roots = null) =>
+        ViewModel.Hierarchy.EnumerateNodes(roots);
 
     /// <summary>Rebuilds the Stuffs tree from scene parent-child links. Preserves expansion and selection by ID.</summary>
     internal void RefreshHierarchy(Guid? keepSelectedId = null, Guid? expandId = null)
@@ -127,17 +95,12 @@ public partial class MainWindow
         _hierarchyRefreshing = true;
         try
         {
-            var expanded = new HashSet<Guid>();
-            foreach (var node in EnumerateHierarchyNodes())
-                if (node.IsExpanded) expanded.Add(node.Ref.Id);
-            _hierarchyRoots = BuildHierarchyRoots();
-            foreach (var node in EnumerateHierarchyNodes())
-                if (expanded.Contains(node.Ref.Id)) node.IsExpanded = true;
-            SceneObjects.ItemsSource = _hierarchyRoots;
+            ViewModel.Hierarchy.RebuildRoots();
         }
         finally
         {
             _hierarchyRefreshing = false;
+            CaptureHierarchySelection();
         }
         if (expandId is { } parentId)
             foreach (var node in EnumerateHierarchyNodes())
@@ -160,12 +123,7 @@ public partial class MainWindow
         }
     }
 
-    private SceneObject? FindObject(Guid id)
-    {
-        foreach (var item in _documents.Current.Current.Objects)
-            if (item.Id == id) return item;
-        return null;
-    }
+    private SceneObject? FindObject(Guid id) => ViewModel.Hierarchy.Find(id);
 
     /// <summary>Selects the Stuffs tree for the given SceneObject. Expands parent nodes to make it visible.</summary>
     internal void SelectSceneObject(SceneObject? item, bool focus)
@@ -179,10 +137,10 @@ public partial class MainWindow
     {
         List<SceneObject> selected = [];
         foreach (var item in items)
-            if (item is not null && _documents.Current.Current.Objects.Contains(item) && !selected.Contains(item))
+            if (item is not null && Documents.Current.Current.Objects.Contains(item) && !selected.Contains(item))
                 selected.Add(item);
         foreach (var item in selected)
-            ExpandAncestors(item);
+            ViewModel.Hierarchy.ExpandAncestors(item);
         var nodes = new Dictionary<SceneObject, HierarchyNode>(ReferenceEqualityComparer.Instance);
         foreach (var node in EnumerateHierarchyNodes())
             nodes.TryAdd(node.Ref, node);
@@ -203,42 +161,13 @@ public partial class MainWindow
         finally
         {
             _hierarchyRefreshing = false;
+            CaptureHierarchySelection();
         }
         RefreshObjectInspector();
         if (focus) SceneObjects.Focus();
     }
 
-    private IEnumerable<SceneObject> EnumerateInDisplayOrder()
-    {
-        foreach (var root in _documents.Current.Current.RootObjects)
-            foreach (var item in EnumerateSubtreeInOrder(root))
-                yield return item;
-    }
-
-    private static IEnumerable<SceneObject> EnumerateSubtreeInOrder(SceneObject root)
-    {
-        yield return root;
-        foreach (var child in root.Children)
-            foreach (var item in EnumerateSubtreeInOrder(child))
-                yield return item;
-    }
-
-    private void ExpandAncestors(SceneObject item)
-    {
-        var ancestors = new Stack<SceneObject>();
-        for (var current = item.Parent; current is not null; current = current.Parent)
-            ancestors.Push(current);
-        while (ancestors.Count > 0)
-        {
-            var ancestor = ancestors.Pop();
-            foreach (var node in EnumerateHierarchyNodes())
-                if (ReferenceEquals(node.Ref, ancestor))
-                {
-                    node.IsExpanded = true;
-                    break;
-                }
-        }
-    }
+    private IEnumerable<SceneObject> EnumerateInDisplayOrder() => ViewModel.Hierarchy.EnumerateInDisplayOrder();
 
     private void OnHierarchyPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -449,7 +378,7 @@ public partial class MainWindow
         if (!CanDropInEditingDocument(draggedId, targetId, position)) return;
         try
         {
-            HierarchyDrop.Execute(_documents.Current.Current, draggedId, targetId, position);
+            HierarchyDrop.Execute(Documents.Current.Current, draggedId, targetId, position);
         }
         catch (Exception error)
         {
@@ -471,7 +400,7 @@ public partial class MainWindow
 
     private bool CanDropInEditingDocument(Guid draggedId, Guid? targetId, HierarchyDropPosition position)
     {
-        if (!HierarchyDrop.CanDrop(_documents.Current.Current, draggedId, targetId)) return false;
+        if (!HierarchyDrop.CanDrop(Documents.Current.Current, draggedId, targetId)) return false;
         if (!IsPrefabEditing) return true;
         return FindObject(draggedId) is { Parent: not null }
             && targetId is { } id && FindObject(id) is { } target

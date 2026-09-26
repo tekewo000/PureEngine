@@ -4,6 +4,7 @@
         xmlns:editor="using:PureEngine.Editor"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         x:Class="PureEngine.Editor.MainWindow"
+        x:DataType="editor:EditorViewModel"
         Title="PureEngine Editor"
         Width="1280" Height="800"
         MinWidth="960" MinHeight="640"
@@ -561,7 +562,7 @@
                 </Grid.ContextMenu>
                 <TextBlock x:Name="StuffsContext" IsVisible="False" Margin="12,8,12,0"
                            TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
-                <TreeView x:Name="SceneObjects" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="8"
+                <TreeView x:Name="SceneObjects" ItemsSource="{Binding Hierarchy.Roots}" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="8"
                           SelectionMode="Multiple" AutomationProperties.Name="Stuffs objects"
                           DragDrop.AllowDrop="True"
                           KeyDown="OnSceneKeyDown" SelectionChanged="OnObjectSelected">
@@ -598,26 +599,30 @@
                 </Grid>
               </Border>
             </TabItem>
-            <TabItem x:Name="DataAssetTableTab" Classes="paneTab" Header="Data Assets" AutomationProperties.Name="Data Assets">
+            <TabItem x:Name="DataAssetTableTab" Classes="paneTab" Header="{Binding DataAssetTable.Title}" AutomationProperties.Name="Data Assets">
               <Grid RowDefinitions="Auto,Auto,*">
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8">
                   <TextBlock Text="Type" Classes="caption" VerticalAlignment="Center" />
-                  <ComboBox x:Name="DataAssetTableTypes" MinWidth="200" VerticalAlignment="Center"
-                            AutomationProperties.Name="Data asset table type" SelectionChanged="OnDataAssetTableTypeChanged" />
-                  <Button x:Name="SaveDataAssetTableButton" Content="Save All" FontSize="11" Padding="8,2"
+                  <ComboBox x:Name="DataAssetTableTypes" ItemsSource="{Binding DataAssetTable.Types}" MinWidth="200" VerticalAlignment="Center"
+                            AutomationProperties.Name="Data asset table type" SelectionChanged="OnDataAssetTableTypeChanged">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate DataType="core:DataAssetDescriptor"><TextBlock Text="{Binding MenuPath}" ToolTip.Tip="{Binding TypeId}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <Button x:Name="SaveDataAssetTableButton" IsEnabled="{Binding DataAssetTable.CanSave}" Content="Save All" FontSize="11" Padding="8,2"
                           VerticalAlignment="Center" AutomationProperties.Name="Save data asset table"
-                          ToolTip.Tip="Save all rows (Ctrl+S)" Click="OnSaveDataAssetTable" IsEnabled="False" />
-                  <Button x:Name="AddDataAssetTableRowButton" Content="Add Row" FontSize="11" Padding="8,2"
+                          ToolTip.Tip="Save all rows (Ctrl+S)" Click="OnSaveDataAssetTable" />
+                  <Button x:Name="AddDataAssetTableRowButton" IsEnabled="{Binding DataAssetTable.CanAdd}" Content="Add Row" FontSize="11" Padding="8,2"
                           VerticalAlignment="Center" AutomationProperties.Name="Add data asset table row"
-                          Click="OnAddDataAssetTableRow" IsEnabled="False" />
+                          Click="OnAddDataAssetTableRow" />
                   <TextBlock x:Name="DataAssetTableError" Classes="errorBadge" IsVisible="False"
                              VerticalAlignment="Center" />
-                  <TextBlock x:Name="DataAssetTableStatus" Classes="hint" VerticalAlignment="Center"
-                             TextTrimming="CharacterEllipsis" Text="Select a type." />
+                  <TextBlock x:Name="DataAssetTableStatus" Text="{Binding DataAssetTable.Status}" Classes="hint" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <Separator Grid.Row="1" Classes="divider" Margin="12,0" />
                 <ScrollViewer Grid.Row="2" Margin="8" HorizontalScrollBarVisibility="Auto">
-                  <StackPanel x:Name="DataAssetTableRows" Spacing="8" Grid.IsSharedSizeScope="True" />
+                  <StackPanel x:Name="DataAssetTableRows" IsEnabled="{Binding DataAssetTable.IsEnabled}" Spacing="8" Grid.IsSharedSizeScope="True" />
                 </ScrollViewer>
               </Grid>
             </TabItem>
@@ -673,8 +678,8 @@
                               ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               Cursor="SizeWestEast" AutomationProperties.Name="Resize Project tree" />
                 <Grid Grid.Column="2" RowDefinitions="Auto,*">
-                  <TextBlock x:Name="ProjectFilesCount" Classes="muted" FontSize="11" Margin="8,2,0,6" />
-                  <ListBox Grid.Row="1" x:Name="ProjectFiles" Background="Transparent" BorderThickness="0"
+                  <TextBlock x:Name="ProjectFilesCount" Text="{Binding Project.FileCountText}" Classes="muted" FontSize="11" Margin="8,2,0,6" />
+                  <ListBox Grid.Row="1" x:Name="ProjectFiles" ItemsSource="{Binding Project.Files}" SelectedItem="{Binding Project.SelectedEntry, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
                            SelectionMode="Single" DragDrop.AllowDrop="True"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                            AutomationProperties.Name="Project files"
@@ -739,49 +744,49 @@
             <TabItem Classes="paneTab" Header="Console" AutomationProperties.Name="Console">
               <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="8">
                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <CheckBox x:Name="ConsoleInfoFilter" Classes="consoleToggle info" IsChecked="True"
+                  <CheckBox x:Name="ConsoleInfoFilter" Classes="consoleToggle info" IsChecked="{Binding Console.ShowInfo, Mode=TwoWay}"
                             AutomationProperties.Name="Console info filter" VerticalAlignment="Center" Margin="0,0,8,4">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                       <TextBlock Text="Info" VerticalAlignment="Center" />
                       <Border Classes="countBadge">
-                        <TextBlock x:Name="ConsoleInfoCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console info count" />
+                        <TextBlock x:Name="ConsoleInfoCount" Classes="muted" Text="{Binding Console.InfoCount}" VerticalAlignment="Center" AutomationProperties.Name="Console info count" />
                       </Border>
                     </StackPanel>
                   </CheckBox>
-                  <CheckBox x:Name="ConsoleWarningFilter" Classes="consoleToggle warning" IsChecked="True"
+                  <CheckBox x:Name="ConsoleWarningFilter" Classes="consoleToggle warning" IsChecked="{Binding Console.ShowWarning, Mode=TwoWay}"
                             AutomationProperties.Name="Console warning filter" VerticalAlignment="Center" Margin="0,0,8,4">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                       <TextBlock Text="Warning" VerticalAlignment="Center" />
                       <Border Classes="countBadge">
-                        <TextBlock x:Name="ConsoleWarningCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console warning count" />
+                        <TextBlock x:Name="ConsoleWarningCount" Classes="muted" Text="{Binding Console.WarningCount}" VerticalAlignment="Center" AutomationProperties.Name="Console warning count" />
                       </Border>
                     </StackPanel>
                   </CheckBox>
-                  <CheckBox x:Name="ConsoleErrorFilter" Classes="consoleToggle error" IsChecked="True"
+                  <CheckBox x:Name="ConsoleErrorFilter" Classes="consoleToggle error" IsChecked="{Binding Console.ShowError, Mode=TwoWay}"
                             AutomationProperties.Name="Console error filter" VerticalAlignment="Center" Margin="0,0,8,4">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                       <TextBlock Text="Error" VerticalAlignment="Center" />
                       <Border Classes="countBadge">
-                        <TextBlock x:Name="ConsoleErrorCount" Classes="muted" Text="0" VerticalAlignment="Center" AutomationProperties.Name="Console error count" />
+                        <TextBlock x:Name="ConsoleErrorCount" Classes="muted" Text="{Binding Console.ErrorCount}" VerticalAlignment="Center" AutomationProperties.Name="Console error count" />
                       </Border>
                     </StackPanel>
                   </CheckBox>
-                  <CheckBox x:Name="ConsoleEngineFilter" Classes="consoleToggle engine" IsChecked="True"
+                  <CheckBox x:Name="ConsoleEngineFilter" Classes="consoleToggle engine" IsChecked="{Binding Console.ShowEngine, Mode=TwoWay}"
                             AutomationProperties.Name="Console engine filter" VerticalAlignment="Center" Margin="0,0,8,4"
                             ToolTip.Tip="Show engine logs (Info / Warning / Error)">
                     <TextBlock Text="Engine" VerticalAlignment="Center" />
                   </CheckBox>
                   <PathIcon Data="{StaticResource Icon.Search}" Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,4" Foreground="{StaticResource EditorTextSecondaryBrush}" AutomationProperties.Name="Console search icon" />
-                  <TextBox x:Name="ConsoleSearch" Width="160" Margin="0,0,8,4" PlaceholderText="Search…" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
-                  <Button x:Name="ConsoleClear" Click="OnConsoleClear" AutomationProperties.Name="Console clear" VerticalAlignment="Center" Margin="0,0,8,4" Padding="10,4">
+                  <TextBox x:Name="ConsoleSearch" Text="{Binding Console.Search, Mode=TwoWay}" Width="160" Margin="0,0,8,4" PlaceholderText="Search…" AutomationProperties.Name="Console search" VerticalAlignment="Center" />
+                  <Button x:Name="ConsoleClear" Command="{Binding Console.ClearCommand}" AutomationProperties.Name="Console clear" VerticalAlignment="Center" Margin="0,0,8,4" Padding="10,4">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <PathIcon Classes="buttonIcon" Data="{StaticResource Icon.Dismiss}" Width="12" Height="12" />
                       <TextBlock Text="Clear" VerticalAlignment="Center" />
                     </StackPanel>
                   </Button>
-                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="True" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" Margin="0,0,8,4" ToolTip.Tip="Clear history when Play starts" />
+                  <CheckBox x:Name="ConsoleClearOnPlay" Content="Clear on Play" IsChecked="{Binding Console.ClearOnPlay, Mode=TwoWay}" AutomationProperties.Name="Console clear on play" VerticalAlignment="Center" Margin="0,0,8,4" ToolTip.Tip="Clear history when Play starts" />
                   <Border Classes="metaPill" Margin="0,0,0,4">
-                    <TextBlock x:Name="ConsoleDropped" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" FontSize="11" />
+                    <TextBlock x:Name="ConsoleDropped" Text="{Binding Console.DroppedText}" Classes="muted" VerticalAlignment="Center" AutomationProperties.Name="Console dropped" FontSize="11" />
                   </Border>
                 </WrapPanel>
                 <StackPanel Grid.Row="1" Margin="8,2,8,0" Spacing="2">
@@ -818,7 +823,7 @@
                     <TextBlock Text="Selected log" Classes="muted" FontSize="10" />
                   </StackPanel>
                   <Border Grid.Row="1" Classes="consoleCard" Padding="0" Margin="0,0,8,0">
-                    <TextBox x:Name="ConsoleDetail" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                    <TextBox x:Name="ConsoleDetail" Text="{Binding Console.Detail, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
                              Background="Transparent" BorderThickness="0" PlaceholderText="Select a log to show details"
                              AutomationProperties.Name="Console detail" />
                   </Border>
@@ -839,53 +844,53 @@
           <TabItem Classes="paneTab first" Header="Inspector" AutomationProperties.Name="Inspector">
             <ScrollViewer Margin="8">
              <StackPanel Spacing="6">
-              <StackPanel x:Name="ObjectInspector" IsVisible="False" Spacing="6">
+              <StackPanel x:Name="ObjectInspector" IsVisible="{Binding Inspector.HasObject}" Spacing="6">
                 <TextBlock Text="NAME" Classes="caption" Margin="0,0,0,-2" />
-                <TextBox x:Name="ObjectName" Classes="inspectorField" PlaceholderText="Object name…" AutomationProperties.Name="Object name" />
+                <TextBox x:Name="ObjectName" Text="{Binding Inspector.Name, Mode=TwoWay}" Classes="inspectorField" PlaceholderText="Object name…" AutomationProperties.Name="Object name" />
                 <TextBlock x:Name="NameError" Text="Enter a name." Foreground="#FF9E99"
-                           TextWrapping="Wrap" IsVisible="False" />
+                           TextWrapping="Wrap" IsVisible="{Binding Inspector.HasNameError}" />
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
                   <TextBlock Text="ID" Classes="caption" />
-                  <TextBlock x:Name="ObjectId" Classes="objectId" MaxLines="1" Grid.Column="1"
+                  <TextBlock x:Name="ObjectId" Text="{Binding Inspector.ObjectId}" ToolTip.Tip="{Binding Inspector.ObjectId}" Classes="objectId" MaxLines="1" Grid.Column="1"
                              HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
                 </Grid>
-                <StackPanel x:Name="AttachedClasses" IsVisible="False" Spacing="8" Margin="0,4,0,0">
+                <StackPanel x:Name="AttachedClasses" IsVisible="{Binding Inspector.HasObject}" Spacing="8" Margin="0,4,0,0">
                   <Separator Classes="divider" />
                   <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                    <TextBlock x:Name="ComponentsHeader" Text="Components" Classes="sectionHeader"
+                    <TextBlock x:Name="ComponentsHeader" Text="{Binding Inspector.ComponentsTitle}" Classes="sectionHeader"
                                VerticalAlignment="Center" />
                     <Button x:Name="AddComponentButton" Content="Add Component" Grid.Column="1"
                             FontSize="11" Padding="8,2" VerticalAlignment="Center"
                             AutomationProperties.Name="Add Component" Click="OnAddComponent" />
-                    <TextBlock x:Name="ComponentsError" Classes="errorBadge" Grid.Column="2" IsVisible="False" />
+                    <TextBlock x:Name="ComponentsError" Text="{Binding Inspector.ErrorText}" ToolTip.Tip="{Binding Inspector.ErrorHint}" Classes="errorBadge" Grid.Column="2" IsVisible="{Binding Inspector.HasFieldErrors}" />
                   </Grid>
                   <StackPanel x:Name="ComponentEditors" Spacing="12" />
                 </StackPanel>
-                <TextBlock x:Name="NoComponentsHint" Classes="hint" IsVisible="False"
+                <TextBlock x:Name="NoComponentsHint" Classes="hint" IsVisible="{Binding Inspector.HasNoComponents}"
                            Text="No components — press Add Component or drag a .cs file from Project to attach." />
                 <TextBlock x:Name="AttachError" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="False" />
               </StackPanel>
-              <StackPanel x:Name="DataAssetInspector" IsVisible="False" Spacing="6">
+              <StackPanel x:Name="DataAssetInspector" IsVisible="{Binding DataAsset.IsVisible}" Spacing="6">
                 <TextBlock Text="DATA ASSET" Classes="caption" Margin="0,0,0,-2" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                  <TextBlock x:Name="DataAssetTitle" Classes="sectionHeader" TextTrimming="CharacterEllipsis"
+                  <TextBlock x:Name="DataAssetTitle" Text="{Binding DataAsset.Title}" Classes="sectionHeader" TextTrimming="CharacterEllipsis"
                              VerticalAlignment="Center" />
-                  <TextBlock x:Name="DataAssetInvalid" Classes="errorBadge" Grid.Column="1" IsVisible="False"
+                  <TextBlock x:Name="DataAssetInvalid" Text="{Binding Inspector.ErrorText}" ToolTip.Tip="{Binding Inspector.ErrorHint}" Classes="errorBadge" Grid.Column="1" IsVisible="{Binding Inspector.HasFieldErrors}"
                              VerticalAlignment="Center" />
                 </Grid>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
                   <TextBlock Text="ID" Classes="caption" />
-                  <TextBlock x:Name="DataAssetId" Classes="objectId" MaxLines="1" Grid.Column="1"
+                  <TextBlock x:Name="DataAssetId" ToolTip.Tip="{Binding DataAsset.Id}" Text="{Binding DataAsset.Id}" Classes="objectId" MaxLines="1" Grid.Column="1"
                              HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
                 </Grid>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
                   <TextBlock Text="Type" Classes="caption" />
-                  <TextBlock x:Name="DataAssetType" Classes="objectId" MaxLines="1" Grid.Column="1"
+                  <TextBlock x:Name="DataAssetType" ToolTip.Tip="{Binding DataAsset.TypeName}" Text="{Binding DataAsset.TypeId}" Classes="objectId" MaxLines="1" Grid.Column="1"
                              HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
                 </Grid>
-                <Button x:Name="SaveDataAssetButton" Content="Save Data Asset" FontSize="11" Padding="8,2"
+                <Button x:Name="SaveDataAssetButton" IsEnabled="{Binding DataAsset.CanSave}" Content="Save Data Asset" FontSize="11" Padding="8,2"
                         HorizontalAlignment="Left" AutomationProperties.Name="Save Data Asset" Click="OnSaveDataAsset" />
-                <TextBlock x:Name="DataAssetError" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="False" />
+                <TextBlock x:Name="DataAssetError" Text="{Binding DataAsset.Error}" Foreground="#FF9E99" TextWrapping="Wrap" IsVisible="{Binding DataAsset.HasError}" />
                 <StackPanel x:Name="DataAssetEditors" Spacing="12" />
               </StackPanel>
              </StackPanel>

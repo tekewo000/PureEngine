@@ -45,6 +45,24 @@ public sealed class EditorDocuments : IDisposable
         if (Asset is not null) DataAssetEditState.CollectObjects(Asset.Instance, AssetOwned);
     }
 
+    public EditedDocumentKind MarkChanged(object? owner)
+    {
+        if (owner is not null && Table.Owned.Contains(owner))
+        {
+            if (Table.FindOwner(owner) is { } row) row.Dirty = true;
+            Table.RefreshOwnership();
+            return EditedDocumentKind.Table;
+        }
+        if (owner is not null && Asset is not null && AssetOwned.Contains(owner))
+        {
+            Asset.Dirty = true;
+            RefreshAssetOwnership();
+            return EditedDocumentKind.DataAsset;
+        }
+        Current.MarkChanged();
+        return EditedDocumentKind.Scene;
+    }
+
     public static DataAssetStore? BuildAssetStore(ProjectFile? project, ComponentRegistry registry)
     {
         if (project is null) return null;
@@ -102,4 +120,11 @@ public sealed class EditorDocuments : IDisposable
         catch (Exception error) { errors.Add(error); }
         if (errors.Count != 0) throw new AggregateException("Documents cleanup failed.", errors);
     }
+}
+
+public enum EditedDocumentKind
+{
+    Scene,
+    DataAsset,
+    Table,
 }

@@ -140,10 +140,7 @@ static class PriorityInspectorChecks
         Dispatcher.UIThread.RunJobs();
         Check(errorBadge.IsVisible, "Invalid priority must show an error badge.");
         Check(fullObject.GetStartPriority(full) == -12, "Invalid input must not change the scene.");
-        var invalidFieldsValue = typeof(MainWindow)
-            .GetField("_invalidFields", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(editor)!;
-        var invalidCount = (int)invalidFieldsValue.GetType().GetProperty("Count")!.GetValue(invalidFieldsValue)!;
+        var invalidCount = editor.ViewModel.Inspector.InvalidCount;
         Check(invalidCount == 1, "Invalid priority must join the shared save guard.");
         var fileStatus = Control<TextBlock>(editor, "FileStatus");
         var saveMethod = typeof(MainWindow).GetMethod("SaveSceneAsync",
@@ -161,7 +158,7 @@ static class PriorityInspectorChecks
         });
         Dispatcher.UIThread.RunJobs();
         Check(startBox.Text == "-12", $"Esc must restore last valid priority, got '{startBox.Text}'.");
-        invalidCount = (int)invalidFieldsValue.GetType().GetProperty("Count")!.GetValue(invalidFieldsValue)!;
+        invalidCount = editor.ViewModel.Inspector.InvalidCount;
         Check(!errorBadge.IsVisible && invalidCount == 0, "Esc must clear the priority error.");
 
         // Update/Destroy stay independent.

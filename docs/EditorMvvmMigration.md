@@ -13,9 +13,9 @@ Core・Runtime・Renderingの責務、namespace、保存形式は維持する。
 ## 進捗
 
 - 文書管理：所有・保存・コード移行の基盤分離を実装し、ローカル品質チェックを通過。ペインの操作コマンドは次段階で接続する。
-- 各ペイン：未着手。
-- MainWindowの接続整理：未着手。
-- ローカル品質チェック：文書管理の変更で通過。CI・mainへの反映：未実施。
+- 各ペイン：Console・Project・Hierarchy・Inspector・単体DataAsset・DataAsset表のViewModelとバインディングを実装し、ローカル品質チェックを通過。
+- MainWindowの接続整理：作業中。
+- ローカル品質チェック：文書管理と各ペインの変更で通過。CI・mainへの反映：未実施。
 
 検証結果は段階ごとに追記し、実画面の確認とHeadlessの検証を区別する。
 
@@ -26,3 +26,11 @@ Core・Runtime・Renderingの責務、namespace、保存形式は維持する。
 `EditorDocumentChecks` をWindow生成前に実行し、文書切替、入れ子の所有判定、部分的な書込失敗後のdirty保持と再試行、事前シリアライズ失敗、候補移行、解放失敗時のサービス解放と二重解放防止を確認した。既存チェックのprivate field参照を既存／新規の読み取り専用プロパティへ更新し、検査する動作は維持した。
 
 `./tools/code-quality.ps1 -Check` は提案診断、警告をエラー扱いにしたビルド、Core／Editor Checksを含め通過。初回は旧field名を間接参照する既存チェックで失敗し、参照先の更新後に全チェックを再実行して通過した。実画面・CIは未確認。
+
+### 各ペインの検証（2026-09-26）
+
+標準の`INotifyPropertyChanged`と`ICommand`を使い、外部依存を追加せずに各ペインの状態を分離した。Consoleは履歴・絞り込み・選択・Clear、Projectはフォルダと一覧、Hierarchyは展開・複数選択、Inspectorは選択・名前／数値編集・入力エラーとdirtyの振り分けを担当する。単体DataAssetと表は表示・保存判定・型一覧・行高を担当し、ファイル走査・行の追加／複製／削除は文書管理へ移した。スクロール、フォーカス、ポインター、動的Controlの生成はViewに残す。
+
+`EditorPaneChecks`でWindowなしの通知・コマンド・選択保持・名前／数値の拒否・Play時の編集禁止・Project一覧を検証した。Console、Hierarchy、Scene View、表、単体DataAsset、PrefabのHeadlessチェックも実行し、最後に`./tools/code-quality.ps1 -Check`全体が通過した。
+
+移行中に検出したDataAsset Inspectorの表示切替回帰は、文書を開いている状態と選択中の編集対象を分けて修正した。旧privateフィールドを参照していた既存チェックはViewModel経由へ更新し、動作の検査は保持した。別途、C#自動反映の待機タイムアウトとWindowsのファイル置換エラーが各一度発生したが、後続の個別・全体チェックでは再現しなかった。待ち時間・判定条件・保存処理を緩めず、反映失敗時の診断情報を追加した。実画面・CIは未確認。

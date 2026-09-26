@@ -76,7 +76,7 @@ static class DataAssetTableChecks
         {
             var types = Control<ComboBox>(editor, "DataAssetTableTypes");
             Check(types.Items.Count == 1, "The table type picker must list the [DataAsset] type.");
-            types.SelectedItem = types.Items.OfType<ComboBoxItem>().Single();
+            types.SelectedItem = types.Items.OfType<DataAssetDescriptor>().Single();
             Control<TabControl>(editor, "ViewportTabs").SelectedIndex = 2;
             Dispatcher.UIThread.RunJobs();
             Program.Until(() => HasBox(editor, "Table.SwordData.Sword.Attack"),

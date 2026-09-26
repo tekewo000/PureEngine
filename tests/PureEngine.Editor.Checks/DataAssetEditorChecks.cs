@@ -78,8 +78,7 @@ static class DataAssetEditorChecks
             var type = session.Components.DataAssetTypes.Single();
             var path = Path.Combine(root, "Sword.pure.asset.yaml");
             DataAssetFile.Create(path, type, session.Components.Registry);
-            typeof(MainWindow).GetField("_explorerFolder",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(editor, "");
+            editor.ViewModel.Project.Folder = "";
             Call(editor, "RefreshProjectExplorer");
             Dispatcher.UIThread.RunJobs();
             var files = Control<ListBox>(editor, "ProjectFiles");

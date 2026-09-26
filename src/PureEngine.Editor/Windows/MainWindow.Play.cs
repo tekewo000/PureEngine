@@ -54,7 +54,7 @@ public partial class MainWindow
         }
 
         // Runs Clear on Play before Start without clearing that Play run start log.
-        if (ConsoleClearOnPlay.IsChecked == true)
+        if (ViewModel.Console.ClearOnPlay)
             ClearConsole();
 
         PlaySession? session;
@@ -64,7 +64,7 @@ public partial class MainWindow
             var assets = BuildProjectAssetStore(_components.Registry);
             var prefabs = BuildPrefabCatalog();
             var configure = GameServices.ForProject(_components);
-            session = PlaySession.Prepare(_documents.Scene.Current, _components.Registry, services =>
+            session = PlaySession.Prepare(Documents.Scene.Current, _components.Registry, services =>
             {
                 configure(services);
                 if (assets is not null) services.AddSingleton(assets);
@@ -340,6 +340,7 @@ public partial class MainWindow
 
     private void UpdatePlayUI()
     {
+        ViewModel.Inspector.IsReadOnly = IsPlaying;
         var playing = _play is not null;
         PlayButton.IsEnabled = !playing;
         StopButton.IsEnabled = playing;

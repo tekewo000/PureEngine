@@ -13,73 +13,13 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace PureEngine.Editor;
 
-public enum ProjectExplorerKind
-{
-    Folder,
-    Scene,
-    File,
-    Component,
-    DataAsset,
-    Prefab,
-}
-
-/// <summary>One row in the Project Explorer right pane. Shows folders, scene files, plain files, and compiled classes in a unified view.</summary>
-public sealed record ProjectExplorerEntry(
-    ProjectExplorerKind Kind,
-    string DisplayName,
-    string Detail,
-    string ToolTip,
-    string? RelativePath,
-    string? FullPath,
-    Type? ComponentType,
-    bool IsStartup)
-{
-    public string KindLabel => Kind switch
-    {
-        ProjectExplorerKind.Folder => "Folder",
-        ProjectExplorerKind.Scene => "Scene",
-        ProjectExplorerKind.DataAsset => "Data Asset",
-        ProjectExplorerKind.Prefab => "Prefab",
-        ProjectExplorerKind.File => IsImageFile ? "Image" : "File",
-        _ => "C#",
-    };
-
-    /// <summary>Tile frame. Scene reuses the structural purple accent (same as Startup pill/Engine border/focus ring);
-    /// others stay neutral so the grid reads calm.</summary>
-    public SolidColorBrush TileBorderBrush => IsScene
-        ? new SolidColorBrush(Color.Parse("#8B7CF6"))
-        : new SolidColorBrush(Color.Parse("#333842"));
-
-    /// <summary>Icon selectors. Exactly one is true per row; C#, images, data assets, scenes, and prefabs are told apart from plain files by kind and extension.</summary>
-    public bool IsFolder => Kind == ProjectExplorerKind.Folder;
-
-    public bool IsScene => Kind == ProjectExplorerKind.Scene;
-
-    public bool IsDataAsset => Kind == ProjectExplorerKind.DataAsset;
-
-    public bool IsPrefab => Kind == ProjectExplorerKind.Prefab;
-
-    public bool IsImageFile => !IsFolder && !IsScene && !IsDataAsset && !IsPrefab
-        && FullPath is not null && ProjectAssets.IsSupportedImage(FullPath);
-
-    public bool IsCSharpFile => (Kind == ProjectExplorerKind.File || Kind == ProjectExplorerKind.Component)
-        && ExternalEditor.IsCSharpFile(FullPath);
-
-    public bool IsPlainFile => !IsFolder && !IsScene && !IsDataAsset && !IsPrefab && !IsImageFile && !IsCSharpFile;
-
-    public bool HasDetail => !string.IsNullOrEmpty(Detail);
-}
-
 public partial class MainWindow
 {
     private const string ComponentsNode = "<components>";
-    private string _explorerFolder = "Scenes";
-    private bool _explorerComponentsSelected;
     private bool _explorerRefreshing;
-    private string? _explorerSelectedFile;
 
     private string? ExplorerSelectedRelativeDirectory =>
-        _explorerComponentsSelected ? null : _explorerFolder;
+        ViewModel.Project.ComponentsSelected ? null : ViewModel.Project.Folder;
 
     private bool ExplorerSelectionIsFolder(out string relativeDirectory, out bool isComponents)
     {
@@ -89,8 +29,8 @@ public partial class MainWindow
             relativeDirectory = isComponents ? "" : tag;
             return true;
         }
-        relativeDirectory = _explorerFolder;
-        isComponents = _explorerComponentsSelected;
+        relativeDirectory = ViewModel.Project.Folder;
+        isComponents = ViewModel.Project.ComponentsSelected;
         return false;
     }
 
@@ -113,10 +53,11 @@ public partial class MainWindow
 
     private void BuildProjectTree()
     {
+        ViewModel.Project.RefreshDirectories(_project);
         ProjectTree.Items.Clear();
         if (_project is null)
         {
-            _explorerComponentsSelected = false;
+            ViewModel.Project.ComponentsSelected = false;
             return;
         }
         var root = new TreeViewItem
@@ -127,7 +68,7 @@ public partial class MainWindow
         };
         ProjectTree.Items.Add(root);
         var nodes = new Dictionary<string, TreeViewItem>(StringComparer.Ordinal) { [""] = root };
-        foreach (var directory in _project.ListDirectories())
+        foreach (var directory in ViewModel.Project.Directories)
         {
             var parent = directory.Contains('/')
                 ? directory[..directory.LastIndexOf('/')]
@@ -137,90 +78,23 @@ public partial class MainWindow
             parentNode.Items.Add(node);
             nodes[directory] = node;
         }
-        _explorerComponentsSelected = false;
-        var target = nodes.ContainsKey(_explorerFolder) ? _explorerFolder : "Scenes";
+        ViewModel.Project.ComponentsSelected = false;
+        var target = nodes.ContainsKey(ViewModel.Project.Folder) ? ViewModel.Project.Folder : "Scenes";
         nodes.TryGetValue(target, out var selected);
         selected ??= root;
-        if (!nodes.ContainsKey(_explorerFolder) && !_explorerComponentsSelected)
-            _explorerFolder = nodes.ContainsKey("Scenes") ? "Scenes" : "";
+        if (!nodes.ContainsKey(ViewModel.Project.Folder) && !ViewModel.Project.ComponentsSelected)
+            ViewModel.Project.Folder = nodes.ContainsKey("Scenes") ? "Scenes" : "";
         // Expands ancestors to bring the selected row into view.
         for (var current = selected; current is not null;
              current = current.Parent as TreeViewItem)
             current.IsExpanded = true;
         selected.IsSelected = true;
-        _explorerComponentsSelected = selected.Tag is ComponentsNode;
-        if (!_explorerComponentsSelected && selected.Tag is string tag) _explorerFolder = tag;
+        ViewModel.Project.ComponentsSelected = selected.Tag is ComponentsNode;
+        if (!ViewModel.Project.ComponentsSelected && selected.Tag is string tag) ViewModel.Project.Folder = tag;
     }
 
-    private void RefreshProjectFiles()
-    {
-        var entries = new List<ProjectExplorerEntry>();
-        if (_project is { } project)
-        {
-            var folder = _explorerFolder;
-            var directory = project.ResolveDirectoryPath(folder);
-            if (Directory.Exists(directory))
-            {
-                var subdirectories = project.ListDirectories()
-                    .Where(d => (d.Contains('/') ? d[..d.LastIndexOf('/')] : "") == folder)
-                    .Order(StringComparer.Ordinal);
-                foreach (var sub in subdirectories)
-                {
-                    var relative = string.IsNullOrEmpty(folder) ? sub : $"{folder}/{sub[(folder.Length + 1)..]}";
-                    entries.Add(new ProjectExplorerEntry(ProjectExplorerKind.Folder,
-                        Path.GetFileName(sub.Replace('/', Path.DirectorySeparatorChar)), "", relative,
-                        relative, Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar)), null, false));
-                }
-                var startup = (project.Document.StartupScene ?? "").Replace('\\', '/');
-                foreach (var file in project.ListFiles(folder))
-                {
-                    if (file.EndsWith(".pureasset.yaml", StringComparison.OrdinalIgnoreCase)) continue;
-                    var relative = string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
-                    var isScene = file.EndsWith(".pure.scene.yaml", StringComparison.OrdinalIgnoreCase);
-                    var isDataAsset = !isScene && ProjectFile.IsDataAssetFileName(file);
-                    var isPrefab = !isScene && !isDataAsset && ProjectFile.IsPrefabFileName(file);
-                    var isStartup = isScene && string.Equals(relative, startup, StringComparison.Ordinal);
-                    var full = Path.Combine(project.RootDirectory, relative.Replace('/', Path.DirectorySeparatorChar));
-                    if (isDataAsset)
-                    {
-                        entries.Add(new ProjectExplorerEntry(
-                            ProjectExplorerKind.DataAsset, file, "Data Asset", relative, relative, full, null, false));
-                    }
-                    else if (isPrefab)
-                    {
-                        entries.Add(new ProjectExplorerEntry(
-                            ProjectExplorerKind.Prefab, file, "Prefab", relative, relative, full, null, false));
-                    }
-                    else if (!isScene && file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Shows custom C# files in their folder layout. Does not require a dedicated folder or aggregation into the Components list.
-                        var types = _components.GetTypesForFile(full);
-                        var detail = types.Count == 0 ? "C# (no attachable types)"
-                            : types.Count == 1 ? $"C# {types[0].Name}"
-                            : $"C# ({types.Count} classes)";
-                        var tip = types.Count == 0 ? $"{relative} (no attachable types)"
-                            : $"{relative}: {string.Join(", ", types.Select(t => t.FullName ?? t.Name))}";
-                        entries.Add(new ProjectExplorerEntry(
-                            ProjectExplorerKind.File, file, detail, tip, relative, full, null, false));
-                    }
-                    else
-                    {
-                        entries.Add(new ProjectExplorerEntry(
-                            isScene ? ProjectExplorerKind.Scene : ProjectExplorerKind.File,
-                            file, "", relative, relative, full, null, isStartup));
-                    }
-                }
-            }
-        }
-        ProjectFiles.ItemsSource = entries;
-        ProjectFilesCount.Text = entries.Count == 0 ? "Empty folder" : $"{entries.Count} item(s)";
-        ProjectFiles.SelectedItem = entries.FirstOrDefault(entry =>
-            entry.FullPath is not null && string.Equals(entry.FullPath, _explorerSelectedFile, PathComparison()));
-        var editPath = _documents.Scene.Path;
-        if (ProjectFiles.SelectedItem is null && _explorerSelectedFile is not null
-            && editPath is not null && entries.Any(entry => string.Equals(entry.FullPath, editPath, PathComparison())))
-            ProjectFiles.SelectedItem = entries.First(entry => string.Equals(entry.FullPath, editPath, PathComparison()));
-    }
+    private void RefreshProjectFiles() =>
+        ViewModel.Project.RefreshFiles(_project, _components, Documents.Scene.Path);
 
     private static StringComparison PathComparison() => OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -231,8 +105,8 @@ public partial class MainWindow
             if (node.Tag is string nodeTag && nodeTag == tag)
             {
                 node.IsSelected = true;
-                if (nodeTag != ComponentsNode) _explorerFolder = nodeTag;
-                _explorerComponentsSelected = nodeTag == ComponentsNode;
+                if (nodeTag != ComponentsNode) ViewModel.Project.Folder = nodeTag;
+                ViewModel.Project.ComponentsSelected = nodeTag == ComponentsNode;
                 return;
             }
     }
@@ -253,9 +127,9 @@ public partial class MainWindow
         if (_explorerRefreshing) return;
         if (ProjectTree.SelectedItem is TreeViewItem node && node.Tag is string tag)
         {
-            _explorerComponentsSelected = tag == ComponentsNode;
-            if (!_explorerComponentsSelected) _explorerFolder = tag;
-            _explorerSelectedFile = null;
+            ViewModel.Project.ComponentsSelected = tag == ComponentsNode;
+            if (!ViewModel.Project.ComponentsSelected) ViewModel.Project.Folder = tag;
+            ViewModel.Project.SelectedFile = null;
             RefreshProjectFiles();
         }
     }
@@ -348,8 +222,8 @@ public partial class MainWindow
         }
         if (entry.Kind == ProjectExplorerKind.Folder && entry.RelativePath is not null)
         {
-            _explorerFolder = entry.RelativePath;
-            _explorerSelectedFile = null;
+            ViewModel.Project.Folder = entry.RelativePath;
+            ViewModel.Project.SelectedFile = null;
             SelectExplorerNode(entry.RelativePath);
             RefreshProjectFiles();
             return;
@@ -407,8 +281,8 @@ public partial class MainWindow
         var name = _project.NextSceneName(folder);
         var path = Path.Combine(_project.ResolveDirectoryPath(folder), name);
         SceneFile.Write(path, _sceneSerializer.Serialize(new Scene()));
-        _explorerFolder = folder;
-        _explorerSelectedFile = path;
+        ViewModel.Project.Folder = folder;
+        ViewModel.Project.SelectedFile = path;
         SelectExplorerNode(folder);
         RefreshProjectExplorer();
         SetFileStatus($"Created scene: {folder}/{name}");
@@ -425,8 +299,8 @@ public partial class MainWindow
         if (Directory.Exists(path) || File.Exists(path)) throw new IOException("A folder or file with the same name already exists.");
         Directory.CreateDirectory(path);
         var relative = string.IsNullOrEmpty(folder) ? name : $"{folder}/{name}";
-        _explorerFolder = relative;
-        _explorerSelectedFile = null;
+        ViewModel.Project.Folder = relative;
+        ViewModel.Project.SelectedFile = null;
         RefreshProjectExplorer();
         SetFileStatus($"Created folder: {relative}");
     });
@@ -450,8 +324,8 @@ public partial class MainWindow
         using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         using (var writer = new StreamWriter(stream))
             writer.Write($"public sealed class {className}{Environment.NewLine}{{{Environment.NewLine}{Environment.NewLine}}}{Environment.NewLine}");
-        _explorerFolder = folder;
-        _explorerSelectedFile = path;
+        ViewModel.Project.Folder = folder;
+        ViewModel.Project.SelectedFile = path;
         RefreshProjectExplorer();
         SetFileStatus($"Created C#: {className}.cs");
     });
@@ -518,8 +392,8 @@ public partial class MainWindow
             if (File.Exists(path) || Directory.Exists(path))
                 throw new IOException("A folder or file with the same name already exists.");
             DataAssetFile.Create(path, type, _components.Registry);
-            _explorerFolder = folder;
-            _explorerSelectedFile = path;
+            ViewModel.Project.Folder = folder;
+            ViewModel.Project.SelectedFile = path;
             RefreshProjectExplorer();
             RescanTableRows();
             SetFileStatus($"Created data asset: {folder}/{name}");
@@ -600,12 +474,12 @@ public partial class MainWindow
             RemapSceneReferences(oldFull!, newFull, isDirectory);
             if (isTreeFolder || isDirectory)
             {
-                _explorerFolder = Path.GetRelativePath(_project.RootDirectory, newFull).Replace('\\', '/');
-                _explorerSelectedFile = null;
+                ViewModel.Project.Folder = Path.GetRelativePath(_project.RootDirectory, newFull).Replace('\\', '/');
+                ViewModel.Project.SelectedFile = null;
             }
             else
             {
-                _explorerSelectedFile = newFull;
+                ViewModel.Project.SelectedFile = newFull;
             }
             RefreshProjectExplorer();
             RescanTableRows();
@@ -647,7 +521,7 @@ public partial class MainWindow
                 SetFileStatus("Cannot delete because it contains the startup scene. Change the startup scene first.", true);
                 return;
             }
-            var editPath = _documents.Scene.Path;
+            var editPath = Documents.Scene.Path;
             var containsOpen = editPath is not null && (string.Equals(target, editPath, PathComparison())
                 || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(target + Path.DirectorySeparatorChar, PathComparison())));
             if (containsOpen)
@@ -660,21 +534,21 @@ public partial class MainWindow
             if (ContainsOpenPrefab(target, isDirectory) && !await ConfirmClosePrefabEditor()) return;
             if (isDirectory) Directory.Delete(target, recursive: true);
             else File.Delete(target);
-            if (isDirectory && string.Equals(_explorerFolder, display, StringComparison.Ordinal))
+            if (isDirectory && string.Equals(ViewModel.Project.Folder, display, StringComparison.Ordinal))
             {
-                _explorerFolder = display.Contains('/') ? display[..display.LastIndexOf('/')] : "";
-                _explorerSelectedFile = null;
+                ViewModel.Project.Folder = display.Contains('/') ? display[..display.LastIndexOf('/')] : "";
+                ViewModel.Project.SelectedFile = null;
             }
-            else if (!isDirectory && string.Equals(_explorerSelectedFile, target, PathComparison()))
+            else if (!isDirectory && string.Equals(ViewModel.Project.SelectedFile, target, PathComparison()))
             {
-                _explorerSelectedFile = null;
+                ViewModel.Project.SelectedFile = null;
             }
             RefreshProjectExplorer();
             RescanTableRows();
             SetFileStatus($"Deleted: {display}");
         });
 
-    private bool ContainsOpenPrefab(string path, bool isDirectory) => _documents.Prefab?.Path is { } prefabPath
+    private bool ContainsOpenPrefab(string path, bool isDirectory) => Documents.Prefab?.Path is { } prefabPath
         && (string.Equals(prefabPath, path, PathComparison())
             || isDirectory && prefabPath.StartsWith(
                 Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar, PathComparison()));
@@ -683,11 +557,11 @@ public partial class MainWindow
     private void RemapSceneReferences(string oldFull, string newFull, bool isDirectory)
     {
         if (_project is null) return;
-        var editPath = _documents.Scene.Path;
+        var editPath = Documents.Scene.Path;
         if (editPath is not null && (string.Equals(editPath, oldFull, PathComparison())
             || (isDirectory && (editPath + Path.DirectorySeparatorChar).StartsWith(oldFull + Path.DirectorySeparatorChar, PathComparison()))))
         {
-            _documents.Scene.SetPath(isDirectory
+            Documents.Scene.SetPath(isDirectory
                 ? Path.Combine(newFull, Path.GetRelativePath(oldFull, editPath))
                 : newFull);
             UpdateSceneTitle();
@@ -762,7 +636,7 @@ public partial class MainWindow
     private Task<IStorageFolder?> ExplorerSaveDirectory()
     {
         if (_project is null) return Task.FromResult<IStorageFolder?>(null);
-        var folder = _explorerComponentsSelected ? "Scenes" : _explorerFolder;
+        var folder = ViewModel.Project.ComponentsSelected ? "Scenes" : ViewModel.Project.Folder;
         if (!_project.IsUnderScenes(folder)) folder = "Scenes";
         var directory = _project.ResolveDirectoryPath(folder);
         if (!Directory.Exists(directory)) directory = _project.ScenesDirectory;

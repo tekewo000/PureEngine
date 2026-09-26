@@ -6,7 +6,7 @@
 
 ## Editor MVVM移行（2026-09-26進行中）
 
-文書管理→各ペイン→MainWindowの接続整理の順に専用ブランチで移行する。文書所有・保存・コード移行の基盤分離は実装し、ローカルの品質チェックを通過。各ペインとMainWindowの移行、CI、mainへの反映は未完了。完了条件と段階ごとの証跡は [EditorMvvmMigration.md](EditorMvvmMigration.md) を参照。
+文書管理→各ペイン→MainWindowの接続整理の順に専用ブランチで移行する。文書所有・保存・コード移行の基盤と各ペインのViewModelを実装し、各段階でローカルの品質チェックを通過。MainWindowの接続整理、CI、mainへの反映は未完了。完了条件と段階ごとの証跡は [EditorMvvmMigration.md](EditorMvvmMigration.md) を参照。
 
 ## C#増分コンパイル（2026-09-25実装）
 

@@ -66,11 +66,45 @@ internal static class Program
         try
         {
             EditorDocumentChecks.Run(root);
+            EditorPaneChecks.Run(root);
             PrefabFileEditingChecks.Run(root);
             if (args.Contains("--prefab-files")) return;
             AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions())
                 .SetupWithClassicDesktopLifetime([]);
             using var desktop = (ClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+            if (args.Contains("--reload-only"))
+            {
+                desktop.MainWindow!.Show();
+                UserCodeChecks.Run(root);
+                return;
+            }
+            if (args.Contains("--assets-only"))
+            {
+                desktop.MainWindow!.Show();
+                DataAssetEditorChecks.Run(root);
+                DataAssetTableChecks.Run(root);
+                DirectAssetEditorChecks.Run(root);
+                PrefabEditorChecks.Run(root);
+                return;
+            }
+            if (args.Contains("--panes-only"))
+            {
+                desktop.MainWindow!.Show();
+                UiMenuChecks.Run();
+                EditorChromeChecks.Run();
+                ConsoleChecks.Run();
+                ProjectDropChecks.Run();
+                SceneViewEditorChecks.Run();
+                HierarchySelectionChecks.Run();
+                StuffsMultiChecks.Run();
+                return;
+            }
+            if (args.Contains("--console-only"))
+            {
+                desktop.MainWindow!.Show();
+                ConsoleChecks.Run();
+                return;
+            }
             if (args.Contains("--game-buttons"))
             {
                 desktop.MainWindow!.Show();
