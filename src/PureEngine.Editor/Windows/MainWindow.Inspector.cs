@@ -1237,13 +1237,14 @@ public partial class MainWindow
         if (elementType == typeof(PureEngine.Core.Color)) return PureEngine.Core.Color.White;
         if (elementType.IsEnum) return Enum.ToObject(elementType, 0);
         if (Nullable.GetUnderlyingType(elementType) is not null) return null;
-        if (InspectorValueTypes.IsCustomInspectorObject(elementType))
+        if (InspectorValueTypes.IsCustomInspectorObject(elementType)
+            || elementType.IsValueType && InspectorValueTypes.IsCustomObjectShape(elementType))
         {
             try
             {
                 return Activator.CreateInstance(elementType);
             }
-            catch
+            catch when (!elementType.IsValueType)
             {
                 // Pad elements that failed to create with Null so they can be rebuilt from the card Create action.
                 return null;

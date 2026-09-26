@@ -115,6 +115,9 @@ static class ComposableInspectorChecks
 
     private static void CheckNestedMissing(MainWindow editor, EditSceneStore store, SceneObject item, Probe probe, SceneObject target)
     {
+        Click(editor, "Probe.ReferenceValues.Add");
+        Check(probe.ReferenceValues.Count == 1 && probe.ReferenceValues[0].Target is null,
+            "Adding a reference-bearing struct must create a value rather than a null list element.");
         Click(editor, "Probe.References[1].Collapse");
         Click(editor, "Probe.References[1].Value[0].Target.Clear");
         Check(probe.References[1]["second"].Target is null, "Reference Clear inside a struct must write back.");
@@ -183,5 +186,6 @@ static class ComposableInspectorChecks
         [Inspector] public OuterValue[,] Matrix { get; set; } = new OuterValue[2, 2];
         [Inspector] public int[] Large { get; set; } = new int[70];
         [Inspector] public List<Dictionary<string, ReferenceValue>> References { get; set; } = [];
+        [Inspector] public List<ReferenceValue> ReferenceValues { get; set; } = [];
     }
 }

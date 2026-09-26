@@ -259,16 +259,26 @@ public partial class MainWindow
         {
             if (IsPlaying) return;
             var current = binding.Read();
-            if (current is IDictionary dictionary) dictionary.Add(UniqueDictionaryKey(dictionary), DefaultElementValue(elementType));
+            object? defaultValue;
+            try
+            {
+                defaultValue = DefaultElementValue(elementType);
+            }
+            catch (Exception error)
+            {
+                SetFileStatus(error.ToString(), true);
+                return;
+            }
+            if (current is IDictionary dictionary) dictionary.Add(UniqueDictionaryKey(dictionary), defaultValue);
             else if (current is Array array)
             {
                 if (array.Length >= 1_048_576) return;
                 var replacement = Array.CreateInstance(elementType, array.Length + 1);
                 Array.Copy(array, replacement, array.Length);
-                replacement.SetValue(DefaultElementValue(elementType), array.Length);
+                replacement.SetValue(defaultValue, array.Length);
                 current = replacement;
             }
-            else if (current is IList list) list.Add(DefaultElementValue(elementType));
+            else if (current is IList list) list.Add(defaultValue);
             CommitBoundValue(binding, current);
             refresh();
         };
