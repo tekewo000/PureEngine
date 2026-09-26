@@ -65,6 +65,12 @@ internal static class Program
         Directory.CreateDirectory(root);
         try
         {
+            WindowsBuildChecks.Run(root);
+            if (args.Contains("--build-package-smoke"))
+            {
+                WindowsBuildChecks.Smoke(root).GetAwaiter().GetResult();
+                return;
+            }
             EditorDocumentChecks.Run(root);
             EditorPaneChecks.Run(root);
             EditorShellChecks.Run(root);

@@ -75,6 +75,7 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
         {
             if (!SetProperty(ref field, value)) return;
             Changed(nameof(IsFileIdle));
+            Changed(nameof(CanBuild));
             SaveDataAssetCommand.Refresh();
             SaveTableCommand.Refresh();
             SaveLocalizationCommand.Refresh();
@@ -83,6 +84,7 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
     }
     public bool IsFileIdle => !FileBusy;
     public bool CanEdit => !IsDisposed && !Play.IsPlaying;
+    public bool CanBuild => CanEdit && !FileBusy && ProjectFile is not null;
     public bool CanSetStartup => CanEdit && ProjectFile is not null;
     public bool CanSaveAs => CanEdit && !Documents.IsPrefabActive;
     public bool CanSavePrefab => CanEdit && Documents.Prefab is not null;
@@ -248,6 +250,7 @@ public sealed class EditorViewModel : EditorObservable, IDisposable
     public void RefreshDocumentState()
     {
         Changed(nameof(CanEdit));
+        Changed(nameof(CanBuild));
         Changed(nameof(CanSetStartup));
         Changed(nameof(CanSaveAs));
         Changed(nameof(CanSavePrefab));
