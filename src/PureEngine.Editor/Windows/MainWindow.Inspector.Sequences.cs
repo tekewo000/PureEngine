@@ -595,8 +595,8 @@ public partial class MainWindow
             ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
-            var clear = new Avalonia.Controls.Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
-            clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
+            var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+            ToolTip.SetTip(clear, "Set to null.");
             root.Children.Add(nullRow);
             root.Children.Add(body);
             root.Children.Add(clear);
@@ -693,8 +693,8 @@ public partial class MainWindow
             ToolTip.SetTip(create, "Create a flags value.");
             nullRow.Children.Add(create);
             var body = new StackPanel { Spacing = 4 };
-            var clear = new Avalonia.Controls.Button { Content = "Set Null", FontSize = 11, Padding = new Avalonia.Thickness(8, 2), HorizontalAlignment = HorizontalAlignment.Left };
-            clear.SetValue(AutomationProperties.NameProperty, $"{automationName}.Null");
+            var clear = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
+            ToolTip.SetTip(clear, "Set to null.");
             root.Children.Add(nullRow);
             root.Children.Add(body);
             root.Children.Add(clear);

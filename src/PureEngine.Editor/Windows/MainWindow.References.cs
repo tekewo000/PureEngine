@@ -621,7 +621,7 @@ public partial class MainWindow
         var count = new TextBlock { Classes = { "memberType" }, VerticalAlignment = VerticalAlignment.Center };
         var add = BuildHeaderIconButton("Icon.AddSquare", $"{automationName}.Add");
         ToolTip.SetTip(add, mapping ? "Add an entry." : "Add a row.");
-        var setNull = BuildHeaderButton("Set Null", $"{automationName}.Null");
+        var setNull = BuildHeaderIconButton("Icon.Dismiss", $"{automationName}.Null");
         ToolTip.SetTip(setNull, mapping
             ? "Set the dictionary itself to null. Removing rows keeps an empty dictionary."
             : "Set the list itself to null. Removing rows keeps an empty list.");
